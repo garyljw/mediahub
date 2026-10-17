@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import { getAuth } from "./auth";
 import { isRole, type Role } from "./roles";
 
@@ -13,6 +14,11 @@ export type SessionUser = {
   name: string;
   role: string | null;
 };
+
+/** A user who passed a role check. Only these fields leave authz. */
+export type AuthorizedUser = { id: string; email: string; name: string; role: Role };
+
+type AllowedRoles = [Role, ...Role[]];
 
 export type SessionLookup = () => Promise<SessionUser | null>;
 
@@ -32,7 +38,8 @@ export function createAuthz(lookup: SessionLookup) {
     return lookup();
   }
 
-  async function requireRole(...roles: Role[]): Promise<{ user: { id: string; email: string; name: string; role: Role } }> {
+  // At least one role is required: an empty list would lock everyone out with no type error.
+  async function requireRole(...roles: AllowedRoles): Promise<{ user: AuthorizedUser }> {
     const user = await lookup();
     if (!user) throw new AuthzError(401);
     // Unknown or garbage role values fail closed: they are never in `roles`.
@@ -40,7 +47,24 @@ export function createAuthz(lookup: SessionLookup) {
     return { user: { id: user.id, email: user.email, name: user.name, role: user.role } };
   }
 
-  return { getSession, requireRole };
+  /**
+   * For server components (pages). No session redirects to /login. A signed-in user whose role
+   * is unknown or not allowed gets a 404, not a 403, so the page does not reveal it exists.
+   */
+  async function requirePageUser(...roles: AllowedRoles): Promise<AuthorizedUser> {
+    // Same policy as requireRole; only the failure response differs.
+    try {
+      return (await requireRole(...roles)).user;
+    } catch (error) {
+      if (error instanceof AuthzError) {
+        if (error.status === 401) redirect("/login");
+        notFound();
+      }
+      throw error;
+    }
+  }
+
+  return { getSession, requireRole, requirePageUser };
 }
 
 // cache() dedupes the lookup within one request, so the layout and the page share one DB query.
@@ -59,6 +83,7 @@ const authz = createAuthz(lookupFromRequest);
 
 export const getSession = authz.getSession;
 export const requireRole = authz.requireRole;
+export const requirePageUser = authz.requirePageUser;
 
 /** Maps AuthzError to a JSON response for route handlers. Anything else is rethrown. */
 export function authzErrorResponse(error: unknown): Response {

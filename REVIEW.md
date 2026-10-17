@@ -19,7 +19,8 @@ In order of severity:
 These are covered by lint, so don't report them by hand:
 - `import "server-only"` at the top of every `src/server/**` file;
 - no `process.env` outside `src/server/env.ts`;
-- lint, typecheck and test failures, which CI catches.
+- lint, typecheck and test failures, which CI catches;
+- every `(app)` page starting with `await requirePageUser(...)` and allowing the roles listed in `PAGE_ROLES`, which `src/app/(app)/pages-auth.test.ts` checks. That test catches a forgotten or wrong check, not a deliberate bypass of the test itself, such as shadowing or aliasing the name. Don't report ways to fool it. Gary's diff read on High-risk changes covers deliberate bypasses.
 
 ## How to report
 - **Every finding needs evidence.** Give a file and line, and a concrete scenario (input or state, then the wrong outcome). Don't guess from a function name or a file name.
