@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated from openapi/*.json by scripts/gen-arr.mjs.
+    "src/server/arr/generated/**",
   ]),
 ]);
 
