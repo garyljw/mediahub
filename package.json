@@ -10,9 +10,15 @@
     "typecheck": "tsc --noEmit",
     "prepare": "git config core.hooksPath .githooks || true",
     "gen:arr": "node scripts/gen-arr.mjs",
+    "db:migrate": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/migrate.ts",
+    "create-user": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/create-user.ts",
+    "create-admin": "npm run create-user -- --role admin",
     "test": "vitest run"
   },
   "dependencies": {
+    "better-auth": "1.7.7",
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.3",
     "next": "16.4.2",
     "openapi-fetch": "0.17.0",
     "react": "19.3.0",
@@ -22,18 +28,22 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "openapi-typescript": "7.13.0",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5",
     "vitest": "5.0.5"
   },
   "allowScripts": {
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "better-sqlite3@13.0.3": true
   },
   "engines": {
     "node": ">=24"
