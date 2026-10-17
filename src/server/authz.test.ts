@@ -1,6 +1,17 @@
 import "server-only";
-import { describe, expect, it } from "vitest";
-import { AuthzError, authzErrorResponse, createAuthz, type SessionUser } from "./authz";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { AuthzError, authzErrorResponse, createAuthz, type Role, type SessionUser } from "./authz";
+
+// redirect() and notFound() normally throw Next-internal errors. Throwing plain errors lets the tests
+// assert which one ran.
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn((url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  }),
+  notFound: vi.fn(() => {
+    throw new Error("NOT_FOUND");
+  }),
+}));
 
 const admin: SessionUser = { id: "u1", email: "admin@example.test", name: "Admin", role: "admin" };
 const requester: SessionUser = { id: "u2", email: "req@example.test", name: "Req", role: "requester" };
@@ -66,5 +77,48 @@ describe("authzErrorResponse", () => {
   it("rethrows anything that is not an AuthzError", () => {
     const boom = new Error("boom");
     expect(() => authzErrorResponse(boom)).toThrow(boom);
+  });
+});
+
+describe("requirePageUser", () => {
+  it("redirects to /login when there is no session", async () => {
+    await expect(authzFor(null).requirePageUser("admin", "requester")).rejects.toThrow("REDIRECT:/login");
+  });
+
+  it("returns notFound when a requester asks for admin only", async () => {
+    await expect(authzFor(requester).requirePageUser("admin")).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("returns notFound for unknown or garbage roles, even when listed roles would allow them", async () => {
+    await expect(authzFor({ ...requester, role: "superuser" }).requirePageUser("admin", "requester")).rejects.toThrow(
+      "NOT_FOUND",
+    );
+    await expect(authzFor({ ...requester, role: "" }).requirePageUser("requester")).rejects.toThrow("NOT_FOUND");
+    await expect(authzFor({ ...requester, role: null }).requirePageUser("requester")).rejects.toThrow("NOT_FOUND");
+    await expect(authzFor({ ...admin, role: "Admin" }).requirePageUser("admin")).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("lets an admin through an admin-only page", async () => {
+    const result = await authzFor(admin).requirePageUser("admin");
+    expect(result).toEqual({ id: "u1", email: admin.email, name: "Admin", role: "admin" });
+  });
+
+  it("lets a requester through a page open to both roles", async () => {
+    const result = await authzFor(requester).requirePageUser("admin", "requester");
+    expect(result.role).toBe("requester");
+  });
+
+  it("does not expose extra session fields", async () => {
+    const withExtra = { ...requester, token: "secret" } as SessionUser & { token: string };
+    const result = await authzFor(withExtra).requirePageUser("requester");
+    expect(Object.keys(result).sort()).toEqual(["email", "id", "name", "role"]);
+  });
+});
+
+describe("role lists", () => {
+  it("requires at least one role", () => {
+    const authz = authzFor(admin);
+    expectTypeOf(authz.requireRole).parameters.toEqualTypeOf<[Role, ...Role[]]>();
+    expectTypeOf(authz.requirePageUser).parameters.toEqualTypeOf<[Role, ...Role[]]>();
   });
 });
