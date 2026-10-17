@@ -28,9 +28,15 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 
 ## Workflow (Opus plans, Haiku codes)
 1. Opus writes a scoped task brief with acceptance criteria.
-2. A Haiku agent implements it and runs lint, typecheck and test.
-3. Opus runs `/code-review` on every change. It also runs `/security-review` on anything touching auth, roles, `src/server/**`, route handlers, env/secrets, headers or the Dockerfile.
-4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main`.
+2. A Haiku agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough.
+3. Opus runs `/code-review` on every change. It also runs `/security-review` on anything touching auth, roles, `src/server/**`, route handlers, env/secrets, headers, CI workflows or the Dockerfile. Reviews follow [REVIEW.md](REVIEW.md), which covers the round cap, diff-only re-review and severity tags.
+4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main` using the PR template.
+5. If a review finding comes up more than once, fix it at the source with a lint rule, a CLAUDE.md line or a REVIEW.md line, not just in the code.
+
+## Risk tiers (set by what the change touches, not by who wrote it)
+- **High:** auth, roles, `src/server/**`, route handlers, env/secrets, headers, `.github/workflows/**`, the Dockerfile. Gary reads the diff before merge.
+- **Low:** everything else, e.g. UI, docs, copy, tests. Can merge on green CI plus clean reviews.
+- An agent's review or approval never replaces Gary's read on a High change.
 
 ## Commands
 `npm run dev` · `npm run build` · `npm run lint` · `npm run typecheck` · `npm test`
