@@ -26,5 +26,11 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 - Keep runtime memory small: no extra services, and no heavy dependencies without a reason.
 - Before finishing a task, run `npm run lint && npm run typecheck && npm test`. All three must pass.
 
+## Workflow (Opus plans, Haiku codes)
+1. Opus writes a scoped task brief with acceptance criteria.
+2. A Haiku agent implements it and runs lint, typecheck and test.
+3. Opus runs `/code-review` on every change. It also runs `/security-review` on anything touching auth, roles, `src/server/**`, route handlers, env/secrets, headers or the Dockerfile.
+4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main`.
+
 ## Commands
 `npm run dev` · `npm run build` · `npm run lint` · `npm run typecheck` · `npm test`
