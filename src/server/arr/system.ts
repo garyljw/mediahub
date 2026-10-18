@@ -16,7 +16,7 @@ async function statusFor(
 ): Promise<ArrStatus> {
   const data = await arrRequest(`${name} status`, get);
   if (!data?.version || !data.appName) {
-    throw new ArrRequestError(`${name} status response missing version or appName`);
+    throw new ArrRequestError(`${name} status response missing version or appName`, "invalid");
   }
   // Return only the fields the UI needs.
   return { version: data.version, appName: data.appName };
