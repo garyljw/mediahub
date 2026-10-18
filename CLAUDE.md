@@ -30,6 +30,8 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 
 ## Workflow (Opus or Sonnet plans, Haiku codes)
 1. The planner writes a scoped task brief with acceptance criteria. Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
+   - If a task needs Opus planning and this session isn't on Opus, tell Gary to run `/model opus` before planning starts. Don't plan in a subagent: planning needs this conversation.
+   - A session that isn't on Opus runs the step 3 reviews in an Opus agent (`model: "opus"`, `effort: "high"`), and checks that the agent's report shows each review actually ran.
 2. A Haiku agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough.
 3. Opus runs `/code-review` on every change. It also runs `/security-review` on anything touching auth, roles, `src/server/**`, route handlers, env/secrets, headers, CI workflows or the Dockerfile. Reviews follow [REVIEW.md](REVIEW.md), which covers the round cap, diff-only re-review and severity tags.
 4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main` using the PR template.
