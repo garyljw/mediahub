@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,8 @@ import {
 import { deletedMessage } from "./movie-delete";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
-import { MoviePoster, MoviePosterPreview } from "./movie-poster";
-import { previewPosition } from "./poster-preview";
+import { Poster } from "@/components/poster/poster";
+import { usePosterPreview } from "@/components/poster/use-poster-preview";
 
 const STATUS_LABEL: Record<MovieStatus, string> = {
   downloaded: "Downloaded",
@@ -50,6 +50,11 @@ const STATUS_CLASS: Record<MovieStatus, string> = {
   missing: "border-transparent bg-amber-500/20 text-amber-800 dark:text-amber-300",
   unreleased: "border-transparent bg-muted text-muted-foreground",
 };
+
+/** A row's thumbnail and preview come from MediaHub's own poster route, and only when Radarr has a poster. */
+function moviePosterSrc(row: MovieRow): string | null {
+  return row.hasPoster ? `/api/movies/${row.id}/poster` : null;
+}
 
 const CELL = "py-1.5 px-2";
 const HEAD = "sticky top-0 z-10 h-8 border-b bg-background py-1.5 px-2";
@@ -109,23 +114,14 @@ export function MoviesTable({
   // The movies the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  // The large poster shown beside the hovered row's thumbnail. Mouse only.
-  const [preview, setPreview] = useState<{ id: number; top: number; left: number } | null>(null);
+  // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
+  const posterPreview = usePosterPreview<number>();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
   useEffect(() => {
     if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
   }, []);
-
-  // Scrolling the page moves the thumbnail away from the fixed preview, so drop it. The table's own
-  // scroll is handled by onScroll on its container.
-  useEffect(() => {
-    if (preview === null) return;
-    const clear = () => setPreview(null);
-    window.addEventListener("scroll", clear, { passive: true });
-    return () => window.removeEventListener("scroll", clear);
-  }, [preview]);
 
   // The status line clears itself after a few seconds.
   useEffect(() => {
@@ -193,22 +189,6 @@ export function MoviesTable({
     setSelected((previous) => new Set([...previous].filter((id) => !gone.has(id))));
     setDeleting(null);
     setStatus(deletedMessage(movieCount));
-  }
-
-  // Mouse only: a tap on a phone fires pointerenter with no matching leave, which would strand the preview.
-  // Rows without a poster have no thumbnail, so they get no preview.
-  function showPreview(event: PointerEvent<HTMLTableRowElement>, id: number) {
-    if (event.pointerType !== "mouse") return;
-    const thumb = event.currentTarget.querySelector<HTMLImageElement>("img[data-poster-thumb]");
-    if (!thumb) {
-      setPreview(null);
-      return;
-    }
-    const position = previewPosition(thumb.getBoundingClientRect(), {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    });
-    setPreview({ id, ...position });
   }
 
   const noun = rows.length === 1 ? "movie" : "movies";
@@ -291,7 +271,7 @@ export function MoviesTable({
 
       <div
         className="max-h-[70vh] overflow-auto rounded-md border"
-        onScroll={() => setPreview(null)}
+        onScroll={() => posterPreview.clear()}
       >
         <Table className="min-w-[60rem]">
           <TableHeader>
@@ -331,8 +311,7 @@ export function MoviesTable({
               <TableRow
                 key={row.id}
                 data-state={isAdmin && selectedIds.has(row.id) ? "selected" : undefined}
-                onPointerEnter={(event) => showPreview(event, row.id)}
-                onPointerLeave={() => setPreview(null)}
+                {...posterPreview.rowHandlers(row.id, moviePosterSrc(row))}
               >
                 {isAdmin && (
                   <TableCell className={CELL}>
@@ -347,7 +326,7 @@ export function MoviesTable({
                 )}
                 <TableCell className={CELL}>
                   <div className="flex items-center gap-2">
-                    <MoviePoster src={row.hasPoster ? `/api/movies/${row.id}/poster` : null} />
+                    <Poster src={moviePosterSrc(row)} />
                     <div className="min-w-0 max-w-[28rem] truncate">
                       <span className="font-medium">{row.title}</span>
                     </div>
@@ -432,9 +411,11 @@ export function MoviesTable({
       )}
 
       {/* Hidden while a dialog is open: clicking a row's Edit or Delete opens it with the mouse still on the row. */}
-      {preview && !editing && !deleting && visible.some((row) => row.id === preview.id) && (
-        <MoviePosterPreview movieId={preview.id} top={preview.top} left={preview.left} />
-      )}
+      {posterPreview.activeKey !== null &&
+        !editing &&
+        !deleting &&
+        visible.some((row) => row.id === posterPreview.activeKey) &&
+        posterPreview.preview}
 
       {isAdmin && deleting && (
         <MovieDeleteDialog

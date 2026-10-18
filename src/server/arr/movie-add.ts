@@ -52,7 +52,7 @@ export class MovieAddError extends Error {
 export const TMDB_POSTER_FILE = /^[A-Za-z0-9]{1,64}\.jpg$/;
 
 const TMDB_HOST = "image.tmdb.org";
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w92/";
+const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342/";
 
 /**
  * The file name of a TMDB poster URL, or null. Accepts only https, the exact host image.tmdb.org with
@@ -205,7 +205,7 @@ export async function addMovie(add: MovieAdd): Promise<{ title: string; year: nu
 }
 
 /**
- * One TMDB poster thumbnail (w92), as JPEG bytes. The file name must match TMDB_POSTER_FILE, and the
+ * One TMDB poster thumbnail (w342), as JPEG bytes. The file name must match TMDB_POSTER_FILE, and the
  * fetch goes to one fixed base URL with no redirects, no custom headers and no Radarr key.
  */
 export async function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {

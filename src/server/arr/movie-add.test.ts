@@ -245,7 +245,7 @@ describe("tmdbPosterFile", () => {
     expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/..%2F..%2Fsecret.jpg" }))).toBeNull();
     expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/%2e%2e.jpg" }))).toBeNull();
     // WHATWG URL resolves "/../" first, so only the bare file name "abc.jpg" is left. That is safe: the
-    // fetch uses the file name alone, under the fixed w92 base, so no directory can be reached.
+    // fetch uses the file name alone, under the fixed w342 base, so no directory can be reached.
     expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/../abc.jpg" }))).toBe("abc.jpg");
   });
 
@@ -284,11 +284,11 @@ describe("getTmdbPoster", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("fetches the fixed w92 URL with no redirects, no headers and no Radarr key", async () => {
+  it("fetches the fixed w342 URL with no redirects, no headers and no Radarr key", async () => {
     fetchMock.mockResolvedValue(new Response(JPEG, { status: 200 }));
     await expect(getTmdbPoster("abc123.jpg")).resolves.toEqual(JPEG);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://image.tmdb.org/t/p/w92/abc123.jpg");
+    expect(url).toBe("https://image.tmdb.org/t/p/w342/abc123.jpg");
     expect(init.redirect).toBe("error");
     expect(init.headers).toBeUndefined();
     expect(init.signal).toBeInstanceOf(AbortSignal);

@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
 import type { QualityProfileOption } from "@/server/arr/movies";
 import { SELECT_CLASS } from "./movie-edit-dialog";
-import { MoviePoster } from "./movie-poster";
+import { Poster } from "@/components/poster/poster";
+import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import {
   GENERIC_ERROR,
   addedMessage,
@@ -27,6 +28,11 @@ import {
   resultLabel,
   type AddOptions,
 } from "./movie-add";
+
+/** A search result's thumbnail, from MediaHub's lookup route. Null when TMDB had no usable poster. */
+function lookupPosterSrc(result: LookupResult): string | null {
+  return result.posterFile === null ? null : `/api/movies/lookup-poster/${result.posterFile}`;
+}
 
 /**
  * "Add movie" button and its dialog. Search TMDB through Radarr, then add a result with the chosen
@@ -52,6 +58,7 @@ export function MovieAddDialog({
   const [addingIds, setAddingIds] = useState<Set<number>>(() => new Set());
   const [addError, setAddError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const posterPreview = usePosterPreview<number>();
 
   const queryId = useId();
   const profileSelectId = useId();
@@ -65,6 +72,7 @@ export function MovieAddDialog({
 
   function openDialog() {
     // Each opening starts fresh, with the default options, like the edit dialog.
+    posterPreview.clear();
     setQuery("");
     setResults(null);
     setSearchError(null);
@@ -80,6 +88,7 @@ export function MovieAddDialog({
     const term = normalizeTerm(query);
     if (term === null) return;
     setSearchError(null);
+    posterPreview.clear();
     startSearch(async () => {
       try {
         const response = await searchMovies({ term });
@@ -124,7 +133,10 @@ export function MovieAddDialog({
         open={open}
         onOpenChange={(next) => {
           // Don't close while a search or add is in flight, so its outcome is never shown to nobody.
-          if (!next && !busy) setOpen(false);
+          if (!next && !busy) {
+            posterPreview.clear();
+            setOpen(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-2xl">
@@ -241,15 +253,20 @@ export function MovieAddDialog({
             <p className="text-sm text-muted-foreground">No movies matched that search.</p>
           )}
           {results !== null && results.length > 0 && (
-            <ul className="max-h-[50vh] divide-y overflow-y-auto rounded-md border">
+            <ul
+              className="max-h-[50vh] divide-y overflow-y-auto rounded-md border"
+              onScroll={() => posterPreview.clear()}
+            >
               {results.map((result) => {
                 const inLibrary = isInLibrary(result, addedIds);
                 const adding = addingIds.has(result.tmdbId);
                 return (
-                  <li key={result.tmdbId} className="flex items-start gap-3 p-3">
-                    <MoviePoster
-                      src={result.posterFile === null ? null : `/api/movies/lookup-poster/${result.posterFile}`}
-                    />
+                  <li
+                    key={result.tmdbId}
+                    className="flex items-start gap-3 p-3"
+                    {...posterPreview.rowHandlers(result.tmdbId, lookupPosterSrc(result))}
+                  >
+                    <Poster src={lookupPosterSrc(result)} />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{resultLabel(result)}</p>
                       {result.overview && (
@@ -275,6 +292,7 @@ export function MovieAddDialog({
               })}
             </ul>
           )}
+          {posterPreview.preview}
         </DialogContent>
       </Dialog>
     </>
