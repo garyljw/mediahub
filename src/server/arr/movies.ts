@@ -22,6 +22,8 @@ export type MovieRow = {
   sizeOnDisk: number;
   added: string | null;
   sortTitle: string;
+  /** True when Radarr has a poster for the movie. The browser then fetches it from MediaHub's poster route. */
+  hasPoster: boolean;
 };
 
 export type QualityProfileOption = { id: number; name: string };
@@ -70,6 +72,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       sizeOnDisk: status === "downloaded" ? (movie.sizeOnDisk ?? 0) : 0,
       added: movie.added ?? null,
       sortTitle: (movie.sortTitle || movie.title).toLowerCase(),
+      hasPoster: movie.images?.some((image) => image.coverType === "poster") ?? false,
     });
   }
 
@@ -152,4 +155,63 @@ export async function deleteMovies(del: MovieDelete): Promise<void> {
   await arrRequest("Radarr movie delete", (signal) => client.DELETE("/api/v3/movie/editor", { body, signal }), {
     timeoutMs: DELETE_TIMEOUT_MS,
   });
+}
+
+/** The one Radarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
+const POSTER_FILENAME = "poster-250.jpg";
+
+/** Largest poster we accept. Radarr's 250px thumbnail is far smaller, so anything bigger is not what we asked for. */
+export const MAX_POSTER_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Reads a body into memory, up to `max` bytes. Returns null as soon as it goes over and cancels the
+ * rest, so an oversized response never gets fully buffered on the NAS.
+ */
+async function readCapped(body: ReadableStream<Uint8Array> | null | undefined, max: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (!body) return new Uint8Array(0);
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/** Every JPEG starts with these bytes. Anything else (e.g. a proxy's HTML login page) is not served as a poster. */
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+/** Fetches Radarr's cached 250px poster for one movie as JPEG bytes. Only the fixed poster file is requested. */
+export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+  const client = radarrClient();
+  // The body is read inside the request callback, so the timeout covers it and read failures are
+  // reported like any other request failure. On an error response body is undefined (openapi-fetch
+  // has already consumed it), and arrRequest throws on the status.
+  const data = await arrRequest("Radarr poster", async (signal) => {
+    const { data: body, response } = await client.GET("/api/v3/mediacover/{movieId}/{filename}", {
+      params: { path: { movieId, filename: POSTER_FILENAME } },
+      parseAs: "stream",
+      signal,
+    });
+    return { data: await readCapped(body, MAX_POSTER_BYTES), response };
+  });
+  if (!data || !isJpeg(data)) {
+    throw new ArrRequestError("Radarr poster response was not a usable image", "invalid");
+  }
+  return data;
 }
