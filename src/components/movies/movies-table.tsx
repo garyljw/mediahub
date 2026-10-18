@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { searchLibraryMovies } from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { MovieRow, MovieStatus, QualityProfileOption } from "@/server/arr/movies";
@@ -34,6 +35,7 @@ import {
   updatedMessage,
 } from "./movie-edit";
 import { deletedMessage } from "./movie-delete";
+import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
 import { Poster } from "@/components/poster/poster";
@@ -58,8 +60,8 @@ function moviePosterSrc(row: MovieRow): string | null {
 
 const CELL = "py-1.5 px-2";
 const HEAD = "sticky top-0 z-10 h-8 border-b bg-background py-1.5 px-2";
-// Columns for a requester. Admins get two more: the checkbox and the Edit button.
-const COLUMN_COUNT = 8;
+// Eight data columns plus the checkbox and the actions column, which every role gets (Search is open to requesters).
+const COLUMN_COUNT = 10;
 // How long the "Updated N movies" line stays before it clears itself.
 const STATUS_MS = 4000;
 
@@ -102,7 +104,7 @@ export function MoviesTable({
 }: {
   rows: MovieRow[];
   profiles: QualityProfileOption[];
-  /** Admins get selection and editing. Requesters get the same table with none of that markup. */
+  /** Admins also get Edit and Delete. Everyone can select movies and search for them. */
   isAdmin: boolean;
 }) {
   const [filters, setFilters] = useState<MovieFilters>(DEFAULT_FILTERS);
@@ -114,6 +116,7 @@ export function MoviesTable({
   // The movies the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [searching, startSearch] = useTransition();
   // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
   const posterPreview = usePosterPreview<number>();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -191,8 +194,22 @@ export function MoviesTable({
     setStatus(deletedMessage(movieCount));
   }
 
+  // Starts a Radarr release search. A bulk search keeps its selection so the user can see what was searched.
+  function searchMovies(ids: number[]) {
+    setStatus(null);
+    startSearch(async () => {
+      try {
+        const result = await searchLibraryMovies({ movieIds: ids });
+        setStatus(result.ok ? searchStartedMessage(result.searched) : result.error);
+      } catch {
+        // The request never got an answer (connection lost, server restarted), so say so instead of failing the page.
+        setStatus("Couldn't reach MediaHub. Check your connection and try again.");
+      }
+    });
+  }
+
   const noun = rows.length === 1 ? "movie" : "movies";
-  const columnCount = isAdmin ? COLUMN_COUNT + 2 : COLUMN_COUNT;
+  const tooManyToSearch = selectedIds.size > MAX_SEARCH_MOVIES;
 
   return (
     <div className="space-y-3">
@@ -247,26 +264,39 @@ export function MoviesTable({
         </p>
       </div>
 
-      {isAdmin && (
-        <>
-          <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-            {status}
-          </p>
-          {selectedIds.size > 0 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-              <span className="font-medium">{formatCount(selectedIds.size)} selected</span>
-              <Button size="sm" onClick={() => openEditor([...selectedIds], true)}>
+      <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+        {status}
+      </p>
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">{formatCount(selectedIds.size)} selected</span>
+          <Button
+            size="sm"
+            onClick={() => searchMovies([...selectedIds])}
+            disabled={searching || tooManyToSearch}
+            aria-busy={searching}
+          >
+            Search…
+          </Button>
+          {isAdmin && (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => openEditor([...selectedIds], true)}>
                 Edit…
               </Button>
               <Button size="sm" variant="destructive" onClick={() => openDeleter(selectedRows)}>
                 Delete…
               </Button>
-              <Button size="sm" variant="outline" onClick={() => updateSelection(new Set())}>
-                Clear
-              </Button>
-            </div>
+            </>
           )}
-        </>
+          <Button size="sm" variant="outline" onClick={() => updateSelection(new Set())}>
+            Clear
+          </Button>
+          {tooManyToSearch && (
+            <span role="alert" className="text-destructive">
+              Select at most {formatCount(MAX_SEARCH_MOVIES)} movies to search.
+            </span>
+          )}
+        </div>
       )}
 
       <div
@@ -276,21 +306,19 @@ export function MoviesTable({
         <Table className="min-w-[60rem]">
           <TableHeader>
             <TableRow>
-              {isAdmin && (
-                <TableHead className={cn(HEAD, "w-8")}>
-                  <input
-                    type="checkbox"
-                    aria-label="Select all movies that match the filters"
-                    checked={allState === "all"}
-                    ref={(el) => {
-                      if (el) el.indeterminate = allState === "some";
-                    }}
-                    disabled={filtered.length === 0}
-                    onChange={() => updateSelection(toggleAllFiltered(selected, filtered))}
-                    className="size-4 accent-primary"
-                  />
-                </TableHead>
-              )}
+              <TableHead className={cn(HEAD, "w-8")}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all movies that match the filters"
+                  checked={allState === "all"}
+                  ref={(el) => {
+                    if (el) el.indeterminate = allState === "some";
+                  }}
+                  disabled={filtered.length === 0}
+                  onChange={() => updateSelection(toggleAllFiltered(selected, filtered))}
+                  className="size-4 accent-primary"
+                />
+              </TableHead>
               <SortHeader label="Title" sortKey="title" sort={sort} onSort={changeSort} />
               <SortHeader label="Year" sortKey="year" sort={sort} onSort={changeSort} />
               <TableHead className={HEAD}>Status</TableHead>
@@ -299,31 +327,27 @@ export function MoviesTable({
               <TableHead className={HEAD}>File quality</TableHead>
               <SortHeader label="Size" sortKey="size" sort={sort} onSort={changeSort} align="right" />
               <SortHeader label="Added" sortKey="added" sort={sort} onSort={changeSort} />
-              {isAdmin && (
-                <TableHead className={cn(HEAD, "w-px")}>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              )}
+              <TableHead className={cn(HEAD, "w-px")}>
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.map((row) => (
               <TableRow
                 key={row.id}
-                data-state={isAdmin && selectedIds.has(row.id) ? "selected" : undefined}
+                data-state={selectedIds.has(row.id) ? "selected" : undefined}
                 {...posterPreview.rowHandlers(row.id, moviePosterSrc(row))}
               >
-                {isAdmin && (
-                  <TableCell className={CELL}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${row.title}`}
-                      checked={selectedIds.has(row.id)}
-                      onChange={() => updateSelection(toggleId(selected, row.id))}
-                      className="size-4 accent-primary"
-                    />
-                  </TableCell>
-                )}
+                <TableCell className={CELL}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${row.title}`}
+                    checked={selectedIds.has(row.id)}
+                    onChange={() => updateSelection(toggleId(selected, row.id))}
+                    className="size-4 accent-primary"
+                  />
+                </TableCell>
                 <TableCell className={CELL}>
                   <div className="flex items-center gap-2">
                     <Poster src={moviePosterSrc(row)} />
@@ -354,33 +378,44 @@ export function MoviesTable({
                   {formatSize(row.sizeOnDisk)}
                 </TableCell>
                 <TableCell className={cn(CELL, "tabular-nums")}>{formatAdded(row.added)}</TableCell>
-                {isAdmin && (
-                  <TableCell className={cn(CELL, "text-right")}>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Edit ${row.title}`}
-                        onClick={() => openEditor([row.id], false, row.title)}
-                      >
-                        <Pencil aria-hidden />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Delete ${row.title}`}
-                        onClick={() => openDeleter([row])}
-                      >
-                        <Trash2 aria-hidden />
-                      </Button>
-                    </div>
-                  </TableCell>
-                )}
+                <TableCell className={cn(CELL, "text-right")}>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Search for ${row.title}`}
+                      onClick={() => searchMovies([row.id])}
+                      disabled={searching}
+                    >
+                      <Search aria-hidden />
+                    </Button>
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${row.title}`}
+                          onClick={() => openEditor([row.id], false, row.title)}
+                        >
+                          <Pencil aria-hidden />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Delete ${row.title}`}
+                          onClick={() => openDeleter([row])}
+                        >
+                          <Trash2 aria-hidden />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
             {visible.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columnCount} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={COLUMN_COUNT} className="py-8 text-center text-muted-foreground">
                   {rows.length === 0 ? (
                     "No movies in Radarr yet."
                   ) : (

@@ -15,7 +15,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
    - validates input with Zod,
    - calls a typed client function,
    - returns only the fields the UI needs.
-4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search, add, view queue/calendar/history; no delete, edit or settings).
+4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB, add, trigger a Radarr release search for library movies, view queue/calendar/history; no delete, edit or settings).
 5. **Never commit real secrets.** `.env.example` holds placeholders only, and real values go in `.env.local`. A gitleaks pre-commit hook enforces this; don't bypass it with `--no-verify`.
 6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`.** Send the key as the `X-Api-Key` header, not as a query parameter.
 
