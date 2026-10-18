@@ -35,3 +35,17 @@ export function formatSize(bytes: number): string {
   const digits = unit === 0 || Number(value.toFixed(1)) >= 100 ? 0 : 1;
   return `${value.toFixed(digits)} ${UNITS[unit]}`;
 }
+
+/**
+ * "<1m", "12m", "1h 5m", "2d 3h". Null when there is no estimate or it has passed. Hand-written, not Intl,
+ * for the same reason as the other helpers here.
+ */
+export function formatEta(seconds: number | null): string | null {
+  if (seconds === null || seconds <= 0) return null;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 1) return "<1m";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
