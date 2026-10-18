@@ -79,7 +79,8 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
   return rows;
 }
 
-async function getList<T>(label: string, get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>): Promise<T[]> {
+/** Runs a list request and checks the reply is a list. Exported for movie-add.ts. */
+export async function getList<T>(label: string, get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>): Promise<T[]> {
   const data = await arrRequest(label, get);
   if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`, "invalid");
   return data;

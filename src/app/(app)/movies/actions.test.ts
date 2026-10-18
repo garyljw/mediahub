@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   deleteMovies: vi.fn(),
   listQualityProfiles: vi.fn(),
   refresh: vi.fn(),
+  lookupMovies: vi.fn(),
+  addMovie: vi.fn(),
+  listRootFolders: vi.fn(),
 }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
@@ -26,10 +29,26 @@ vi.mock("@/server/arr/movies", () => ({
   listQualityProfiles: mocks.listQualityProfiles,
 }));
 
+vi.mock("@/server/arr/movie-add", () => {
+  class MovieAddError extends Error {
+    constructor(readonly reason: "not-found" | "exists") {
+      super(reason);
+      this.name = "MovieAddError";
+    }
+  }
+  return {
+    MovieAddError,
+    lookupMovies: mocks.lookupMovies,
+    addMovie: mocks.addMovie,
+    listRootFolders: mocks.listRootFolders,
+  };
+});
+
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { removeMovies, updateMovies } from "./actions";
+import { addLibraryMovie, removeMovies, searchMovies, updateMovies } from "./actions";
+import { MovieAddError } from "@/server/arr/movie-add";
 
 const DENIED = "You don't have permission to edit movies.";
 const DELETE_DENIED = "You don't have permission to delete movies.";
@@ -317,5 +336,210 @@ describe("removeMovies deletes", () => {
     await expect(removeMovies({ movieIds: [1], deleteFiles: false, addImportExclusion: false, confirmCount: 1 })).rejects.toThrow(
       "config broken",
     );
+  });
+});
+
+const ADDER = { id: "u1", email: "a@example.test", name: "A", role: "requester" };
+const ADD_DENIED = "You don't have permission to add movies.";
+const validAdd = { tmdbId: 910001, qualityProfileId: 1, rootFolderId: 7, monitored: true, searchForMovie: true };
+
+describe("searchMovies", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+    mocks.lookupMovies.mockResolvedValue([{ tmdbId: 1, title: "Film", year: 2000, overview: "", inLibrary: false }]);
+  });
+
+  it("allows both admin and requester", async () => {
+    await searchMovies({ term: "film" });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+  });
+
+  it("rejects a signed-out caller and never calls Radarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await searchMovies({ term: "film" });
+    expect(result).toEqual({ ok: false, error: ADD_DENIED });
+    expect(mocks.lookupMovies).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an empty term", { term: "" }],
+    ["a whitespace-only term", { term: "   " }],
+    ["an overlong term", { term: "x".repeat(101) }],
+    ["an extra key", { term: "film", page: 2 }],
+    ["a missing term", {}],
+    ["a non-string term", { term: 5 }],
+  ])("rejects %s without calling Radarr", async (_name, input) => {
+    const result = await searchMovies(input);
+    expect(result.ok).toBe(false);
+    expect(mocks.lookupMovies).not.toHaveBeenCalled();
+  });
+
+  it("trims the term and accepts exactly 100 characters", async () => {
+    await searchMovies({ term: `  ${"x".repeat(100)}  ` });
+    expect(mocks.lookupMovies).toHaveBeenCalledWith("x".repeat(100));
+  });
+
+  it("returns the results on success", async () => {
+    const result = await searchMovies({ term: "film" });
+    expect(result).toEqual({ ok: true, results: [{ tmdbId: 1, title: "Film", year: 2000, overview: "", inLibrary: false }] });
+  });
+
+  it("gives a friendly error and logs only the safe message when Radarr fails", async () => {
+    mocks.lookupMovies.mockRejectedValue(new ArrRequestError("Radarr movie lookup request failed: HTTP 500"));
+    const result = await searchMovies({ term: "film" });
+    expect(result).toEqual({ ok: false, error: "Radarr couldn't complete the search. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Movie search: Radarr movie lookup request failed: HTTP 500");
+  });
+
+  it("rethrows errors that are not Radarr request failures", async () => {
+    mocks.lookupMovies.mockRejectedValue(new Error("config broken"));
+    await expect(searchMovies({ term: "film" })).rejects.toThrow("config broken");
+  });
+});
+
+describe("addLibraryMovie authorization", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+    mocks.listRootFolders.mockResolvedValue([{ id: 7, path: "/invented/movies/", freeSpace: 1 }]);
+    mocks.addMovie.mockResolvedValue({ title: "Lantern Harbour", year: 2021 });
+  });
+
+  it("allows both admin and requester", async () => {
+    await addLibraryMovie(validAdd);
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+  });
+
+  it("rejects a signed-out caller (401) without calling Radarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: ADD_DENIED });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.listRootFolders).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(addLibraryMovie(validAdd)).rejects.toThrow("database down");
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+  });
+});
+
+describe("addLibraryMovie input validation", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+  });
+
+  const without = (key: string) => {
+    const copy: Record<string, unknown> = { ...validAdd };
+    delete copy[key];
+    return copy;
+  };
+
+  const invalid: [string, unknown][] = [
+    ["not an object", "movie"],
+    ["null", null],
+    ["a missing tmdbId", without("tmdbId")],
+    ["a missing qualityProfileId", without("qualityProfileId")],
+    ["a missing rootFolderId", without("rootFolderId")],
+    ["a missing monitored", without("monitored")],
+    ["a missing searchForMovie", without("searchForMovie")],
+    ["a string boolean for monitored", { ...validAdd, monitored: "true" }],
+    ["a string boolean for searchForMovie", { ...validAdd, searchForMovie: "false" }],
+    ["a zero tmdbId", { ...validAdd, tmdbId: 0 }],
+    ["a fractional tmdbId", { ...validAdd, tmdbId: 1.5 }],
+    ["a string tmdbId", { ...validAdd, tmdbId: "910001" }],
+    ["a negative profile id", { ...validAdd, qualityProfileId: -1 }],
+    ["a zero root folder id", { ...validAdd, rootFolderId: 0 }],
+    ["a string root folder id", { ...validAdd, rootFolderId: "7" }],
+    ["a rootFolderPath key", { ...validAdd, rootFolderPath: "/invented/movies/" }],
+    ["a title key", { ...validAdd, title: "Chosen Title" }],
+    ["a string rootFolderPath instead of an id", { tmdbId: 910001, qualityProfileId: 1, rootFolderPath: "/invented/movies/", monitored: true, searchForMovie: true }],
+  ];
+
+  it.each(invalid)("rejects %s without calling Radarr", async (_name, input) => {
+    const result = await addLibraryMovie(input);
+    expect(result).toEqual({ ok: false, error: "Invalid add." });
+    expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.listRootFolders).not.toHaveBeenCalled();
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("addLibraryMovie resolution and results", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+    mocks.listQualityProfiles.mockResolvedValue([{ id: 1, name: "HD-1080p" }]);
+    mocks.listRootFolders.mockResolvedValue([
+      { id: 7, path: "/invented/movies/", freeSpace: 1 },
+      { id: 8, path: "/invented/other/", freeSpace: 2 },
+    ]);
+    mocks.addMovie.mockResolvedValue({ title: "Lantern Harbour", year: 2021 });
+  });
+
+  it("refuses an unknown quality profile without adding", async () => {
+    const result = await addLibraryMovie({ ...validAdd, qualityProfileId: 99 });
+    expect(result).toEqual({ ok: false, error: "That quality profile no longer exists." });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown root folder id without adding", async () => {
+    const result = await addLibraryMovie({ ...validAdd, rootFolderId: 99 });
+    expect(result).toEqual({ ok: false, error: "That root folder no longer exists." });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("passes the resolved root folder path, not the id, to addMovie", async () => {
+    await addLibraryMovie({ ...validAdd, rootFolderId: 8, monitored: false, searchForMovie: false });
+    expect(mocks.addMovie).toHaveBeenCalledWith({
+      tmdbId: 910001,
+      qualityProfileId: 1,
+      rootFolderPath: "/invented/other/",
+      monitored: false,
+      searchForMovie: false,
+    });
+  });
+
+  it("returns the title and year from addMovie, then refreshes", async () => {
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: true, title: "Lantern Harbour", year: 2021 });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps an exists error to the library message and does not refresh", async () => {
+    mocks.addMovie.mockRejectedValue(new MovieAddError("exists"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "That movie is already in your library." });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("maps a not-found error to the Radarr message and does not refresh", async () => {
+    mocks.addMovie.mockRejectedValue(new MovieAddError("not-found"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "Radarr couldn't find that movie." });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the friendly error and logs the safe message when Radarr fails", async () => {
+    mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie add request failed: HTTP 500"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Movie add: Radarr movie add request failed: HTTP 500");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the friendly error when the root folder list cannot be fetched", async () => {
+    mocks.listRootFolders.mockRejectedValue(new ArrRequestError("Radarr root folder request failed: timed out", "timeout"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not Radarr request failures", async () => {
+    mocks.addMovie.mockRejectedValue(new Error("config broken"));
+    await expect(addLibraryMovie(validAdd)).rejects.toThrow("config broken");
   });
 });
