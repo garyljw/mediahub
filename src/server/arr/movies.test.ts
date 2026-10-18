@@ -4,6 +4,7 @@ import type { components as RadarrComponents } from "./generated/radarr";
 import movieFixture from "./__fixtures__/radarr-movies.json";
 import profileFixture from "./__fixtures__/radarr-qualityprofiles.json";
 import { ARR_TIMEOUT_MS, ArrRequestError } from "./request";
+import { MAX_POSTER_BYTES } from "./poster";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
@@ -35,7 +36,6 @@ vi.mock("@/server/env", () => ({
 
 import {
   DELETE_TIMEOUT_MS,
-  MAX_POSTER_BYTES,
   deleteMovies,
   editMovies,
   getMoviePoster,

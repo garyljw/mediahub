@@ -1,0 +1,93 @@
+[
+  {
+    "id": 0,
+    "title": "Lantern Harbour",
+    "originalTitle": "Lantern Harbour",
+    "sortTitle": "lantern harbour",
+    "sizeOnDisk": 0,
+    "status": "released",
+    "overview": "A ferry pilot finds a sealed message in a lighthouse and has three days to deliver it before the storm season closes the coast.",
+    "year": 2021,
+    "qualityProfileId": 0,
+    "hasFile": false,
+    "monitored": false,
+    "minimumAvailability": "released",
+    "isAvailable": true,
+    "tmdbId": 910001,
+    "remotePoster": "https://image.tmdb.org/t/p/original/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg",
+    "imdbId": "tt0000101",
+    "titleSlug": "lantern-harbour-2021",
+    "genres": ["Drama", "Mystery"],
+    "tags": [],
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-lantern.jpg", "remoteUrl": "https://example.invalid/poster-lantern.jpg" }
+    ],
+    "ratings": { "imdb": { "value": 6.8, "votes": 4312 } }
+  },
+  {
+    "id": 0,
+    "title": "Copper Meridian",
+    "sortTitle": "copper meridian",
+    "overview": "",
+    "year": 1998,
+    "tmdbId": 910002,
+    "images": [
+      { "coverType": "poster", "url": "https://image.tmdb.org/t/p/original/kqjL17yufvn9OVLyXYpvtyrFfak.jpg", "remoteUrl": "https://image.tmdb.org/t/p/original/kqjL17yufvn9OVLyXYpvtyrFfak.jpg" }
+    ],
+    "monitored": false,
+    "hasFile": false,
+    "isAvailable": true,
+    "genres": [],
+    "tags": []
+  },
+  {
+    "id": 0,
+    "title": "",
+    "sortTitle": "",
+    "overview": "An entry with a tmdbId but no title. It must be skipped.",
+    "year": 2005,
+    "tmdbId": 910003,
+    "monitored": false,
+    "hasFile": false,
+    "genres": [],
+    "tags": []
+  },
+  {
+    "id": 0,
+    "sortTitle": "untitled",
+    "overview": "An entry with no title field at all. It must be skipped.",
+    "year": 2010,
+    "monitored": false,
+    "hasFile": false,
+    "genres": [],
+    "tags": []
+  },
+  {
+    "id": 0,
+    "title": "Glass Orchard",
+    "sortTitle": "glass orchard",
+    "overview": "A botanist inherits a greenhouse that grows a different fruit every night, and each fruit remembers a different year. Her sister wants it sold before the lease runs out, and the town council wants it closed for reasons nobody will explain. Over one long autumn she tries to learn what the orchard is for, who planted the first tree, and whether the memories it keeps can be returned to the people who lost them before the frost arrives.",
+    "year": 2016,
+    "tmdbId": 910004,
+    "remotePoster": "https://example.invalid/poster-orchard.jpg",
+    "monitored": false,
+    "hasFile": false,
+    "genres": ["Fantasy"],
+    "tags": [],
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-orchard.jpg", "remoteUrl": "https://example.invalid/poster-orchard.jpg" }
+    ]
+  },
+  {
+    "id": 0,
+    "title": "Signal Dust",
+    "sortTitle": "signal dust",
+    "overview": "Already in the library.",
+    "year": 0,
+    "tmdbId": 910005,
+    "monitored": true,
+    "hasFile": true,
+    "genres": ["Science Fiction"],
+    "tags": []
+  }
+]

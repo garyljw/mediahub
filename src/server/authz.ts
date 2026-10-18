@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { connection } from "next/server";
 import { getAuth } from "./auth";
 import { isRole, type Role } from "./roles";
 
@@ -71,6 +72,10 @@ export function createAuthz(lookup: SessionLookup) {
 const lookupFromRequest = cache(async (): Promise<SessionUser | null> => {
   // Read headers first: during prerender this bails out before env() can run.
   const requestHeaders = await headers();
+  // Better Auth checks the session expiry with `new Date()`, and better-sqlite3 answers synchronously, so
+  // without this the clock is read in a render stage where Next forbids it (dev error "unstable value
+  // `new Date()`", raised because partialPrefetching is on). connection() defers the rest to request time.
+  await connection();
   const session = await getAuth().api.getSession({ headers: requestHeaders });
   if (!session) return null;
   const { id, email, name, role } = session.user;
