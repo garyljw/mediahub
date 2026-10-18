@@ -40,7 +40,7 @@ vi.mock("./release-cache", async () => {
   };
 });
 
-import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES, type ReleaseRow } from "./releases";
+import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES_PER_PROTOCOL, type ReleaseRow } from "./releases";
 
 const ALLOWED_KEYS = [
   "ageHours",
@@ -75,10 +75,10 @@ beforeEach(() => {
 });
 
 describe("toReleaseRows", () => {
-  const { rows, total } = mapRows(releases);
+  const { rows, totals } = mapRows(releases);
 
   it("keeps only usable releases, in upstream order", () => {
-    expect(total).toBe(4);
+    expect(totals).toEqual({ all: 4, usenet: 3, torrent: 1 });
     expect(rows.map((r) => r.title)).toEqual([
       "Starfall.Protocol.2019.2160p.BluRay.x265-GRP",
       "Starfall.Protocol.2019.1080p.WEB-DL.x264-TOR",
@@ -197,15 +197,28 @@ describe("toReleaseRows", () => {
     });
   });
 
-  it("returns at most MAX_RELEASES rows but counts every usable release in total", () => {
-    const many = Array.from({ length: MAX_RELEASES + 50 }, (_, i) => release({ title: `Release ${i}`, guid: `g${i}` }));
+  it("returns at most MAX_RELEASES_PER_PROTOCOL rows per group but counts every usable release", () => {
+    const many = Array.from({ length: MAX_RELEASES_PER_PROTOCOL + 50 }, (_, i) => release({ title: `Release ${i}`, guid: `g${i}` }));
     const makeToken = vi.fn(() => "t");
     const result = toReleaseRows(many, makeToken);
-    expect(MAX_RELEASES).toBe(200);
-    expect(result.rows).toHaveLength(MAX_RELEASES);
-    expect(result.total).toBe(MAX_RELEASES + 50);
-    expect(makeToken).toHaveBeenCalledTimes(MAX_RELEASES);
+    expect(MAX_RELEASES_PER_PROTOCOL).toBe(200);
+    expect(result.rows).toHaveLength(MAX_RELEASES_PER_PROTOCOL);
+    // These have no protocol, so they count only in `all`.
+    expect(result.totals).toEqual({ all: MAX_RELEASES_PER_PROTOCOL + 50, usenet: 0, torrent: 0 });
+    expect(makeToken).toHaveBeenCalledTimes(MAX_RELEASES_PER_PROTOCOL);
     expect(result.rows[0].title).toBe("Release 0");
+  });
+
+  it("caps each protocol separately, so torrents ranked below 200 Usenet releases are still returned", () => {
+    const usenet = Array.from({ length: 300 }, (_, i) => release({ protocol: "usenet", title: `U${i}`, guid: `u${i}` }));
+    const torrents = Array.from({ length: 30 }, (_, i) => release({ protocol: "torrent", title: `T${i}`, guid: `t${i}` }));
+    const result = mapRows([...usenet, ...torrents]);
+    expect(result.totals).toEqual({ all: 330, usenet: 300, torrent: 30 });
+    expect(result.rows.filter((r) => r.protocol === "usenet")).toHaveLength(MAX_RELEASES_PER_PROTOCOL);
+    expect(result.rows.filter((r) => r.protocol === "torrent")).toHaveLength(30);
+    // Radarr's order is kept: the kept Usenet releases come first, then the torrents.
+    expect(result.rows[0].title).toBe("U0");
+    expect(result.rows[MAX_RELEASES_PER_PROTOCOL].title).toBe("T0");
   });
 });
 
@@ -271,12 +284,12 @@ describe("searchReleases", () => {
     expect(req.url).not.toContain("apikey");
   });
 
-  it("returns rows and total, with tokens that a grab can use", async () => {
+  it("returns rows and totals, with tokens that a grab can use", async () => {
     serve({ search: () => json(releases) });
 
     const result = await searchReleases(7);
 
-    expect(result.total).toBe(4);
+    expect(result.totals.all).toBe(4);
     expect(result.rows).toHaveLength(4);
     expect(JSON.stringify(result)).not.toContain(FAKE_KEY);
   });

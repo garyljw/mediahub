@@ -89,7 +89,7 @@ beforeEach(() => {
   mocks.deleteMovies.mockResolvedValue(undefined);
   mocks.searchMovieReleases.mockResolvedValue(undefined);
   mocks.refreshMovies.mockResolvedValue(undefined);
-  mocks.searchReleases.mockResolvedValue({ rows: [], total: 0 });
+  mocks.searchReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
   mocks.grabRelease.mockResolvedValue({ title: "Starfall.2019.1080p" });
   mocks.listQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
@@ -790,14 +790,15 @@ describe("findMovieReleases and grabMovieRelease", () => {
       expect(mocks.searchReleases).not.toHaveBeenCalled();
     });
 
-    it("returns the rows and total on success, and does not re-render the page", async () => {
+    it("returns the rows and totals on success, and does not re-render the page", async () => {
       const rows = [{ token: release.token, title: release.title }];
-      mocks.searchReleases.mockResolvedValue({ rows, total: 9 });
+      const totals = { all: 9, usenet: 5, torrent: 4 };
+      mocks.searchReleases.mockResolvedValue({ rows, totals });
 
       const result = await findMovieReleases({ movieId: 7 });
 
       expect(mocks.searchReleases).toHaveBeenCalledWith(7);
-      expect(result).toEqual({ ok: true, releases: rows, total: 9 });
+      expect(result).toEqual({ ok: true, releases: rows, totals });
       expect(mocks.refresh).not.toHaveBeenCalled();
     });
 

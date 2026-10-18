@@ -34,8 +34,15 @@ export type ReleaseRow = {
   rejections: string[];
 };
 
-/** Most releases returned for one search. Radarr can return hundreds; the dialog only needs the best ones. */
-export const MAX_RELEASES = 200;
+/**
+ * Most releases returned per protocol for one search. Radarr can return hundreds; the dialog only needs the
+ * best ones. The cap is per protocol, so filtering the dialog to torrents (or Usenet) still shows the best
+ * torrents even when Radarr ranks hundreds of Usenet releases above them.
+ */
+export const MAX_RELEASES_PER_PROTOCOL = 200;
+
+/** How many usable releases Radarr found: all of them, and per protocol. Unknown-protocol releases count only in `all`. */
+export type ReleaseTotals = { all: number; usenet: number; torrent: number };
 /** Longest title sent to the browser, in code points. Longer titles are cut and end with an ellipsis. */
 const MAX_TITLE = 300;
 /** Most rejection reasons shown per release. */
@@ -85,15 +92,17 @@ function protocolOf(value: unknown): ReleaseRow["protocol"] {
 /**
  * Pure: maps Radarr's releases to dialog rows, in upstream order. Radarr returns them best-first by its
  * own ranking, and that order is kept. Skips a release without a guid, without a positive indexer id, or
- * without a title. `total` counts every usable release, and `rows` holds the first MAX_RELEASES of them.
+ * without a title. `totals` counts every usable release, and `rows` holds the first MAX_RELEASES_PER_PROTOCOL
+ * of each protocol (unknown is its own group), still in Radarr's order.
  * `makeToken` runs only for returned rows that Radarr allows to be grabbed.
  */
 export function toReleaseRows(
   releases: ReleaseResource[],
   makeToken: (key: { guid: string; indexerId: number; title: string }) => string,
-): { rows: ReleaseRow[]; total: number } {
+): { rows: ReleaseRow[]; totals: ReleaseTotals } {
   const rows: ReleaseRow[] = [];
-  let total = 0;
+  const totals: ReleaseTotals = { all: 0, usenet: 0, torrent: 0 };
+  const kept: Record<ReleaseRow["protocol"], number> = { usenet: 0, torrent: 0, unknown: 0 };
 
   for (const release of releases) {
     const guid = text(release.guid);
@@ -102,13 +111,15 @@ export function toReleaseRows(
     if (guid === null || title === null || typeof indexerId !== "number" || !Number.isInteger(indexerId) || indexerId <= 0) {
       continue;
     }
-    total += 1;
-    if (rows.length >= MAX_RELEASES) continue;
+    const protocol = protocolOf(release.protocol);
+    totals.all += 1;
+    if (protocol !== "unknown") totals[protocol] += 1;
+    if (kept[protocol] >= MAX_RELEASES_PER_PROTOCOL) continue;
+    kept[protocol] += 1;
 
     // Array.from splits by code point, so the cut never splits a surrogate pair.
     const titleChars = Array.from(title);
     const shortTitle = titleChars.length > MAX_TITLE ? `${titleChars.slice(0, MAX_TITLE - 1).join("")}…` : title;
-    const protocol = protocolOf(release.protocol);
     const rejections: string[] = [];
     for (const reason of release.rejections ?? []) {
       const clean = text(reason);
@@ -137,14 +148,14 @@ export function toReleaseRows(
     });
   }
 
-  return { rows, total };
+  return { rows, totals };
 }
 
 /**
  * Asks Radarr for interactive search results for one movie. Radarr queries every indexer, so this is slow.
  * Each returned release gets a server-side token, and the grab action accepts only those tokens.
  */
-export async function searchReleases(movieId: number): Promise<{ rows: ReleaseRow[]; total: number }> {
+export async function searchReleases(movieId: number): Promise<{ rows: ReleaseRow[]; totals: ReleaseTotals }> {
   const client = radarrClient();
   const releases = await getList(
     "Radarr release search",

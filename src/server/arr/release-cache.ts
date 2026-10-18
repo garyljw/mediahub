@@ -75,8 +75,11 @@ export type ReleaseCache = ReturnType<typeof createReleaseCache>;
 /** Radarr caches interactive search results for 30 minutes, so tokens expire just before Radarr forgets the release. */
 export const RELEASE_TTL_MS = 25 * 60_000;
 
-/** Most releases held at once. Each search adds one entry per returned release, capped by the search itself. */
-export const MAX_CACHED_RELEASES = 1000;
+/**
+ * Most releases held at once. Each search adds one entry per grabbable returned release, up to 600 (200 per
+ * protocol, unknown included), so this keeps a few recent searches. Each entry is a guid and a short title.
+ */
+export const MAX_CACHED_RELEASES = 2000;
 
 // Next's dev server reloads modules, and a bundle can be loaded twice. Keeping the cache on globalThis under
 // a shared symbol means every copy of this module uses the same cache, so a token made in one copy can be

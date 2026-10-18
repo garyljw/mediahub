@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ReleaseRow } from "@/server/arr/releases";
-import { formatAge, formatPeers, grabbedMessage, releaseCountLine, releaseDetails } from "./movie-release";
+import {
+  filterReleases,
+  formatAge,
+  formatPeers,
+  grabbedMessage,
+  parseProtocolFilter,
+  releaseCountLine,
+  releaseDetails,
+} from "./movie-release";
 
 describe("formatAge", () => {
   it("shows a dash for missing, negative or non-finite ages", () => {
@@ -109,5 +117,53 @@ describe("releaseDetails", () => {
 
   it("keeps the sign on a negative score", () => {
     expect(releaseDetails({ ...base, customFormatScore: -1500 })).toContain("Score -1,500");
+  });
+});
+
+describe("filterReleases", () => {
+  function row(token: string, protocol: ReleaseRow["protocol"]): ReleaseRow {
+    return {
+      token,
+      title: token,
+      indexer: null,
+      protocol,
+      quality: null,
+      customFormats: [],
+      customFormatScore: 0,
+      size: 0,
+      ageHours: null,
+      seeders: null,
+      leechers: null,
+      languages: [],
+      approved: true,
+      rejections: [],
+    };
+  }
+  const releases = [row("a", "torrent"), row("b", "usenet"), row("c", "unknown"), row("d", "torrent")];
+
+  it("returns every release, unknown protocol included, for all", () => {
+    expect(filterReleases(releases, "all")).toBe(releases);
+  });
+
+  it("keeps only the chosen protocol, in the original order", () => {
+    expect(filterReleases(releases, "torrent").map((r) => r.token)).toEqual(["a", "d"]);
+    expect(filterReleases(releases, "usenet").map((r) => r.token)).toEqual(["b"]);
+  });
+});
+
+describe("releaseCountLine with a protocol", () => {
+  it("names the protocol", () => {
+    expect(releaseCountLine(0, 0, "torrent")).toBe("No torrent releases found.");
+    expect(releaseCountLine(1, 1, "usenet")).toBe("1 Usenet release");
+    expect(releaseCountLine(200, 300, "usenet")).toBe("Showing the top 200 of 300 Usenet releases");
+  });
+});
+
+describe("parseProtocolFilter", () => {
+  it("accepts the three options and falls back to all for anything else", () => {
+    expect(parseProtocolFilter("usenet")).toBe("usenet");
+    expect(parseProtocolFilter("torrent")).toBe("torrent");
+    expect(parseProtocolFilter("all")).toBe("all");
+    expect(parseProtocolFilter("unknown")).toBe("all");
   });
 });

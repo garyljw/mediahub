@@ -19,7 +19,7 @@ import {
   type LookupResult,
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
-import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases, type ReleaseRow } from "@/server/arr/releases";
+import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases, type ReleaseRow, type ReleaseTotals } from "@/server/arr/releases";
 import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
@@ -308,7 +308,7 @@ export async function refreshLibraryMovies(input: unknown): Promise<RefreshResul
   return { ok: true, refreshed: movieIds.length };
 }
 
-export type ReleaseSearchResult = { ok: true; releases: ReleaseRow[]; total: number } | { ok: false; error: string };
+export type ReleaseSearchResult = { ok: true; releases: ReleaseRow[]; totals: ReleaseTotals } | { ok: false; error: string };
 
 // strictObject rejects unknown keys. Only the movie id crosses from the browser.
 const ReleaseSearchInput = z.strictObject({
@@ -332,8 +332,8 @@ export async function findMovieReleases(input: unknown): Promise<ReleaseSearchRe
   if (!parsed.success) return { ok: false, error: "Invalid search." };
 
   try {
-    const { rows, total } = await searchReleases(parsed.data.movieId);
-    return { ok: true, releases: rows, total };
+    const { rows, totals } = await searchReleases(parsed.data.movieId);
+    return { ok: true, releases: rows, totals };
   } catch (error) {
     if (!(error instanceof ArrRequestError)) throw error;
     // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
