@@ -7,6 +7,7 @@ import {
   deleteMovies,
   editMovies,
   listQualityProfiles,
+  refreshMovies,
   searchMovieReleases,
   type MovieEdit,
 } from "@/server/arr/movies";
@@ -21,6 +22,7 @@ import { ArrRequestError } from "@/server/arr/request";
 import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
+import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
 
 export type EditResult = { ok: true } | { ok: false; error: string };
 
@@ -263,4 +265,44 @@ export async function searchLibraryMovies(input: unknown): Promise<SearchNowResu
     return { ok: false, error: "Radarr didn't start the search. Try again." };
   }
   return { ok: true, searched: movieIds.length };
+}
+
+export type RefreshResult = { ok: true; refreshed: number } | { ok: false; error: string };
+
+// strictObject rejects unknown keys. Only ids cross from the browser.
+const MovieRefreshInput = z.strictObject({
+  movieIds: z.array(z.number().int().positive()).min(1).max(MAX_REFRESH_MOVIES),
+});
+
+/**
+ * Asks Radarr to refresh metadata and rescan disk for library movies (admin only). Same shape as the other
+ * actions: the role check runs first inside try, and the catch always returns or throws. Radarr queues the
+ * refresh and answers at once, so the data on the page is the same afterwards and there is no refresh().
+ */
+export async function refreshLibraryMovies(input: unknown): Promise<RefreshResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to refresh movies." };
+    throw error;
+  }
+
+  const parsed = MovieRefreshInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid refresh." };
+
+  // A Set drops duplicate ids, so Radarr refreshes each movie once.
+  const movieIds = [...new Set(parsed.data.movieIds)];
+  try {
+    await refreshMovies(movieIds);
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Movie refresh: ${error.message}`);
+    // After a timeout Radarr may have queued the refresh anyway, so don't tell the user to just retry.
+    if (error.kind === "timeout") {
+      return { ok: false, error: "Radarr took too long to answer. The refresh may still have started, so check Radarr before trying again." };
+    }
+    return { ok: false, error: "Radarr didn't start the refresh. Try again." };
+  }
+  return { ok: true, refreshed: movieIds.length };
 }

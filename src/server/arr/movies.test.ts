@@ -41,6 +41,7 @@ import {
   getMoviePoster,
   listMovies,
   listQualityProfiles,
+  refreshMovies,
   searchMovieReleases,
   toMovieRows,
 } from "./movies";
@@ -692,6 +693,38 @@ describe("searchMovieReleases", () => {
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Radarr movie search command request failed: HTTP 500");
+    expect(error.message).not.toContain(FAKE_KEY);
+    expect(error.message).not.toContain("radarr.test");
+  });
+});
+
+describe("refreshMovies", () => {
+  function serveCommand(respond: () => Response) {
+    fetchMock.mockImplementation(async () => respond());
+  }
+
+  it("POSTs the RefreshMovie command with the key in a header and exactly name and movieIds", async () => {
+    serveCommand(() => Response.json({ id: 1, name: "RefreshMovie" }));
+
+    await refreshMovies([3, 5]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("POST");
+    expect(new URL(req.url).pathname).toBe("/api/v3/command");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toStrictEqual({ name: "RefreshMovie", movieIds: [3, 5] });
+  });
+
+  it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
+    serveCommand(() => new Response(`boom ${FAKE_KEY} at http://radarr.test:7878`, { status: 500 }));
+
+    const error = await rejectionOf(refreshMovies([1]));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr movie refresh command request failed: HTTP 500");
     expect(error.message).not.toContain(FAKE_KEY);
     expect(error.message).not.toContain("radarr.test");
   });

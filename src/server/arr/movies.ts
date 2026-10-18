@@ -171,6 +171,18 @@ export async function searchMovieReleases(movieIds: number[]): Promise<void> {
   await arrRequest("Radarr movie search command", (signal) => client.POST("/api/v3/command", { body, signal }));
 }
 
+/**
+ * Asks Radarr to refresh metadata and rescan disk for the given movies (its RefreshMovie command, the same one
+ * its "Refresh & Scan" button sends). Radarr re-reads each movie's folder on disk. It queues the command and
+ * answers at once. Only the command name and the ids are sent.
+ */
+export async function refreshMovies(movieIds: number[]): Promise<void> {
+  const client = radarrClient();
+  // CommandResource doesn't declare the command's own fields (movieIds), so the body is built as a variable.
+  const body = { name: "RefreshMovie", movieIds };
+  await arrRequest("Radarr movie refresh command", (signal) => client.POST("/api/v3/command", { body, signal }));
+}
+
 /** The one Radarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const POSTER_FILENAME = "poster-250.jpg";
 
