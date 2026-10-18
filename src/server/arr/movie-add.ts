@@ -2,6 +2,7 @@ import "server-only";
 import { radarrClient } from "./client";
 import { getList } from "./movies";
 import { ArrRequestError, arrRequest } from "./request";
+import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./movies";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -15,6 +16,8 @@ export type LookupResult = {
   overview: string;
   /** True when the movie is already in the Radarr library. */
   inLibrary: boolean;
+  /** The TMDB poster file name (e.g. "abc123.jpg"), or null when there is no usable poster. Validated by tmdbPosterFile. */
+  posterFile: string | null;
 };
 
 /** A root folder the add dialog can choose. The browser sends its id; the server resolves the path. */
@@ -45,6 +48,43 @@ export class MovieAddError extends Error {
   }
 }
 
+/** A TMDB poster file name: letters and digits, then ".jpg". Also the only shape the poster route accepts. */
+export const TMDB_POSTER_FILE = /^[A-Za-z0-9]{1,64}\.jpg$/;
+
+const TMDB_HOST = "image.tmdb.org";
+const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w92/";
+
+/**
+ * The file name of a TMDB poster URL, or null. Accepts only https, the exact host image.tmdb.org with
+ * no port or credentials, and a last path segment that is a bare TMDB file name.
+ */
+function posterFileFromUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.hostname !== TMDB_HOST || url.port !== "" || url.username !== "" || url.password !== "") {
+      return null;
+    }
+    const last = url.pathname.split("/").pop() ?? "";
+    return TMDB_POSTER_FILE.test(last) ? last : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The TMDB poster file for a Radarr movie, or null. Tries remotePoster first, then the poster entry's
+ * remoteUrl. Each candidate must pass posterFileFromUrl, so a URL on any other host or scheme is ignored.
+ */
+export function tmdbPosterFile(movie: MovieResource): string | null {
+  const posterImage = movie.images?.find((image) => image.coverType === "poster")?.remoteUrl;
+  for (const candidate of [movie.remotePoster, posterImage]) {
+    if (typeof candidate !== "string" || candidate === "") continue;
+    const file = posterFileFromUrl(candidate);
+    if (file !== null) return file;
+  }
+  return null;
+}
+
 /** Radarr's year when it is a real year, otherwise null. Same rule as toMovieRows. */
 function yearOrNull(year: unknown): number | null {
   return typeof year === "number" && year > 0 ? year : null;
@@ -65,6 +105,7 @@ export function toLookupResults(movies: MovieResource[], libraryTmdbIds: Set<num
       year: yearOrNull(movie.year),
       overview: overviewChars.length > MAX_OVERVIEW ? `${overviewChars.slice(0, MAX_OVERVIEW - 1).join("")}…` : overviewChars.join(""),
       inLibrary: libraryTmdbIds.has(movie.tmdbId),
+      posterFile: tmdbPosterFile(movie),
     });
   }
   return results;
@@ -161,4 +202,20 @@ export async function addMovie(add: MovieAdd): Promise<{ title: string; year: nu
   await arrRequest("Radarr movie add", (signal) => client.POST("/api/v3/movie", { body, signal }));
 
   return { title, year };
+}
+
+/**
+ * One TMDB poster thumbnail (w92), as JPEG bytes. The file name must match TMDB_POSTER_FILE, and the
+ * fetch goes to one fixed base URL with no redirects, no custom headers and no Radarr key.
+ */
+export async function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {
+  if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError("TMDB poster request failed: invalid name", "invalid");
+  const data = await arrRequest("TMDB poster", async (signal) => {
+    const response = await fetch(`${TMDB_POSTER_BASE}${file}`, { redirect: "error", signal });
+    // Only read the body of a good response. A failed one is reported by arrRequest from the status.
+    if (!response.ok) return { data: undefined, response };
+    return { data: await readCapped(response.body, MAX_POSTER_BYTES), response };
+  });
+  if (!data || !isJpeg(data)) throw new ArrRequestError("TMDB poster response was not a usable image", "invalid");
+  return data;
 }

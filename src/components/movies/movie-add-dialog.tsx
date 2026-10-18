@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
 import type { QualityProfileOption } from "@/server/arr/movies";
 import { SELECT_CLASS } from "./movie-edit-dialog";
+import { MoviePoster } from "./movie-poster";
 import {
   GENERIC_ERROR,
   addedMessage,
@@ -246,6 +247,9 @@ export function MovieAddDialog({
                 const adding = addingIds.has(result.tmdbId);
                 return (
                   <li key={result.tmdbId} className="flex items-start gap-3 p-3">
+                    <MoviePoster
+                      src={result.posterFile === null ? null : `/api/movies/lookup-poster/${result.posterFile}`}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{resultLabel(result)}</p>
                       {result.overview && (

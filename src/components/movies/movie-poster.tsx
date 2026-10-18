@@ -6,10 +6,10 @@ import { Film } from "lucide-react";
 import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
 
 /**
- * A 24x36 poster thumbnail, or a same-size placeholder when there is no poster or it failed to load.
- * The poster comes from MediaHub's own route, never from Radarr or TMDB directly.
+ * A 24x36 poster thumbnail, or a same-size placeholder when there is no src or it failed to load.
+ * `src` is always one of MediaHub's own poster routes, never a Radarr or TMDB URL.
  */
-export function MoviePoster({ movieId, hasPoster }: { movieId: number; hasPoster: boolean }) {
+export function MoviePoster({ src }: { src: string | null }) {
   const [failed, setFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -19,13 +19,13 @@ export function MoviePoster({ movieId, hasPoster }: { movieId: number; hasPoster
     if (img && img.complete && img.naturalWidth === 0) setFailed(true);
   }, []);
 
-  if (hasPoster && !failed) {
+  if (src !== null && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the source is already a 250px thumbnail. The alt is empty because the title sits right next to it.
       <img
         ref={imgRef}
         data-poster-thumb
-        src={`/api/movies/${movieId}/poster`}
+        src={src}
         alt=""
         width={24}
         height={36}

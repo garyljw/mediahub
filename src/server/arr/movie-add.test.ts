@@ -12,8 +12,11 @@ vi.mock("@/server/env", () => ({ env: () => ({}) }));
 import { ArrRequestError } from "./request";
 import {
   MovieAddError,
+  TMDB_POSTER_FILE,
   addMovie,
+  getTmdbPoster,
   movieAddBody,
+  tmdbPosterFile,
   toLookupResults,
   toRootFolderOptions,
   type MovieAdd,
@@ -37,10 +40,19 @@ describe("toLookupResults", () => {
     expect(results.map((r) => r.tmdbId)).toEqual([910001, 910002, 910004, 910005]);
   });
 
-  it("returns only the five dialog fields", () => {
+  it("returns only the six dialog fields", () => {
     for (const result of results) {
-      expect(Object.keys(result).sort()).toEqual(["inLibrary", "overview", "title", "tmdbId", "year"]);
+      expect(Object.keys(result).sort()).toEqual(["inLibrary", "overview", "posterFile", "title", "tmdbId", "year"]);
     }
+  });
+
+  it("gives each result its TMDB poster file, or null when there is none", () => {
+    expect(results.find((r) => r.tmdbId === 910001)?.posterFile).toBe("vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg");
+    // No remotePoster: falls back to the poster entry's remoteUrl.
+    expect(results.find((r) => r.tmdbId === 910002)?.posterFile).toBe("kqjL17yufvn9OVLyXYpvtyrFfak.jpg");
+    // remotePoster is on a non-TMDB host and the poster entry is too, so there is no poster.
+    expect(results.find((r) => r.tmdbId === 910004)?.posterFile).toBeNull();
+    expect(results.find((r) => r.tmdbId === 910005)?.posterFile).toBeNull();
   });
 
   it("maps a year, using null for a missing or non-positive one", () => {
@@ -192,5 +204,112 @@ describe("addMovie", () => {
 
     await expect(addMovie(add)).resolves.toEqual({ title: "Lantern Harbour", year: 2021 });
     expect(clientMock.POST.mock.calls[0][1].body).toStrictEqual(movieAddBody(add, "Lantern Harbour", 2021));
+  });
+});
+
+describe("tmdbPosterFile", () => {
+  const good = "https://image.tmdb.org/t/p/original/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg";
+  const movie = (fields: Record<string, unknown>) => ({ title: "X", ...fields }) as MovieResource;
+
+  it("takes the file name from remotePoster", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: good }))).toBe("vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg");
+  });
+
+  it("falls back to the poster entry's remoteUrl when remotePoster is missing", () => {
+    expect(tmdbPosterFile(movie({ images: [{ coverType: "poster", remoteUrl: good }] }))).toBe("vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg");
+  });
+
+  it("falls back to the poster entry when remotePoster is on the wrong host", () => {
+    const movieWithBadFirst = movie({
+      remotePoster: "https://evil.example/t/p/original/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg",
+      images: [{ coverType: "poster", remoteUrl: good }],
+    });
+    expect(tmdbPosterFile(movieWithBadFirst)).toBe("vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg");
+  });
+
+  it("rejects a wrong host, including a lookalike suffix", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org.evil.example/t/p/original/abc.jpg" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "https://evil.example/image.tmdb.org/abc.jpg" }))).toBeNull();
+  });
+
+  it("rejects plain http", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: "http://image.tmdb.org/t/p/original/abc.jpg" }))).toBeNull();
+  });
+
+  it("rejects a port or credentials on the TMDB host", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org:8443/t/p/original/abc.jpg" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "https://user@image.tmdb.org/t/p/original/abc.jpg" }))).toBeNull();
+  });
+
+  it("rejects an encoded or raw traversal in the last segment", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/..%2F..%2Fsecret.jpg" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/%2e%2e.jpg" }))).toBeNull();
+    // WHATWG URL resolves "/../" first, so only the bare file name "abc.jpg" is left. That is safe: the
+    // fetch uses the file name alone, under the fixed w92 base, so no directory can be reached.
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/../abc.jpg" }))).toBe("abc.jpg");
+  });
+
+  it("rejects a .png, a different extension, or an uppercase .JPG", () => {
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/abc.png" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/abc.jpg.exe" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "https://image.tmdb.org/t/p/original/abc.JPG" }))).toBeNull();
+  });
+
+  it("returns null for a missing poster, an empty string, or an unparseable URL", () => {
+    expect(tmdbPosterFile(movie({}))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ remotePoster: "not a url" }))).toBeNull();
+    expect(tmdbPosterFile(movie({ images: [{ coverType: "fanart", remoteUrl: good }] }))).toBeNull();
+  });
+
+  it("accepts only names that match TMDB_POSTER_FILE", () => {
+    expect(TMDB_POSTER_FILE.test("vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg")).toBe(true);
+    expect(TMDB_POSTER_FILE.test("a".repeat(64) + ".jpg")).toBe(true);
+    expect(TMDB_POSTER_FILE.test("a".repeat(65) + ".jpg")).toBe(false);
+    expect(TMDB_POSTER_FILE.test("../a.jpg")).toBe(false);
+  });
+});
+
+describe("getTmdbPoster", () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("rejects a bad file name without fetching", async () => {
+    await expect(getTmdbPoster("../etc.jpg")).rejects.toThrow("TMDB poster request failed: invalid name");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fetches the fixed w92 URL with no redirects, no headers and no Radarr key", async () => {
+    fetchMock.mockResolvedValue(new Response(JPEG, { status: 200 }));
+    await expect(getTmdbPoster("abc123.jpg")).resolves.toEqual(JPEG);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://image.tmdb.org/t/p/w92/abc123.jpg");
+    expect(init.redirect).toBe("error");
+    expect(init.headers).toBeUndefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("maps a non-OK status to a safe ArrRequestError with the status", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+    const error = await getTmdbPoster("abc123.jpg").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).message).toBe("TMDB poster request failed: HTTP 404");
+    expect((error as ArrRequestError).status).toBe(404);
+  });
+
+  it("rejects a body that is not a JPEG", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>", { status: 200 }));
+    await expect(getTmdbPoster("abc123.jpg")).rejects.toThrow("TMDB poster response was not a usable image");
+  });
+
+  it("reports a network failure without the underlying error", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed: https://image.tmdb.org/..."));
+    const error = await getTmdbPoster("abc123.jpg").catch((e: unknown) => e);
+    expect((error as ArrRequestError).message).toBe("TMDB poster request failed: network error");
   });
 });

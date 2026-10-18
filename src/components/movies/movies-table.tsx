@@ -347,7 +347,7 @@ export function MoviesTable({
                 )}
                 <TableCell className={CELL}>
                   <div className="flex items-center gap-2">
-                    <MoviePoster movieId={row.id} hasPoster={row.hasPoster} />
+                    <MoviePoster src={row.hasPoster ? `/api/movies/${row.id}/poster` : null} />
                     <div className="min-w-0 max-w-[28rem] truncate">
                       <span className="font-medium">{row.title}</span>
                     </div>

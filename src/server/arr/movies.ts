@@ -168,7 +168,7 @@ export const MAX_POSTER_BYTES = 2 * 1024 * 1024;
  * Reads a body into memory, up to `max` bytes. Returns null as soon as it goes over and cancels the
  * rest, so an oversized response never gets fully buffered on the NAS.
  */
-async function readCapped(body: ReadableStream<Uint8Array> | null | undefined, max: number): Promise<Uint8Array<ArrayBuffer> | null> {
+export async function readCapped(body: ReadableStream<Uint8Array> | null | undefined, max: number): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!body) return new Uint8Array(0);
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
@@ -193,7 +193,7 @@ async function readCapped(body: ReadableStream<Uint8Array> | null | undefined, m
 }
 
 /** Every JPEG starts with these bytes. Anything else (e.g. a proxy's HTML login page) is not served as a poster. */
-function isJpeg(bytes: Uint8Array): boolean {
+export function isJpeg(bytes: Uint8Array): boolean {
   return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
