@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, formatPeers, grabbedMessage, releaseCountLine } from "./movie-release";
+import type { ReleaseRow } from "@/server/arr/releases";
+import { formatAge, formatPeers, grabbedMessage, releaseCountLine, releaseDetails } from "./movie-release";
 
 describe("formatAge", () => {
   it("shows a dash for missing, negative or non-finite ages", () => {
@@ -66,5 +67,47 @@ describe("releaseCountLine", () => {
 
   it("says how many were cut when only the top ones are shown", () => {
     expect(releaseCountLine(200, 1234)).toBe("Showing the top 200 of 1,234 releases");
+  });
+});
+
+describe("releaseDetails", () => {
+  const base: ReleaseRow = {
+    token: "t",
+    title: "Some.Release",
+    indexer: "NZBgeek",
+    protocol: "usenet",
+    quality: "Bluray-2160p",
+    customFormats: [],
+    customFormatScore: 120,
+    size: 14_000_000_000,
+    ageHours: 30.5,
+    seeders: null,
+    leechers: null,
+    languages: [],
+    approved: true,
+    rejections: [],
+  };
+
+  it("lists quality, size, age, protocol, indexer and score in that order", () => {
+    expect(releaseDetails(base)).toEqual(["Bluray-2160p", "13.0 GB", "30h old", "Usenet", "NZBgeek", "Score 120"]);
+  });
+
+  it("adds peers for torrents only", () => {
+    expect(releaseDetails({ ...base, protocol: "torrent", seeders: 12, leechers: 3 })).toContain("12/3 peers");
+    expect(releaseDetails(base).some((part) => part.endsWith("peers"))).toBe(false);
+  });
+
+  it("leaves out peers for a torrent that has no counts, and marks a missing side with ?", () => {
+    expect(releaseDetails({ ...base, protocol: "torrent" }).some((part) => part.endsWith("peers"))).toBe(false);
+    expect(releaseDetails({ ...base, protocol: "torrent", seeders: null, leechers: 4 })).toContain("?/4 peers");
+  });
+
+  it("leaves out missing values instead of showing dashes, but always shows the score", () => {
+    const sparse = { ...base, quality: null, size: 0, ageHours: null, protocol: "unknown" as const, indexer: null, customFormatScore: 0 };
+    expect(releaseDetails(sparse)).toEqual(["Score 0"]);
+  });
+
+  it("keeps the sign on a negative score", () => {
+    expect(releaseDetails({ ...base, customFormatScore: -1500 })).toContain("Score -1,500");
   });
 });

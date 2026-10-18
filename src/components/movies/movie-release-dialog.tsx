@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { findMovieReleases, grabMovieRelease, type ReleaseSearchResult } from "@/app/(app)/movies/actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,16 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { ReleaseRow } from "@/server/arr/releases";
-import { formatCount, formatSize } from "./movie-format";
-import { formatAge, formatPeers, releaseCountLine } from "./movie-release";
-
-const PROTOCOL_LABEL: Record<ReleaseRow["protocol"], string | null> = {
-  usenet: "Usenet",
-  torrent: "Torrent",
-  unknown: null,
-};
+import { releaseCountLine, releaseDetails } from "./movie-release";
 
 /**
  * Lists Radarr's interactive search results for one movie and sends the chosen one to the download client.
@@ -86,7 +76,7 @@ export function MovieReleaseDialog({
         if (!open && !grabbing) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-6xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Pick a release for {title}</DialogTitle>
           <DialogDescription>
@@ -125,80 +115,45 @@ export function MovieReleaseDialog({
               )}
             </div>
             {outcome.releases.length > 0 && (
-              <div className="max-h-[60vh] overflow-auto rounded-md border">
-                <Table className="min-w-[56rem]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky top-0 z-10 bg-background">Release</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">Indexer</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">Protocol</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">Quality</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background text-right">Size</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">Age</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">Seeders/leechers</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background text-right">Score</TableHead>
-                      <TableHead className="sticky top-0 z-10 bg-background">
-                        <span className="sr-only">Grab</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {outcome.releases.map((release, index) => {
-                      const protocol = PROTOCOL_LABEL[release.protocol];
-                      const { token } = release;
-                      return (
-                        // Rows without a token (Radarr won't allow the grab) fall back to their position, which is stable for one search.
-                        <TableRow key={release.token ?? `row-${index}`}>
-                          <TableCell className="max-w-[28rem] whitespace-normal py-1.5 px-2">
-                            <div className="break-words font-medium">{release.title}</div>
-                            {(release.customFormats.length > 0 || release.languages.length > 0) && (
-                              <div className="break-words text-xs text-muted-foreground">
-                                {[...release.customFormats, ...release.languages].join(", ")}
-                              </div>
-                            )}
-                            {!release.approved && release.rejections.length > 0 && (
-                              <ul className="mt-1 list-disc pl-4 text-xs text-destructive">
-                                {release.rejections.map((reason, reasonIndex) => (
-                                  <li key={reasonIndex}>{reason}</li>
-                                ))}
-                              </ul>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-1.5 px-2">{release.indexer ?? "—"}</TableCell>
-                          <TableCell className="py-1.5 px-2">
-                            {protocol === null ? (
-                              "—"
-                            ) : (
-                              <Badge variant="outline">{protocol}</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-1.5 px-2">{release.quality ?? "—"}</TableCell>
-                          <TableCell className="py-1.5 px-2 text-right tabular-nums">{formatSize(release.size)}</TableCell>
-                          <TableCell className="py-1.5 px-2 tabular-nums">{formatAge(release.ageHours)}</TableCell>
-                          <TableCell className="py-1.5 px-2 tabular-nums">
-                            {formatPeers(release.seeders, release.leechers)}
-                          </TableCell>
-                          <TableCell className="py-1.5 px-2 text-right tabular-nums">
-                            {formatCount(release.customFormatScore)}
-                          </TableCell>
-                          <TableCell className="py-1.5 px-2 text-right">
-                            <Button
-                              size="sm"
-                              variant={release.approved ? "default" : "outline"}
-                              aria-label={`Grab ${release.title}`}
-                              disabled={token === null || grabbing}
-                              aria-busy={grabbing}
-                              onClick={() => token !== null && grab(token)}
-                            >
-                              Grab
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+              // Two lines per release instead of a wide table, so the dialog stays the same size as Add movie.
+              <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border">
+                {outcome.releases.map((release, index) => {
+                  const { token } = release;
+                  const extras = [...release.customFormats, ...release.languages];
+                  return (
+                    // Rows without a token (Radarr won't allow the grab) fall back to their position, which is stable for one search.
+                    <li key={token ?? `row-${index}`} className="flex items-start gap-3 px-3 py-2">
+                      <div className="min-w-0 flex-1 text-sm">
+                        <div className="break-words font-medium">{release.title}</div>
+                        <div className="break-words text-xs text-muted-foreground tabular-nums">
+                          {releaseDetails(release).join(" · ")}
+                        </div>
+                        {extras.length > 0 && (
+                          <div className="break-words text-xs text-muted-foreground">{extras.join(", ")}</div>
+                        )}
+                        {!release.approved && release.rejections.length > 0 && (
+                          <ul className="mt-1 list-disc pl-4 text-xs text-destructive">
+                            {release.rejections.map((reason, reasonIndex) => (
+                              <li key={reasonIndex}>{reason}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={release.approved ? "default" : "outline"}
+                        className="shrink-0"
+                        aria-label={`Grab ${release.title}`}
+                        disabled={token === null || grabbing}
+                        aria-busy={grabbing}
+                        onClick={() => token !== null && grab(token)}
+                      >
+                        Grab
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </>
         )}
