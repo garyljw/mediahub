@@ -55,6 +55,15 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // `npx shadcn add` has twice written `import { cn } from "cn"` (an unrelated npm package).
+  {
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { paths: [{ name: "cn", message: 'Import cn from "@/lib/utils" (shadcn CLI bug).' }] },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
