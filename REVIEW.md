@@ -21,6 +21,7 @@ These are covered by lint, so don't report them by hand:
 - no `process.env` outside `src/server/env.ts`;
 - lint, typecheck and test failures, which CI catches;
 - every `(app)` page starting with `await requirePageUser(...)` and allowing the roles listed in `PAGE_ROLES`, which `src/app/(app)/pages-auth.test.ts` checks. That test catches a forgotten or wrong check, not a deliberate bypass of the test itself, such as shadowing or aliasing the name. Don't report ways to fool it. The guard targets mistakes; a deliberate bypass would stand out in the diff under review.
+- every server action anywhere in `src/` (a `"use server"` file export) starting with `await requireRole(...)`, or the `try` form whose catch returns or throws, with `PUBLIC_ACTIONS` (sign-out only) as the one exception, and no inline `"use server"` functions, which `src/app/server-actions-auth.test.ts` checks. The same limits as the pages guard above apply.
 
 ## How to report
 - **Every finding needs evidence.** Give a file and line, and a concrete scenario (input or state, then the wrong outcome). Don't guess from a function name or a file name.

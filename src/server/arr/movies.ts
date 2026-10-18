@@ -5,6 +5,7 @@ import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
+type MovieEditorResource = RadarrComponents["schemas"]["MovieEditorResource"];
 
 export type MovieStatus = "downloaded" | "missing" | "unreleased";
 
@@ -81,16 +82,51 @@ async function getList<T>(label: string, get: (signal: AbortSignal) => Promise<{
   return data;
 }
 
+/** Upstream profiles, reduced to usable options and sorted by name. Shared by listMovies and listQualityProfiles. */
+function sortedProfileOptions(profiles: QualityProfileResource[]): QualityProfileOption[] {
+  const options = usableProfiles(profiles);
+  options.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  return options;
+}
+
+async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
+  const client = radarrClient();
+  return getList("Radarr quality profile", (signal) => client.GET("/api/v3/qualityprofile", { signal }));
+}
+
+/** Quality profiles as dropdown options. Used by the edit action to check a chosen profile still exists. */
+export async function listQualityProfiles(): Promise<QualityProfileOption[]> {
+  return sortedProfileOptions(await fetchQualityProfiles());
+}
+
 /** Movies (as table rows) and quality profiles (as dropdown options) from Radarr. */
 export async function listMovies(): Promise<{ rows: MovieRow[]; profiles: QualityProfileOption[] }> {
   const client = radarrClient();
   const [movies, profiles] = await Promise.all([
     getList("Radarr movie", (signal) => client.GET("/api/v3/movie", { signal })),
-    getList("Radarr quality profile", (signal) => client.GET("/api/v3/qualityprofile", { signal })),
+    fetchQualityProfiles(),
   ]);
 
-  const options = usableProfiles(profiles);
-  options.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  return { rows: toMovieRows(movies, profiles), profiles: sortedProfileOptions(profiles) };
+}
 
-  return { rows: toMovieRows(movies, profiles), profiles: options };
+/**
+ * A bulk edit. Only these two fields are sent, so Radarr never sees moveFiles, deleteFiles,
+ * rootFolderPath, tags or anything else from the editor resource.
+ */
+export type MovieEdit = { movieIds: number[]; qualityProfileId?: number; monitored?: boolean };
+
+/** Builds the editor body. Fields that are undefined are left out, not sent as null. */
+function movieEditorBody(edit: MovieEdit): MovieEditorResource {
+  const body: MovieEditorResource = { movieIds: edit.movieIds };
+  if (edit.qualityProfileId !== undefined) body.qualityProfileId = edit.qualityProfileId;
+  if (edit.monitored !== undefined) body.monitored = edit.monitored;
+  return body;
+}
+
+/** Changes the quality profile and/or monitored flag for the given Radarr movie ids. */
+export async function editMovies(edit: MovieEdit): Promise<void> {
+  const client = radarrClient();
+  const body = movieEditorBody(edit);
+  await arrRequest("Radarr movie edit", (signal) => client.PUT("/api/v3/movie/editor", { body, signal }));
 }
