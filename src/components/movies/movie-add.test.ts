@@ -26,6 +26,10 @@ describe("defaultOptions", () => {
   it("selects nothing when there are no profiles or root folders", () => {
     expect(defaultOptions([], [])).toEqual({ profileId: null, rootFolderId: null, monitored: true, searchForMovie: true });
   });
+
+  it("selects no root folder when the folder list could not be loaded (null)", () => {
+    expect(defaultOptions(profiles, null)).toEqual({ profileId: 4, rootFolderId: null, monitored: true, searchForMovie: true });
+  });
 });
 
 describe("normalizeTerm", () => {

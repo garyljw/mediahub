@@ -1,7 +1,7 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { getList } from "./movies";
-import { arrRequest } from "./request";
+import { ArrRequestError, arrRequest } from "./request";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -29,7 +29,7 @@ export type MovieAdd = {
   searchForMovie: boolean;
 };
 
-/** Longest overview sent to the browser. Longer text is cut and ends with an ellipsis. */
+/** Longest overview sent to the browser, in code points (so an emoji is never cut in half). Longer text is cut and ends with an ellipsis. */
 const MAX_OVERVIEW = 300;
 /** Most search hits returned. Radarr can return hundreds; the dialog only needs a short list. */
 const MAX_RESULTS = 20;
@@ -57,12 +57,13 @@ export function toLookupResults(movies: MovieResource[], libraryTmdbIds: Set<num
     if (results.length >= MAX_RESULTS) break;
     if (typeof movie.tmdbId !== "number" || !(movie.tmdbId > 0)) continue;
     if (!movie.title) continue;
-    const overview = movie.overview ?? "";
+    // Array.from splits by code point, so the cut and the length check never split a surrogate pair.
+    const overviewChars = Array.from(movie.overview ?? "");
     results.push({
       tmdbId: movie.tmdbId,
       title: movie.title,
       year: yearOrNull(movie.year),
-      overview: overview.length > MAX_OVERVIEW ? `${overview.slice(0, MAX_OVERVIEW - 1)}…` : overview,
+      overview: overviewChars.length > MAX_OVERVIEW ? `${overviewChars.slice(0, MAX_OVERVIEW - 1).join("")}…` : overviewChars.join(""),
       inLibrary: libraryTmdbIds.has(movie.tmdbId),
     });
   }
@@ -137,9 +138,16 @@ export function movieAddBody(add: MovieAdd, title: string, year: number | null):
 export async function addMovie(add: MovieAdd): Promise<{ title: string; year: number | null }> {
   const client = radarrClient();
 
-  const found = await arrRequest("Radarr movie lookup", (signal) =>
-    client.GET("/api/v3/movie/lookup/tmdb", { params: { query: { tmdbId: add.tmdbId } }, signal }),
-  );
+  let found: MovieResource | undefined;
+  try {
+    found = await arrRequest("Radarr movie lookup", (signal) =>
+      client.GET("/api/v3/movie/lookup/tmdb", { params: { query: { tmdbId: add.tmdbId } }, signal }),
+    );
+  } catch (error) {
+    // Radarr answers 404 for an id it does not know. That is "not found", not a Radarr outage.
+    if (error instanceof ArrRequestError && error.status === 404) throw new MovieAddError("not-found");
+    throw error;
+  }
   if (typeof found?.title !== "string" || found.title.trim() === "") throw new MovieAddError("not-found");
   const title = found.title;
   const year = yearOrNull(found.year);

@@ -11,14 +11,23 @@ export type AddOptions = {
   searchForMovie: boolean;
 };
 
-/** Longest search term the server accepts (src/app/(app)/movies/actions.ts uses the same value). */
+/** Longest search term, in characters. The server's Zod limit in src/app/(app)/movies/actions.ts imports this same value. */
 export const MAX_TERM_LENGTH = 100;
 
-/** First profile and first root folder selected, both checkboxes on. Lists come from the server sorted. */
-export function defaultOptions(profiles: readonly QualityProfileOption[], folders: readonly RootFolderOption[]): AddOptions {
+/** Shown in place of a failed call the dialog can't explain better (e.g. a thrown error). */
+export const GENERIC_ERROR = "Something went wrong. Reload the page and try again.";
+
+/**
+ * First profile and first root folder selected, both checkboxes on. Lists come from the server sorted.
+ * A null folder list (Radarr's root folders could not be loaded) selects nothing.
+ */
+export function defaultOptions(
+  profiles: readonly QualityProfileOption[],
+  folders: readonly RootFolderOption[] | null,
+): AddOptions {
   return {
     profileId: profiles[0]?.id ?? null,
-    rootFolderId: folders[0]?.id ?? null,
+    rootFolderId: folders?.[0]?.id ?? null,
     monitored: true,
     searchForMovie: true,
   };

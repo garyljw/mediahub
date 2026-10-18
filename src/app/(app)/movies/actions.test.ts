@@ -538,6 +538,24 @@ describe("addLibraryMovie resolution and results", () => {
     expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 
+  it("says the movie may still have been added when the add times out, and logs the safe message", async () => {
+    mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie add request failed: timed out", "timeout"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({
+      ok: false,
+      error: "Radarr took too long to answer. The movie may still have been added, so reload the page to check.",
+    });
+    expect(console.error).toHaveBeenCalledWith("Movie add: Radarr movie add request failed: timed out");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not claim the movie may have been added when only the root folder read timed out", async () => {
+    mocks.listRootFolders.mockRejectedValue(new ArrRequestError("Radarr root folder request failed: timed out", "timeout"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+  });
+
   it("rethrows errors that are not Radarr request failures", async () => {
     mocks.addMovie.mockRejectedValue(new Error("config broken"));
     await expect(addLibraryMovie(validAdd)).rejects.toThrow("config broken");

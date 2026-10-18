@@ -12,6 +12,7 @@ import {
   type LookupResult,
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
+import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 
 export type EditResult = { ok: true } | { ok: false; error: string };
@@ -126,9 +127,9 @@ export async function removeMovies(input: unknown): Promise<DeleteResult> {
 
 export type SearchResult = { ok: true; results: LookupResult[] } | { ok: false; error: string };
 
-// The term is trimmed, and must be 1 to 100 characters after trimming. strictObject rejects any other key.
+// The term is trimmed, and must be 1 to MAX_TERM_LENGTH characters after trimming. strictObject rejects any other key.
 const MovieSearchInput = z.strictObject({
-  term: z.string().trim().min(1).max(100),
+  term: z.string().trim().min(1).max(MAX_TERM_LENGTH),
 });
 
 /**
@@ -183,6 +184,8 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
   if (!parsed.success) return { ok: false, error: "Invalid add." };
   const { tmdbId, qualityProfileId, rootFolderId, monitored, searchForMovie } = parsed.data;
 
+  // Set just before the add is sent. Only a timeout after that point can mean Radarr added the movie.
+  let addSent = false;
   try {
     const [profiles, folders] = await Promise.all([listQualityProfiles(), listRootFolders()]);
     if (!profiles.some((profile) => profile.id === qualityProfileId)) {
@@ -191,6 +194,7 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
     const folder = folders.find((option) => option.id === rootFolderId);
     if (!folder) return { ok: false, error: "That root folder no longer exists." };
 
+    addSent = true;
     const added = await addMovie({ tmdbId, qualityProfileId, rootFolderPath: folder.path, monitored, searchForMovie });
     // The Movies page reads Radarr on every request, so refresh() is enough for the new row to appear.
     refresh();
@@ -203,6 +207,13 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
     if (!(error instanceof ArrRequestError)) throw error;
     // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
     console.error(`Movie add: ${error.message}`);
+    // A timeout means Radarr may have finished the add after we gave up, so the user must check the library.
+    if (addSent && error.kind === "timeout") {
+      return {
+        ok: false,
+        error: "Radarr took too long to answer. The movie may still have been added, so reload the page to check.",
+      };
+    }
     return { ok: false, error: "Radarr didn't accept the movie. Try again." };
   }
 }

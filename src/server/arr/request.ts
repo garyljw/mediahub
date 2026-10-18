@@ -11,6 +11,8 @@ export class ArrRequestError extends Error {
     message: string,
     /** "timeout" matters to callers: the upstream may still have done the work. */
     readonly kind: ArrFailureKind = "http",
+    /** The HTTP status, set only when Radarr/Sonarr answered with a non-OK status. */
+    readonly status?: number,
   ) {
     super(message);
     this.name = "ArrRequestError";
@@ -39,7 +41,7 @@ export async function arrRequest<T>(
     throw new ArrRequestError(`${label} request failed: ${FAILURE_TEXT[kind]}`, kind);
   }
   if (!result.response.ok) {
-    throw new ArrRequestError(`${label} request failed: HTTP ${result.response.status}`);
+    throw new ArrRequestError(`${label} request failed: HTTP ${result.response.status}`, "http", result.response.status);
   }
   return result.data;
 }

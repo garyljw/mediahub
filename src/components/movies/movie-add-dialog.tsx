@@ -16,6 +16,7 @@ import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
 import type { QualityProfileOption } from "@/server/arr/movies";
 import { SELECT_CLASS } from "./movie-edit-dialog";
 import {
+  GENERIC_ERROR,
   addedMessage,
   buildAddRequest,
   defaultOptions,
@@ -35,7 +36,8 @@ export function MovieAddDialog({
   rootFolders,
 }: {
   profiles: QualityProfileOption[];
-  rootFolders: RootFolderOption[];
+  /** null when Radarr's root folders could not be loaded. Movies can't be added then, but search still works. */
+  rootFolders: RootFolderOption[] | null;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -58,7 +60,7 @@ export function MovieAddDialog({
   const errorId = useId();
 
   const busy = searching || addingIds.size > 0;
-  const canAdd = options.profileId !== null && options.rootFolderId !== null;
+  const canAdd = rootFolders !== null && options.profileId !== null && options.rootFolderId !== null;
 
   function openDialog() {
     // Each opening starts fresh, with the default options, like the edit dialog.
@@ -78,9 +80,13 @@ export function MovieAddDialog({
     if (term === null) return;
     setSearchError(null);
     startSearch(async () => {
-      const response = await searchMovies({ term });
-      if (response.ok) setResults(response.results);
-      else setSearchError(response.error);
+      try {
+        const response = await searchMovies({ term });
+        if (response.ok) setResults(response.results);
+        else setSearchError(response.error);
+      } catch {
+        setSearchError(GENERIC_ERROR);
+      }
     });
   }
 
@@ -90,17 +96,23 @@ export function MovieAddDialog({
     setAddError(null);
     setStatus(null);
     setAddingIds((previous) => new Set(previous).add(result.tmdbId));
-    const response = await addLibraryMovie(request);
-    setAddingIds((previous) => {
-      const next = new Set(previous);
-      next.delete(result.tmdbId);
-      return next;
-    });
-    if (response.ok) {
-      setAddedIds((previous) => new Set(previous).add(result.tmdbId));
-      setStatus(addedMessage(response));
-    } else {
-      setAddError(response.error);
+    try {
+      const response = await addLibraryMovie(request);
+      if (response.ok) {
+        setAddedIds((previous) => new Set(previous).add(result.tmdbId));
+        setStatus(addedMessage(response));
+      } else {
+        setAddError(response.error);
+      }
+    } catch {
+      setAddError(GENERIC_ERROR);
+    } finally {
+      // Always clear the row, so a failed call never leaves its button stuck on "Adding…".
+      setAddingIds((previous) => {
+        const next = new Set(previous);
+        next.delete(result.tmdbId);
+        return next;
+      });
     }
   }
 
@@ -147,7 +159,11 @@ export function MovieAddDialog({
 
           <fieldset className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
             <legend className="px-1 text-sm font-medium">Add options</legend>
-            {rootFolders.length === 0 ? (
+            {rootFolders === null ? (
+              <p role="alert" className="text-sm text-destructive sm:col-span-2">
+                Couldn&apos;t load root folders from Radarr, so movies can&apos;t be added right now.
+              </p>
+            ) : rootFolders.length === 0 ? (
               <p className="text-sm text-destructive sm:col-span-2">
                 Radarr has no root folders set up, so movies can&apos;t be added yet.
               </p>
