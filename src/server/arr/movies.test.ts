@@ -33,11 +33,21 @@ vi.mock("@/server/env", () => ({
   },
 }));
 
-import { DELETE_TIMEOUT_MS, deleteMovies, editMovies, listMovies, listQualityProfiles, toMovieRows } from "./movies";
+import {
+  DELETE_TIMEOUT_MS,
+  MAX_POSTER_BYTES,
+  deleteMovies,
+  editMovies,
+  getMoviePoster,
+  listMovies,
+  listQualityProfiles,
+  toMovieRows,
+} from "./movies";
 
 const ALLOWED_KEYS = [
   "added",
   "fileQuality",
+  "hasPoster",
   "id",
   "monitored",
   "qualityProfile",
@@ -78,6 +88,7 @@ describe("toMovieRows", () => {
       sizeOnDisk: 12345678901,
       added: "2024-03-12T10:21:45Z",
       sortTitle: "starfall protocol",
+      hasPoster: true,
     });
   });
 
@@ -94,6 +105,7 @@ describe("toMovieRows", () => {
       sizeOnDisk: 0,
       added: "2024-05-01T08:00:00Z",
       sortTitle: "lantern road",
+      hasPoster: false,
     });
   });
 
@@ -119,6 +131,16 @@ describe("toMovieRows", () => {
       qualityProfileId: 99,
       qualityProfile: "Unknown profile (#99)",
     });
+  });
+
+  it("sets hasPoster only when a poster cover exists", () => {
+    const base = movies[0];
+    const withImages = (images: MovieResource["images"]) => toMovieRows([{ ...base, id: 900, title: "Poster Test", images }], profiles)[0];
+    expect(withImages([{ coverType: "poster", url: "x", remoteUrl: "x" }]).hasPoster).toBe(true);
+    expect(withImages([{ coverType: "fanart", url: "x", remoteUrl: "x" }]).hasPoster).toBe(false);
+    expect(withImages([])).toMatchObject({ hasPoster: false });
+    expect(withImages(null).hasPoster).toBe(false);
+    expect(withImages(undefined).hasPoster).toBe(false);
   });
 
   it("maps a null year and a null sortTitle", () => {
@@ -488,5 +510,156 @@ describe("listQualityProfiles", () => {
       { id: 3, name: "Ultra-HD" },
     ]);
     expect(options).toEqual(fromMovies);
+  });
+});
+
+describe("getMoviePoster", () => {
+  const POSTER_PATH = "/api/v3/mediacover/42/poster-250.jpg";
+
+  function servePoster(reply: () => Response) {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname === POSTER_PATH) return reply();
+      throw new TypeError(`unexpected request to ${new URL(req.url).pathname}`);
+    });
+  }
+
+  it("requests exactly the fixed poster file with the key in a header and not in the URL", async () => {
+    servePoster(() => new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200 }));
+
+    await getMoviePoster(42);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("GET");
+    expect(req.url).toBe("http://radarr.test:7878/api/v3/mediacover/42/poster-250.jpg");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+    expect(req.url).not.toContain(FAKE_KEY);
+  });
+
+  it("returns the image bytes", async () => {
+    servePoster(() => new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { status: 200 }));
+
+    const bytes = await getMoviePoster(42);
+
+    expect(Array.from(bytes)).toEqual([0xff, 0xd8, 0xff, 0xe0]);
+  });
+
+  it("joins a body that arrives in several chunks", async () => {
+    const chunks = [new Uint8Array([0xff, 0xd8]), new Uint8Array([0xff, 0xe0, 0x01])];
+    servePoster(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              for (const chunk of chunks) controller.enqueue(chunk);
+              controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    expect(Array.from(await getMoviePoster(42))).toEqual([0xff, 0xd8, 0xff, 0xe0, 0x01]);
+  });
+
+  it("throws an invalid ArrRequestError for a body that is not a JPEG, such as an HTML login page", async () => {
+    servePoster(() => new Response("<!doctype html><title>Login</title>", { status: 200 }));
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("invalid");
+  });
+
+  it("stops reading an oversized body once it passes the cap", async () => {
+    const chunk = new Uint8Array(1024 * 1024).fill(0xff);
+    let pulls = 0;
+    let cancelled = false;
+    servePoster(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              pulls += 1;
+              controller.enqueue(chunk);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect((error as ArrRequestError).kind).toBe("invalid");
+    expect(cancelled).toBe(true);
+    // 2 MiB cap with 1 MiB chunks: the third chunk goes over. Allow one extra for stream read-ahead.
+    expect(pulls).toBeLessThanOrEqual(4);
+  });
+
+  it("throws an invalid ArrRequestError for an empty body", async () => {
+    servePoster(() => new Response(new Uint8Array(0), { status: 200 }));
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("invalid");
+    expect(error.message).toBe("Radarr poster response was not a usable image");
+  });
+
+  it("throws an invalid ArrRequestError for a body larger than MAX_POSTER_BYTES", async () => {
+    // A valid JPEG start, so only the size cap can reject it.
+    const body = new Uint8Array(MAX_POSTER_BYTES + 1);
+    body.set([0xff, 0xd8, 0xff]);
+    servePoster(() => new Response(body, { status: 200 }));
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("invalid");
+  });
+
+  it("accepts a JPEG of exactly MAX_POSTER_BYTES", async () => {
+    const body = new Uint8Array(MAX_POSTER_BYTES);
+    body.set([0xff, 0xd8, 0xff]);
+    servePoster(() => new Response(body, { status: 200 }));
+
+    expect((await getMoviePoster(42)).byteLength).toBe(MAX_POSTER_BYTES);
+  });
+
+  it("reports a body that fails mid-read as a network error, without the underlying message", async () => {
+    servePoster(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([0xff, 0xd8, 0xff]));
+              controller.error(new TypeError(`socket reset by http://radarr.test:7878 ${FAKE_KEY}`));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("network");
+    expect(error.message).not.toContain("radarr.test");
+    expect(error.message).not.toContain(FAKE_KEY);
+  });
+
+  it("throws ArrRequestError with HTTP 404 for a missing poster", async () => {
+    servePoster(() => new Response(`not found at http://radarr.test:7878 ${FAKE_KEY}`, { status: 404 }));
+
+    const error = await rejectionOf(getMoviePoster(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr poster request failed: HTTP 404");
+    expect(error.message).not.toContain("radarr.test");
+    expect(error.message).not.toContain(FAKE_KEY);
   });
 });

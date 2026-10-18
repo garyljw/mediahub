@@ -26,6 +26,7 @@ function row(overrides: Partial<MovieRow> & { id: number; title: string }): Movi
     sizeOnDisk: 0,
     added: null,
     sortTitle: overrides.title.toLowerCase(),
+    hasPoster: false,
     ...overrides,
   };
 }

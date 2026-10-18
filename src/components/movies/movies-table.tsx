@@ -36,6 +36,7 @@ import {
 import { deletedMessage } from "./movie-delete";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
+import { MoviePoster } from "./movie-poster";
 
 const STATUS_LABEL: Record<MovieStatus, string> = {
   downloaded: "Downloaded",
@@ -312,8 +313,11 @@ export function MoviesTable({
                   </TableCell>
                 )}
                 <TableCell className={CELL}>
-                  <div className="max-w-[28rem] truncate">
-                    <span className="font-medium">{row.title}</span>
+                  <div className="flex items-center gap-2">
+                    <MoviePoster movieId={row.id} hasPoster={row.hasPoster} />
+                    <div className="min-w-0 max-w-[28rem] truncate">
+                      <span className="font-medium">{row.title}</span>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className={cn(CELL, "tabular-nums text-muted-foreground")}>
