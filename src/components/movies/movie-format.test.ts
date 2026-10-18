@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatCount, formatSize } from "./movie-format";
+import { formatAdded, formatCount, formatEta, formatSize } from "./movie-format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {
@@ -61,5 +61,24 @@ describe("formatCount", () => {
     expect(formatCount(475)).toBe("475");
     expect(formatCount(2000)).toBe("2,000");
     expect(formatCount(1234567)).toBe("1,234,567");
+  });
+});
+
+describe("formatEta", () => {
+  it.each([
+    [null, null],
+    [0, null],
+    [-30, null],
+    [1, "<1m"],
+    [59, "<1m"],
+    [60, "1m"],
+    [720, "12m"],
+    [3599, "59m"],
+    [3900, "1h 5m"],
+    [86399, "23h 59m"],
+    [90000, "1d 1h"],
+    [2 * 86400 + 3 * 3600 + 40, "2d 3h"],
+  ])("formats %j as %j", (seconds, expected) => {
+    expect(formatEta(seconds)).toBe(expected);
   });
 });

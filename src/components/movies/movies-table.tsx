@@ -1,14 +1,38 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2, UserSearch } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Bookmark,
+  BookmarkCheck,
+  Clock,
+  Download,
+  MoreHorizontal,
+  Pause,
+  Pencil,
+  RefreshCw,
+  Search,
+  Trash2,
+  UserSearch,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { refreshLibraryMovies, searchLibraryMovies } from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { MovieRow, MovieStatus, QualityProfileOption } from "@/server/arr/movies";
+import type { ActivitySeverity, ActivityState, MovieActivity } from "@/server/arr/activity";
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
@@ -35,6 +59,8 @@ import {
   updatedMessage,
 } from "./movie-edit";
 import { deletedMessage } from "./movie-delete";
+import { activityLabel, showsProgress } from "./movie-activity";
+import { useMovieActivity } from "./use-movie-activity";
 import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
@@ -61,10 +87,31 @@ function moviePosterSrc(row: MovieRow): string | null {
   return row.hasPoster ? `/api/movies/${row.id}/poster` : null;
 }
 
+/** Text colour for each Activity severity. Warning reuses the amber of the "Missing" badge. */
+const ACTIVITY_CLASS: Record<ActivitySeverity, string> = {
+  ok: "text-muted-foreground",
+  warning: "text-amber-800 dark:text-amber-300",
+  error: "text-destructive",
+};
+
+/** One icon per activity state. Download and pause are the two that show progress. */
+const ACTIVITY_ICON: Record<ActivityState, typeof Clock> = {
+  queued: Clock,
+  delayed: Clock,
+  importPending: Clock,
+  importing: Clock,
+  unknown: Clock,
+  downloading: Download,
+  paused: Pause,
+  importBlocked: AlertTriangle,
+  failed: AlertTriangle,
+  clientUnavailable: AlertTriangle,
+};
+
 const CELL = "py-1.5 px-2";
 const HEAD = "sticky top-0 z-10 h-8 border-b bg-background py-1.5 px-2";
-// Eight data columns plus the checkbox and the actions column, which every role gets (Search is open to requesters).
-const COLUMN_COUNT = 10;
+// Nine data columns plus the checkbox and the actions column, which every role gets (Search is open to requesters).
+const COLUMN_COUNT = 11;
 // How long the "Updated N movies" line stays before it clears itself.
 const STATUS_MS = 4000;
 
@@ -74,18 +121,21 @@ function SortHeader({
   sort,
   onSort,
   align = "left",
+  width,
 }: {
   label: string;
   sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
   align?: "left" | "right";
+  /** A fixed column width class. Only the Title column has none, so it takes the remaining space. */
+  width?: string;
 }) {
   const active = sort.key === sortKey;
   const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
     <TableHead
-      className={cn(HEAD, align === "right" && "text-right")}
+      className={cn(HEAD, width, align === "right" && "text-right")}
       aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
     >
       <button
@@ -97,6 +147,106 @@ function SortHeader({
         <Icon aria-hidden className={cn("size-3.5", !active && "text-muted-foreground/60")} />
       </button>
     </TableHead>
+  );
+}
+
+/**
+ * One movie's Activity cell: an icon and label, a progress bar while downloading or paused, and the first
+ * message. Admins get messages; requesters never do, so for them the cell only shows state.
+ */
+function ActivityCell({ title, activity }: { title: string; activity: MovieActivity | undefined }) {
+  if (!activity) return <TableCell className={CELL} />;
+  const Icon = ACTIVITY_ICON[activity.state];
+  // The label can be cut off in the cell, so the hover text always has it. Messages (admins only) follow it.
+  const tooltip = [activityLabel(activity), ...activity.messages].join("\n");
+  return (
+    <TableCell className={CELL} title={tooltip}>
+      <span className={cn("flex min-w-0 items-center gap-1.5", ACTIVITY_CLASS[activity.severity])}>
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        <span className="min-w-0 truncate">{activityLabel(activity)}</span>
+      </span>
+      {showsProgress(activity) && (
+        <div
+          role="progressbar"
+          aria-label={`Download progress for ${title}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={activity.progress}
+          className="mt-1 h-1 w-24 overflow-hidden rounded bg-muted"
+        >
+          <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+        </div>
+      )}
+      {activity.messages.length > 0 && (
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{activity.messages[0]}</p>
+      )}
+    </TableCell>
+  );
+}
+
+/**
+ * The ⋯ menu for one admin row. Pick, Edit and Delete open dialogs, so their onSelect only remembers the
+ * action. The action runs from onCloseAutoFocus. Radix calls that handler and then focuses the ⋯ trigger
+ * in the same timeout callback. The state change from this handler renders after that focus, so the
+ * dialog's FocusScope saves the trigger as the element to return focus to. The menu is non-modal because a
+ * modal menu locks the page with body pointer-events, and that lock fights a dialog opened while it closes.
+ */
+function RowMenu({
+  title,
+  refreshing,
+  onOpen,
+  onClosed,
+  onPick,
+  onRefresh,
+  onEdit,
+  onDelete,
+}: {
+  title: string;
+  refreshing: boolean;
+  onOpen: () => void;
+  /** Called once the menu has closed, whatever the reason. */
+  onClosed: () => void;
+  onPick: () => void;
+  onRefresh: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const pending = useRef<(() => void) | null>(null);
+  return (
+    <DropdownMenu modal={false} onOpenChange={(open) => open && onOpen()}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${title}`}>
+          <MoreHorizontal aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={() => {
+          const run = pending.current;
+          pending.current = null;
+          onClosed();
+          run?.();
+        }}
+      >
+        <DropdownMenuItem onSelect={() => (pending.current = onPick)}>
+          <UserSearch aria-hidden />
+          Pick a release…
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={refreshing} onSelect={onRefresh}>
+          <RefreshCw aria-hidden />
+          Refresh &amp; scan
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => (pending.current = onEdit)}>
+          <Pencil aria-hidden />
+          Edit…
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={() => (pending.current = onDelete)}>
+          <Trash2 aria-hidden />
+          Delete…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -120,11 +270,15 @@ export function MoviesTable({
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   // The movie whose release picker is open. Admin only, and one movie at a time.
   const [picking, setPicking] = useState<{ id: number; title: string } | null>(null);
+  // The row whose ⋯ menu is open. Its poster preview is hidden so the large image doesn't cover the menu.
+  const [menuRowId, setMenuRowId] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
   const [refreshing, startRefresh] = useTransition();
   // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
   const posterPreview = usePosterPreview<number>();
+  // Live Radarr queue state, polled from the browser. Empty until the first reply arrives.
+  const activity = useMovieActivity();
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -145,6 +299,8 @@ export function MoviesTable({
   const pages = pageCount(sorted.length);
   const current = clampPage(page, sorted.length);
   const visible = pageSlice(sorted, current);
+  // Only an id that matches a visible row counts. A row refreshed away while its menu is open would otherwise hide previews for good.
+  const menuOpenOnVisibleRow = menuRowId !== null && visible.some((row) => row.id === menuRowId);
   // Only selected movies that match the current search and filters count. Edit never touches a movie
   // the admin can't see, and a refresh that removes a movie drops it too. Hidden picks come back if
   // the filter is changed back. So toggles update `selected` (the full set); selectedIds is display/edit only.
@@ -343,7 +499,7 @@ export function MoviesTable({
         className="max-h-[70vh] overflow-auto rounded-md border"
         onScroll={() => posterPreview.clear()}
       >
-        <Table className="min-w-[60rem]">
+        <Table className="table-fixed min-w-[72rem]">
           <TableHeader>
             <TableRow>
               <TableHead className={cn(HEAD, "w-8")}>
@@ -360,14 +516,25 @@ export function MoviesTable({
                 />
               </TableHead>
               <SortHeader label="Title" sortKey="title" sort={sort} onSort={changeSort} />
-              <SortHeader label="Year" sortKey="year" sort={sort} onSort={changeSort} />
-              <TableHead className={HEAD}>Status</TableHead>
-              <TableHead className={cn(HEAD, "text-center")}>Monitored</TableHead>
-              <TableHead className={HEAD}>Quality profile</TableHead>
-              <TableHead className={HEAD}>File quality</TableHead>
-              <SortHeader label="Size" sortKey="size" sort={sort} onSort={changeSort} align="right" />
-              <SortHeader label="Added" sortKey="added" sort={sort} onSort={changeSort} />
-              <TableHead className={cn(HEAD, "w-px")}>
+              <SortHeader label="Year" sortKey="year" sort={sort} onSort={changeSort} width="w-16" />
+              <TableHead className={cn(HEAD, "w-28")}>Status</TableHead>
+              <TableHead className={cn(HEAD, "w-48")}>
+                <span className="inline-flex items-center gap-1">
+                  Activity
+                  {activity.failed && (
+                    <span title="Couldn't update activity from Radarr" className="inline-flex">
+                      <AlertTriangle aria-hidden className="size-3.5 text-amber-800 dark:text-amber-300" />
+                    </span>
+                  )}
+                  {activity.failed && <span className="sr-only">Couldn&apos;t update activity from Radarr</span>}
+                </span>
+              </TableHead>
+              <TableHead className={cn(HEAD, "w-24 text-center")}>Monitored</TableHead>
+              <TableHead className={cn(HEAD, "w-28")}>Quality profile</TableHead>
+              <TableHead className={cn(HEAD, "w-32")}>File quality</TableHead>
+              <SortHeader label="Size" sortKey="size" sort={sort} onSort={changeSort} align="right" width="w-20" />
+              <SortHeader label="Added" sortKey="added" sort={sort} onSort={changeSort} width="w-28" />
+              <TableHead className={cn(HEAD, isAdmin ? "w-24" : "w-14")}>
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
@@ -389,9 +556,9 @@ export function MoviesTable({
                   />
                 </TableCell>
                 <TableCell className={CELL}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Poster src={moviePosterSrc(row)} />
-                    <div className="min-w-0 max-w-[28rem] truncate">
+                    <div className="min-w-0 flex-1 truncate" title={row.title}>
                       <span className="font-medium">{row.title}</span>
                     </div>
                   </div>
@@ -404,6 +571,7 @@ export function MoviesTable({
                     {STATUS_LABEL[row.status]}
                   </Badge>
                 </TableCell>
+                <ActivityCell title={row.title} activity={activity.byMovie.get(row.id)} />
                 <TableCell className={cn(CELL, "text-center")}>
                   {row.monitored ? (
                     <BookmarkCheck aria-hidden className="inline size-4 text-primary" />
@@ -412,8 +580,8 @@ export function MoviesTable({
                   )}
                   <span className="sr-only">{row.monitored ? "Monitored" : "Unmonitored"}</span>
                 </TableCell>
-                <TableCell className={CELL}>{row.qualityProfile}</TableCell>
-                <TableCell className={CELL}>{row.fileQuality ?? "—"}</TableCell>
+                <TableCell className={cn(CELL, "truncate")}>{row.qualityProfile}</TableCell>
+                <TableCell className={cn(CELL, "truncate")}>{row.fileQuality ?? "—"}</TableCell>
                 <TableCell className={cn(CELL, "text-right tabular-nums")}>
                   {formatSize(row.sizeOnDisk)}
                 </TableCell>
@@ -430,41 +598,16 @@ export function MoviesTable({
                       <Search aria-hidden />
                     </Button>
                     {isAdmin && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Pick a release for ${row.title}`}
-                          onClick={() => openPicker(row)}
-                        >
-                          <UserSearch aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Refresh and scan ${row.title}`}
-                          onClick={() => refreshMovies([row.id])}
-                          disabled={refreshing}
-                        >
-                          <RefreshCw aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Edit ${row.title}`}
-                          onClick={() => openEditor([row.id], false, row.title)}
-                        >
-                          <Pencil aria-hidden />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Delete ${row.title}`}
-                          onClick={() => openDeleter([row])}
-                        >
-                          <Trash2 aria-hidden />
-                        </Button>
-                      </>
+                      <RowMenu
+                        title={row.title}
+                        refreshing={refreshing}
+                        onOpen={() => setMenuRowId(row.id)}
+                        onClosed={() => setMenuRowId((previous) => (previous === row.id ? null : previous))}
+                        onPick={() => openPicker(row)}
+                        onRefresh={() => refreshMovies([row.id])}
+                        onEdit={() => openEditor([row.id], false, row.title)}
+                        onDelete={() => openDeleter([row])}
+                      />
                     )}
                   </div>
                 </TableCell>
@@ -516,6 +659,7 @@ export function MoviesTable({
 
       {/* Hidden while a dialog is open: clicking a row's Edit, Delete or Pick opens it with the mouse still on the row. */}
       {posterPreview.activeKey !== null &&
+        !menuOpenOnVisibleRow &&
         !editing &&
         !deleting &&
         !picking &&
