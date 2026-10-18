@@ -33,7 +33,7 @@ vi.mock("@/server/env", () => ({
   },
 }));
 
-import { listMovies, toMovieRows } from "./movies";
+import { editMovies, listMovies, listQualityProfiles, toMovieRows } from "./movies";
 
 const ALLOWED_KEYS = [
   "added",
@@ -312,5 +312,105 @@ describe("env errors", () => {
 
     await expect(mod.listMovies()).rejects.toThrow("Invalid environment configuration");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("editMovies", () => {
+  // The only request this function may make: one PUT to the movie editor.
+  function serveEditor(reply: () => Response) {
+    fetchMock.mockImplementation(async (req: Request) => {
+      const path = new URL(req.url).pathname;
+      if (path === "/api/v3/movie/editor") return reply();
+      throw new TypeError(`unexpected request to ${path}`);
+    });
+  }
+
+  async function sentBody(): Promise<Record<string, unknown>> {
+    const req = requestAt(0);
+    return JSON.parse(await req.text()) as Record<string, unknown>;
+  }
+
+  it("sends a PUT to the movie editor with the key in a header and only the given fields", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editMovies({ movieIds: [1, 2], qualityProfileId: 3, monitored: false });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("PUT");
+    expect(new URL(req.url).pathname).toBe("/api/v3/movie/editor");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toEqual({ movieIds: [1, 2], qualityProfileId: 3, monitored: false });
+  });
+
+  it("leaves out undefined fields instead of sending them", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editMovies({ movieIds: [7], monitored: true });
+
+    const body = await sentBody();
+    expect(body).toEqual({ movieIds: [7], monitored: true });
+    expect("qualityProfileId" in body).toBe(false);
+  });
+
+  it("sends only movieIds when nothing else is set", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editMovies({ movieIds: [4] });
+
+    expect(await sentBody()).toEqual({ movieIds: [4] });
+  });
+
+  it("never sends other editor fields", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editMovies({ movieIds: [1], qualityProfileId: 2, monitored: true });
+
+    const keys = Object.keys(await sentBody()).sort();
+    expect(keys).toEqual(["monitored", "movieIds", "qualityProfileId"]);
+  });
+
+  it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
+    serveEditor(() => new Response(`boom ${FAKE_KEY} at http://radarr.test:7878`, { status: 500 }));
+
+    const error = await rejectionOf(editMovies({ movieIds: [1], monitored: true }));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr movie edit request failed: HTTP 500");
+    expect(error.message).not.toContain(FAKE_KEY);
+    expect(error.message).not.toContain("radarr.test");
+  });
+
+  it("throws ArrRequestError on a network failure without exposing the host", async () => {
+    serveEditor(() => {
+      throw new TypeError("fetch failed for http://radarr.test:7878/api/v3/movie/editor");
+    });
+
+    const error = await rejectionOf(editMovies({ movieIds: [1], monitored: true }));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr movie edit request failed: network error");
+    expect(error.message).not.toContain("radarr.test");
+  });
+});
+
+describe("listQualityProfiles", () => {
+  it("returns the same usable, sorted options that listMovies returns as profiles", async () => {
+    serve(
+      () => json(movies),
+      () => json(profiles),
+    );
+
+    const options = await listQualityProfiles();
+    const { profiles: fromMovies } = await listMovies();
+
+    expect(options).toEqual([
+      { id: 2, name: "Any" },
+      { id: 1, name: "HD-1080p" },
+      { id: 3, name: "Ultra-HD" },
+    ]);
+    expect(options).toEqual(fromMovies);
   });
 });

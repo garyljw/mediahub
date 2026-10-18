@@ -8,7 +8,7 @@ export const metadata = { title: "Movies" };
 export const instant = false;
 
 export default async function MoviesPage() {
-  await requirePageUser("admin", "requester");
+  const user = await requirePageUser("admin", "requester");
 
   let library: Awaited<ReturnType<typeof listMovies>>;
   try {
@@ -32,7 +32,7 @@ export default async function MoviesPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">Movies</h1>
-      <MoviesTable rows={library.rows} profiles={library.profiles} />
+      <MoviesTable rows={library.rows} profiles={library.profiles} isAdmin={user.role === "admin"} />
     </div>
   );
 }
