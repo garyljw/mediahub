@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { QualityProfileOption } from "@/server/arr/movies";
+import { formatCount } from "./movie-format";
 import { MAX_EDIT_MOVIES, buildEditPayload, editTitle, type MonitorChoice } from "./movie-edit";
 
 export const SELECT_CLASS =
@@ -120,7 +121,7 @@ export function MovieEditDialog({
 
           {tooMany && (
             <p className="text-sm text-destructive">
-              Select at most {MAX_EDIT_MOVIES.toLocaleString("en-GB")} movies per edit.
+              Select at most {formatCount(MAX_EDIT_MOVIES)} movies per edit.
             </p>
           )}
 

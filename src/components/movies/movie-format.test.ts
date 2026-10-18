@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatSize } from "./movie-format";
+import { formatAdded, formatCount, formatSize } from "./movie-format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {
@@ -39,5 +39,27 @@ describe("formatAdded", () => {
   it("shows an em dash when the date is missing or unparseable", () => {
     expect(formatAdded(null)).toBe("—");
     expect(formatAdded("not a date")).toBe("—");
+  });
+});
+
+describe("formatAdded month names", () => {
+  it("uses fixed three-letter months, so server and browser render identical text", () => {
+    // Node's ICU gave "5 Sept 2026" for en-GB while Safari gave "5 Sep 2026", causing a hydration error.
+    expect(formatAdded("2026-09-05T10:00:00Z")).toBe("5 Sep 2026");
+    expect(formatAdded("2024-01-31T23:59:59Z")).toBe("31 Jan 2024");
+    expect(formatAdded("2024-12-01T00:00:00Z")).toBe("1 Dec 2024");
+  });
+
+  it("uses UTC, so a late-evening time doesn't roll to the next day in one runtime only", () => {
+    expect(formatAdded("2024-03-12T23:30:00-05:00")).toBe("13 Mar 2024");
+  });
+});
+
+describe("formatCount", () => {
+  it("groups thousands with commas", () => {
+    expect(formatCount(0)).toBe("0");
+    expect(formatCount(475)).toBe("475");
+    expect(formatCount(2000)).toBe("2,000");
+    expect(formatCount(1234567)).toBe("1,234,567");
   });
 });
