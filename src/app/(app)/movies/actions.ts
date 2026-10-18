@@ -3,7 +3,13 @@
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
-import { deleteMovies, editMovies, listQualityProfiles, type MovieEdit } from "@/server/arr/movies";
+import {
+  deleteMovies,
+  editMovies,
+  listQualityProfiles,
+  searchMovieReleases,
+  type MovieEdit,
+} from "@/server/arr/movies";
 import {
   MovieAddError,
   addMovie,
@@ -14,6 +20,7 @@ import {
 import { ArrRequestError } from "@/server/arr/request";
 import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
+import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
 
 export type EditResult = { ok: true } | { ok: false; error: string };
 
@@ -216,4 +223,44 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
     }
     return { ok: false, error: "Radarr didn't accept the movie. Try again." };
   }
+}
+
+export type SearchNowResult = { ok: true; searched: number } | { ok: false; error: string };
+
+// strictObject rejects unknown keys. Only ids cross from the browser.
+const MovieSearchNowInput = z.strictObject({
+  movieIds: z.array(z.number().int().positive()).min(1).max(MAX_SEARCH_MOVIES),
+});
+
+/**
+ * Starts a Radarr release search for existing library movies (admin and requester). Same shape as the
+ * other actions: the role check runs first inside try, and the catch always returns or throws. Radarr
+ * queues the search and answers at once, and nothing on the page changes, so there is no refresh().
+ */
+export async function searchLibraryMovies(input: unknown): Promise<SearchNowResult> {
+  try {
+    await requireRole("admin", "requester");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to search for movies." };
+    throw error;
+  }
+
+  const parsed = MovieSearchNowInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid search." };
+
+  // A Set drops duplicate ids, so Radarr searches each movie once.
+  const movieIds = [...new Set(parsed.data.movieIds)];
+  try {
+    await searchMovieReleases(movieIds);
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Movie search now: ${error.message}`);
+    // After a timeout Radarr may have queued the search anyway, so don't tell the user to just retry.
+    if (error.kind === "timeout") {
+      return { ok: false, error: "Radarr took too long to answer. The search may still have started, so check Radarr before trying again." };
+    }
+    return { ok: false, error: "Radarr didn't start the search. Try again." };
+  }
+  return { ok: true, searched: movieIds.length };
 }

@@ -159,6 +159,18 @@ export async function deleteMovies(del: MovieDelete): Promise<void> {
   });
 }
 
+/**
+ * Asks Radarr to search for releases for the given movies (its MoviesSearch command). Radarr queues the
+ * command and answers at once; the searching and any grabbing happen afterwards. Only the command name
+ * and the ids are sent.
+ */
+export async function searchMovieReleases(movieIds: number[]): Promise<void> {
+  const client = radarrClient();
+  // CommandResource doesn't declare the command's own fields (movieIds), so the body is built as a variable.
+  const body = { name: "MoviesSearch", movieIds };
+  await arrRequest("Radarr movie search command", (signal) => client.POST("/api/v3/command", { body, signal }));
+}
+
 /** The one Radarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const POSTER_FILENAME = "poster-250.jpg";
 

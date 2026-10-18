@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   lookupMovies: vi.fn(),
   addMovie: vi.fn(),
+  searchMovieReleases: vi.fn(),
   listRootFolders: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock("@/server/arr/movies", () => ({
   editMovies: mocks.editMovies,
   deleteMovies: mocks.deleteMovies,
   listQualityProfiles: mocks.listQualityProfiles,
+  searchMovieReleases: mocks.searchMovieReleases,
 }));
 
 vi.mock("@/server/arr/movie-add", () => {
@@ -47,7 +49,7 @@ vi.mock("@/server/arr/movie-add", () => {
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { addLibraryMovie, removeMovies, searchMovies, updateMovies } from "./actions";
+import { addLibraryMovie, removeMovies, searchLibraryMovies, searchMovies, updateMovies } from "./actions";
 import { MovieAddError } from "@/server/arr/movie-add";
 
 const DENIED = "You don't have permission to edit movies.";
@@ -58,6 +60,7 @@ beforeEach(() => {
   mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
   mocks.editMovies.mockResolvedValue(undefined);
   mocks.deleteMovies.mockResolvedValue(undefined);
+  mocks.searchMovieReleases.mockResolvedValue(undefined);
   mocks.listQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
@@ -559,5 +562,72 @@ describe("addLibraryMovie resolution and results", () => {
   it("rethrows errors that are not Radarr request failures", async () => {
     mocks.addMovie.mockRejectedValue(new Error("config broken"));
     await expect(addLibraryMovie(validAdd)).rejects.toThrow("config broken");
+  });
+});
+
+describe("searchLibraryMovies", () => {
+  const SEARCH_DENIED = "You don't have permission to search for movies.";
+
+  it("allows both admin and requester", async () => {
+    await searchLibraryMovies({ movieIds: [1] });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+  });
+
+  it("rejects a signed-out caller and never calls Radarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await searchLibraryMovies({ movieIds: [1] });
+    expect(result).toEqual({ ok: false, error: SEARCH_DENIED });
+    expect(mocks.searchMovieReleases).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a non-authorization failure from the role check", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("db down"));
+    await expect(searchLibraryMovies({ movieIds: [1] })).rejects.toThrow("db down");
+    expect(mocks.searchMovieReleases).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no ids", { movieIds: [] }],
+    ["too many ids", { movieIds: Array.from({ length: 101 }, (_, i) => i + 1) }],
+    ["a zero id", { movieIds: [0] }],
+    ["a fractional id", { movieIds: [1.5] }],
+    ["a string id", { movieIds: ["1"] }],
+    ["an extra key", { movieIds: [1], monitored: true }],
+    ["a missing list", {}],
+    ["null", null],
+  ])("rejects %s without calling Radarr", async (_name, input) => {
+    const result = await searchLibraryMovies(input);
+    expect(result).toEqual({ ok: false, error: "Invalid search." });
+    expect(mocks.searchMovieReleases).not.toHaveBeenCalled();
+  });
+
+  it("accepts exactly 100 ids", async () => {
+    const result = await searchLibraryMovies({ movieIds: Array.from({ length: 100 }, (_, i) => i + 1) });
+    expect(result).toEqual({ ok: true, searched: 100 });
+  });
+
+  it("sends each id once and reports the unique count", async () => {
+    const result = await searchLibraryMovies({ movieIds: [4, 5, 4] });
+    expect(mocks.searchMovieReleases).toHaveBeenCalledWith([4, 5]);
+    expect(result).toEqual({ ok: true, searched: 2 });
+  });
+
+  it("gives a friendly error and logs only the safe message when Radarr fails", async () => {
+    mocks.searchMovieReleases.mockRejectedValue(new ArrRequestError("Radarr movie search command request failed: HTTP 500"));
+    const result = await searchLibraryMovies({ movieIds: [1] });
+    expect(result).toEqual({ ok: false, error: "Radarr didn't start the search. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Movie search now: Radarr movie search command request failed: HTTP 500");
+  });
+
+  it("warns that the search may have started after a timeout", async () => {
+    mocks.searchMovieReleases.mockRejectedValue(new ArrRequestError("timed out", "timeout"));
+    const result = await searchLibraryMovies({ movieIds: [1] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("may still have started");
+  });
+
+  it("rethrows errors that are not Radarr request failures", async () => {
+    mocks.searchMovieReleases.mockRejectedValue(new Error("config broken"));
+    await expect(searchLibraryMovies({ movieIds: [1] })).rejects.toThrow("config broken");
   });
 });
