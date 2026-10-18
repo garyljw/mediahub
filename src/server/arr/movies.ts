@@ -80,9 +80,13 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
   return rows;
 }
 
-/** Runs a list request and checks the reply is a list. Exported for movie-add.ts. */
-export async function getList<T>(label: string, get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>): Promise<T[]> {
-  const data = await arrRequest(label, get);
+/** Runs a list request and checks the reply is a list. Exported for movie-add.ts and releases.ts. */
+export async function getList<T>(
+  label: string,
+  get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>,
+  options?: { timeoutMs?: number },
+): Promise<T[]> {
+  const data = await arrRequest(label, get, options);
   if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`, "invalid");
   return data;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2, UserSearch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,8 @@ import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
+import { MovieReleaseDialog } from "./movie-release-dialog";
+import { grabbedMessage } from "./movie-release";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 
@@ -105,7 +107,7 @@ export function MoviesTable({
 }: {
   rows: MovieRow[];
   profiles: QualityProfileOption[];
-  /** Admins also get Refresh & scan, Edit and Delete. Everyone can select movies and search for them. */
+  /** Admins also get Pick a release, Refresh & scan, Edit and Delete. Everyone can select movies and search for them. */
   isAdmin: boolean;
 }) {
   const [filters, setFilters] = useState<MovieFilters>(DEFAULT_FILTERS);
@@ -116,6 +118,8 @@ export function MoviesTable({
   const [editing, setEditing] = useState<{ ids: number[]; title?: string; fromSelection: boolean } | null>(null);
   // The movies the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
+  // The movie whose release picker is open. Admin only, and one movie at a time.
+  const [picking, setPicking] = useState<{ id: number; title: string } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
   const [refreshing, startRefresh] = useTransition();
@@ -181,6 +185,11 @@ export function MoviesTable({
     if (editing?.fromSelection) setSelected(new Set());
     setEditing(null);
     setStatus(updatedMessage(movieCount));
+  }
+
+  function openPicker(row: MovieRow) {
+    setStatus(null);
+    setPicking({ id: row.id, title: row.title });
   }
 
   function openDeleter(movies: MovieRow[]) {
@@ -425,6 +434,14 @@ export function MoviesTable({
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          aria-label={`Pick a release for ${row.title}`}
+                          onClick={() => openPicker(row)}
+                        >
+                          <UserSearch aria-hidden />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           aria-label={`Refresh and scan ${row.title}`}
                           onClick={() => refreshMovies([row.id])}
                           disabled={refreshing}
@@ -485,10 +502,23 @@ export function MoviesTable({
         />
       )}
 
-      {/* Hidden while a dialog is open: clicking a row's Edit or Delete opens it with the mouse still on the row. */}
+      {isAdmin && picking && (
+        <MovieReleaseDialog
+          movieId={picking.id}
+          title={picking.title}
+          onClose={() => setPicking(null)}
+          onGrabbed={(grabbedTitle) => {
+            setPicking(null);
+            setStatus(grabbedMessage(grabbedTitle));
+          }}
+        />
+      )}
+
+      {/* Hidden while a dialog is open: clicking a row's Edit, Delete or Pick opens it with the mouse still on the row. */}
       {posterPreview.activeKey !== null &&
         !editing &&
         !deleting &&
+        !picking &&
         visible.some((row) => row.id === posterPreview.activeKey) &&
         posterPreview.preview}
 

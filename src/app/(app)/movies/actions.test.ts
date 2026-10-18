@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   searchMovieReleases: vi.fn(),
   refreshMovies: vi.fn(),
   listRootFolders: vi.fn(),
+  searchReleases: vi.fn(),
+  grabRelease: vi.fn(),
 }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
@@ -33,6 +35,18 @@ vi.mock("@/server/arr/movies", () => ({
   refreshMovies: mocks.refreshMovies,
 }));
 
+// grabWasRefused is the real one, so these tests check the same 4xx/5xx rule that decides whether a token is restored.
+vi.mock("@/server/arr/releases", async () => {
+  const { grabWasRefused } = await vi.importActual<typeof import("@/server/arr/releases")>("@/server/arr/releases");
+  class ReleaseGrabError extends Error {
+    constructor(readonly reason: "expired") {
+      super(reason);
+      this.name = "ReleaseGrabError";
+    }
+  }
+  return { ReleaseGrabError, grabWasRefused, searchReleases: mocks.searchReleases, grabRelease: mocks.grabRelease };
+});
+
 vi.mock("@/server/arr/movie-add", () => {
   class MovieAddError extends Error {
     constructor(readonly reason: "not-found" | "exists") {
@@ -51,7 +65,17 @@ vi.mock("@/server/arr/movie-add", () => {
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { addLibraryMovie, refreshLibraryMovies, removeMovies, searchLibraryMovies, searchMovies, updateMovies } from "./actions";
+import {
+  addLibraryMovie,
+  findMovieReleases,
+  grabMovieRelease,
+  refreshLibraryMovies,
+  removeMovies,
+  searchLibraryMovies,
+  searchMovies,
+  updateMovies,
+} from "./actions";
+import { ReleaseGrabError } from "@/server/arr/releases";
 import { MovieAddError } from "@/server/arr/movie-add";
 import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
 
@@ -65,6 +89,8 @@ beforeEach(() => {
   mocks.deleteMovies.mockResolvedValue(undefined);
   mocks.searchMovieReleases.mockResolvedValue(undefined);
   mocks.refreshMovies.mockResolvedValue(undefined);
+  mocks.searchReleases.mockResolvedValue({ rows: [], total: 0 });
+  mocks.grabRelease.mockResolvedValue({ title: "Starfall.2019.1080p" });
   mocks.listQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
@@ -713,5 +739,171 @@ describe("refreshLibraryMovies", () => {
   it("rethrows errors that are not Radarr request failures", async () => {
     mocks.refreshMovies.mockRejectedValue(new Error("config broken"));
     await expect(refreshLibraryMovies({ movieIds: [1] })).rejects.toThrow("config broken");
+  });
+});
+
+describe("findMovieReleases and grabMovieRelease", () => {
+  const PICK_DENIED = "You don't have permission to pick releases.";
+  const release = { token: "00000000-0000-4000-8000-000000000001", title: "Starfall.2019.1080p" };
+
+  describe("authorization", () => {
+    it.each([
+      ["findMovieReleases", () => findMovieReleases({ movieId: 1 })],
+      ["grabMovieRelease", () => grabMovieRelease({ token: release.token })],
+    ])("checks for the admin role only in %s", async (_name, call) => {
+      await call();
+      expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+    });
+
+    it.each([
+      ["requester (403)", 403],
+      ["signed-out (401)", 401],
+    ] as const)("rejects a %s and never calls Radarr", async (_label, status) => {
+      mocks.requireRole.mockRejectedValue(new AuthzError(status));
+
+      expect(await findMovieReleases({ movieId: 1 })).toEqual({ ok: false, error: PICK_DENIED });
+      expect(await grabMovieRelease({ token: release.token })).toEqual({ ok: false, error: PICK_DENIED });
+      expect(mocks.searchReleases).not.toHaveBeenCalled();
+      expect(mocks.grabRelease).not.toHaveBeenCalled();
+    });
+
+    it("rethrows errors that are not authorization failures", async () => {
+      mocks.requireRole.mockRejectedValue(new Error("database down"));
+      await expect(findMovieReleases({ movieId: 1 })).rejects.toThrow("database down");
+      await expect(grabMovieRelease({ token: release.token })).rejects.toThrow("database down");
+      expect(mocks.searchReleases).not.toHaveBeenCalled();
+      expect(mocks.grabRelease).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("findMovieReleases input and results", () => {
+    it.each([
+      ["a missing id", {}],
+      ["a zero id", { movieId: 0 }],
+      ["a negative id", { movieId: -3 }],
+      ["a fractional id", { movieId: 1.5 }],
+      ["a string id", { movieId: "1" }],
+      ["an extra key", { movieId: 1, indexerId: 2 }],
+      ["null", null],
+    ])("rejects %s without calling Radarr", async (_name, input) => {
+      expect(await findMovieReleases(input)).toEqual({ ok: false, error: "Invalid search." });
+      expect(mocks.searchReleases).not.toHaveBeenCalled();
+    });
+
+    it("returns the rows and total on success, and does not re-render the page", async () => {
+      const rows = [{ token: release.token, title: release.title }];
+      mocks.searchReleases.mockResolvedValue({ rows, total: 9 });
+
+      const result = await findMovieReleases({ movieId: 7 });
+
+      expect(mocks.searchReleases).toHaveBeenCalledWith(7);
+      expect(result).toEqual({ ok: true, releases: rows, total: 9 });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("says it timed out, and logs only the safe message", async () => {
+      mocks.searchReleases.mockRejectedValue(new ArrRequestError("Radarr release search request failed: timed out", "timeout"));
+      const result = await findMovieReleases({ movieId: 1 });
+      expect(result).toEqual({ ok: false, error: "Radarr took too long searching the indexers. Try again in a moment." });
+      expect(console.error).toHaveBeenCalledWith("Release search: Radarr release search request failed: timed out");
+    });
+
+    it("says the movie is gone on a 404", async () => {
+      mocks.searchReleases.mockRejectedValue(new ArrRequestError("Radarr release search request failed: HTTP 404", "http", 404));
+      expect(await findMovieReleases({ movieId: 1 })).toEqual({
+        ok: false,
+        error: "That movie is no longer in Radarr. Close this and reload the page.",
+      });
+    });
+
+    it("gives the generic message for other Radarr failures", async () => {
+      mocks.searchReleases.mockRejectedValue(new ArrRequestError("Radarr release search request failed: HTTP 500", "http", 500));
+      expect(await findMovieReleases({ movieId: 1 })).toEqual({
+        ok: false,
+        error: "Radarr couldn't search the indexers. Try again.",
+      });
+    });
+
+    it("rethrows errors that are not Radarr request failures", async () => {
+      mocks.searchReleases.mockRejectedValue(new Error("config broken"));
+      await expect(findMovieReleases({ movieId: 1 })).rejects.toThrow("config broken");
+    });
+  });
+
+  describe("grabMovieRelease input and results", () => {
+    it.each([
+      ["a missing token", {}],
+      ["a token that is not a UUID", { token: "not-a-uuid" }],
+      ["a number token", { token: 12 }],
+      ["an extra key", { token: release.token, guid: "https://indexer.test/details/1" }],
+      ["null", null],
+    ])("rejects %s without calling Radarr", async (_name, input) => {
+      expect(await grabMovieRelease(input)).toEqual({ ok: false, error: "Invalid grab." });
+      expect(mocks.grabRelease).not.toHaveBeenCalled();
+    });
+
+    it("returns the title on success, and does not re-render the page", async () => {
+      mocks.grabRelease.mockResolvedValue({ title: release.title });
+
+      const result = await grabMovieRelease({ token: release.token });
+
+      expect(mocks.grabRelease).toHaveBeenCalledWith(release.token);
+      expect(result).toEqual({ ok: true, title: release.title });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("says the result expired when the token is unknown or used up", async () => {
+      mocks.grabRelease.mockRejectedValue(new ReleaseGrabError("expired"));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "That result has expired. Search again.",
+      });
+    });
+
+    it("warns about a possible grab after a timeout", async () => {
+      mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: timed out", "timeout"));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Radarr took too long to answer. The release may still have been grabbed, so check the queue before trying again.",
+      });
+      expect(console.error).toHaveBeenCalledWith("Release grab: Radarr release grab request failed: timed out");
+    });
+
+    it("says the indexer did not hand over the release on a 409", async () => {
+      mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: HTTP 409", "http", 409));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "The indexer didn't hand over that release. Try again, or pick another one.",
+      });
+    });
+
+    it("gives the plain refusal message for other 4xx errors", async () => {
+      mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: HTTP 400", "http", 400));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Radarr didn't grab the release. Try again.",
+      });
+    });
+
+    it("warns about a possible grab after a 5xx, since Radarr may have sent the release first", async () => {
+      mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: HTTP 500", "http", 500));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Radarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+      });
+    });
+
+    it("warns about a possible grab after a network error", async () => {
+      mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: network error", "network"));
+      expect(await grabMovieRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Radarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+      });
+    });
+
+    it("rethrows errors that are not Radarr request failures", async () => {
+      mocks.grabRelease.mockRejectedValue(new Error("config broken"));
+      await expect(grabMovieRelease({ token: release.token })).rejects.toThrow("config broken");
+    });
   });
 });

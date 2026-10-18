@@ -19,6 +19,7 @@ import {
   type LookupResult,
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
+import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases, type ReleaseRow } from "@/server/arr/releases";
 import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
@@ -305,4 +306,95 @@ export async function refreshLibraryMovies(input: unknown): Promise<RefreshResul
     return { ok: false, error: "Radarr didn't start the refresh. Try again." };
   }
   return { ok: true, refreshed: movieIds.length };
+}
+
+export type ReleaseSearchResult = { ok: true; releases: ReleaseRow[]; total: number } | { ok: false; error: string };
+
+// strictObject rejects unknown keys. Only the movie id crosses from the browser.
+const ReleaseSearchInput = z.strictObject({
+  movieId: z.number().int().positive(),
+});
+
+/**
+ * Asks Radarr for interactive release search results for one library movie (admin only). Same shape as the
+ * other actions: the role check runs first inside try, and the catch always returns or throws. Nothing on the
+ * page changes, so there is no refresh(). The rows carry only what the dialog shows, plus the server's token.
+ */
+export async function findMovieReleases(input: unknown): Promise<ReleaseSearchResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to pick releases." };
+    throw error;
+  }
+
+  const parsed = ReleaseSearchInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid search." };
+
+  try {
+    const { rows, total } = await searchReleases(parsed.data.movieId);
+    return { ok: true, releases: rows, total };
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Release search: ${error.message}`);
+    if (error.kind === "timeout") {
+      return { ok: false, error: "Radarr took too long searching the indexers. Try again in a moment." };
+    }
+    if (error.kind === "http" && error.status === 404) {
+      return { ok: false, error: "That movie is no longer in Radarr. Close this and reload the page." };
+    }
+    return { ok: false, error: "Radarr couldn't search the indexers. Try again." };
+  }
+}
+
+export type GrabResult = { ok: true; title: string } | { ok: false; error: string };
+
+// strictObject rejects unknown keys. The browser sends only the token from a search result.
+const ReleaseGrabInput = z.strictObject({
+  token: z.uuid(),
+});
+
+/**
+ * Sends a release from an earlier search to Radarr's download client (admin only). Same shape as the other
+ * actions: the role check runs first inside try, and the catch always returns or throws. The release is taken
+ * from the server's cache, so the browser can only grab what Radarr returned. Nothing on the page changes, so
+ * there is no refresh().
+ */
+export async function grabMovieRelease(input: unknown): Promise<GrabResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to pick releases." };
+    throw error;
+  }
+
+  const parsed = ReleaseGrabInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid grab." };
+
+  try {
+    const grabbed = await grabRelease(parsed.data.token);
+    return { ok: true, title: grabbed.title };
+  } catch (error) {
+    if (error instanceof ReleaseGrabError) return { ok: false, error: "That result has expired. Search again." };
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Release grab: ${error.message}`);
+    // A timeout or a dropped connection can mean Radarr already sent the release, so don't invite a blind retry.
+    if (error.kind === "timeout") {
+      return {
+        ok: false,
+        error: "Radarr took too long to answer. The release may still have been grabbed, so check the queue before trying again.",
+      };
+    }
+    // Only a refusal means nothing was grabbed. A 5xx can come after the release reached the download client.
+    if (grabWasRefused(error)) {
+      if (error.status === 409) return { ok: false, error: "The indexer didn't hand over that release. Try again, or pick another one." };
+      return { ok: false, error: "Radarr didn't grab the release. Try again." };
+    }
+    return {
+      ok: false,
+      error: "Radarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+    };
+  }
 }
