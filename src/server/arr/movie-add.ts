@@ -1,8 +1,8 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { getList } from "./movies";
+import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./poster";
 import { ArrRequestError, arrRequest } from "./request";
-import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./movies";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -212,8 +212,16 @@ export async function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffe
   if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError("TMDB poster request failed: invalid name", "invalid");
   const data = await arrRequest("TMDB poster", async (signal) => {
     const response = await fetch(`${TMDB_POSTER_BASE}${file}`, { redirect: "error", signal });
-    // Only read the body of a good response. A failed one is reported by arrRequest from the status.
-    if (!response.ok) return { data: undefined, response };
+    // Only read the body of a good response. For a failed one, drop the body so the socket is released.
+    // A cancel error is ignored: the status is what gets reported.
+    if (!response.ok) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignored on purpose, see above.
+      }
+      return { data: undefined, response };
+    }
     return { data: await readCapped(response.body, MAX_POSTER_BYTES), response };
   });
   if (!data || !isJpeg(data)) throw new ArrRequestError("TMDB poster response was not a usable image", "invalid");

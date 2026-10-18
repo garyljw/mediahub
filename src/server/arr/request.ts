@@ -1,8 +1,9 @@
 import "server-only";
 
 /**
- * A failed Radarr/Sonarr request. Messages never contain the host, URL, key or response
- * body, so they are safe to log. Config errors from env() are not wrapped in this.
+ * A failed request to Radarr/Sonarr, or the TMDB poster fetch in poster.ts / movie-add.ts. Messages never
+ * contain the host, URL, key or response body, so they are safe to log. Config errors from env() are not
+ * wrapped in this.
  */
 export type ArrFailureKind = "timeout" | "invalid" | "network" | "http";
 

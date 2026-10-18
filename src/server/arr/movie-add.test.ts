@@ -294,6 +294,23 @@ describe("getTmdbPoster", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("cancels the body of a failed response so the socket is released", async () => {
+    const cancel = vi.fn(async () => {});
+    fetchMock.mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 404 }));
+    await expect(getTmdbPoster("abc123.jpg")).rejects.toThrow("TMDB poster request failed: HTTP 404");
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("still reports the status when cancelling the body throws", async () => {
+    const cancel = vi.fn(async () => {
+      throw new Error("socket already closed");
+    });
+    fetchMock.mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 500 }));
+    const error = await getTmdbPoster("abc123.jpg").catch((e: unknown) => e);
+    expect((error as ArrRequestError).message).toBe("TMDB poster request failed: HTTP 500");
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("maps a non-OK status to a safe ArrRequestError with the status", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
     const error = await getTmdbPoster("abc123.jpg").catch((e: unknown) => e);

@@ -10,14 +10,16 @@ import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
  * `src` is always one of MediaHub's own poster routes, never a Radarr or TMDB URL.
  */
 export function MoviePoster({ src }: { src: string | null }) {
-  const [failed, setFailed] = useState(false);
+  // A failure belongs to the src that failed. A new src gets a fresh attempt, so the same <img> can recover.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = src !== null && failedSrc === src;
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // An image can fail before React hydrates, and then onError never fires. Check once on mount.
+  // An image can fail before React hydrates, and then onError never fires. Check after each src change.
   useEffect(() => {
     const img = imgRef.current;
-    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
-  }, []);
+    if (img && src !== null && img.complete && img.naturalWidth === 0) setFailedSrc(src);
+  }, [src]);
 
   if (src !== null && !failed) {
     return (
@@ -31,7 +33,7 @@ export function MoviePoster({ src }: { src: string | null }) {
         height={36}
         loading="lazy"
         decoding="async"
-        onError={() => setFailed(true)}
+        onError={() => setFailedSrc(src)}
         className="h-9 w-6 shrink-0 rounded-sm bg-muted object-cover"
       />
     );
