@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,8 @@ import {
   toggleId,
   updatedMessage,
 } from "./movie-edit";
+import { deletedMessage } from "./movie-delete";
+import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
 
 const STATUS_LABEL: Record<MovieStatus, string> = {
@@ -102,6 +104,8 @@ export function MoviesTable({
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   // The movies the dialog is editing: one row, or the whole selection (no title).
   const [editing, setEditing] = useState<{ ids: number[]; title?: string; fromSelection: boolean } | null>(null);
+  // The movies the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
+  const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -127,6 +131,8 @@ export function MoviesTable({
   // the admin can't see, and a refresh that removes a movie drops it too. Hidden picks come back if
   // the filter is changed back. So toggles update `selected` (the full set); selectedIds is display/edit only.
   const selectedIds = useMemo(() => pruneSelection(selected, filtered), [selected, filtered]);
+  // The same filter-pruned selection as selectedIds, as rows. Delete shows these titles and sends their ids.
+  const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row.id)), [filtered, selectedIds]);
   const allState = selectAllState(selectedIds, filtered);
 
   // Filter and search changes go back to page 1. The handlers do this, not an effect.
@@ -161,6 +167,19 @@ export function MoviesTable({
     if (editing?.fromSelection) setSelected(new Set());
     setEditing(null);
     setStatus(updatedMessage(movieCount));
+  }
+
+  function openDeleter(movies: MovieRow[]) {
+    setStatus(null);
+    setDeleting({ movies });
+  }
+
+  function handleDeleted(movieCount: number) {
+    // Drop only the deleted movies from the selection. Picks hidden by the current filter stay.
+    const gone = new Set(deleting?.movies.map((movie) => movie.id));
+    setSelected((previous) => new Set([...previous].filter((id) => !gone.has(id))));
+    setDeleting(null);
+    setStatus(deletedMessage(movieCount));
   }
 
   const noun = rows.length === 1 ? "movie" : "movies";
@@ -229,6 +248,9 @@ export function MoviesTable({
               <span className="font-medium">{selectedIds.size.toLocaleString("en-GB")} selected</span>
               <Button size="sm" onClick={() => openEditor([...selectedIds], true)}>
                 Edit…
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => openDeleter(selectedRows)}>
+                Delete…
               </Button>
               <Button size="sm" variant="outline" onClick={() => updateSelection(new Set())}>
                 Clear
@@ -318,14 +340,24 @@ export function MoviesTable({
                 <TableCell className={cn(CELL, "tabular-nums")}>{formatAdded(row.added)}</TableCell>
                 {isAdmin && (
                   <TableCell className={cn(CELL, "text-right")}>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Edit ${row.title}`}
-                      onClick={() => openEditor([row.id], false, row.title)}
-                    >
-                      <Pencil aria-hidden />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${row.title}`}
+                        onClick={() => openEditor([row.id], false, row.title)}
+                      >
+                        <Pencil aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Delete ${row.title}`}
+                        onClick={() => openDeleter([row])}
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
@@ -359,6 +391,14 @@ export function MoviesTable({
           profiles={profiles}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {isAdmin && deleting && (
+        <MovieDeleteDialog
+          movies={deleting.movies}
+          onClose={() => setDeleting(null)}
+          onDeleted={handleDeleted}
         />
       )}
 

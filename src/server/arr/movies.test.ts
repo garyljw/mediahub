@@ -33,7 +33,7 @@ vi.mock("@/server/env", () => ({
   },
 }));
 
-import { editMovies, listMovies, listQualityProfiles, toMovieRows } from "./movies";
+import { DELETE_TIMEOUT_MS, deleteMovies, editMovies, listMovies, listQualityProfiles, toMovieRows } from "./movies";
 
 const ALLOWED_KEYS = [
   "added",
@@ -287,6 +287,7 @@ describe("listMovies failure kinds", () => {
     const error = await rejectionOf(listMovies());
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Radarr movie request failed: timed out");
+    expect((error as ArrRequestError).kind).toBe("timeout");
   });
 
   it("reports a non-JSON OK body as an invalid response, without the body", async () => {
@@ -315,21 +316,21 @@ describe("env errors", () => {
   });
 });
 
+// The only request the editor functions may make: one call to the movie editor.
+function serveEditor(reply: () => Response) {
+  fetchMock.mockImplementation(async (req: Request) => {
+    const path = new URL(req.url).pathname;
+    if (path === "/api/v3/movie/editor") return reply();
+    throw new TypeError(`unexpected request to ${path}`);
+  });
+}
+
+async function sentBody(): Promise<Record<string, unknown>> {
+  const req = requestAt(0);
+  return JSON.parse(await req.text()) as Record<string, unknown>;
+}
+
 describe("editMovies", () => {
-  // The only request this function may make: one PUT to the movie editor.
-  function serveEditor(reply: () => Response) {
-    fetchMock.mockImplementation(async (req: Request) => {
-      const path = new URL(req.url).pathname;
-      if (path === "/api/v3/movie/editor") return reply();
-      throw new TypeError(`unexpected request to ${path}`);
-    });
-  }
-
-  async function sentBody(): Promise<Record<string, unknown>> {
-    const req = requestAt(0);
-    return JSON.parse(await req.text()) as Record<string, unknown>;
-  }
-
   it("sends a PUT to the movie editor with the key in a header and only the given fields", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
@@ -392,6 +393,81 @@ describe("editMovies", () => {
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Radarr movie edit request failed: network error");
+    expect(error.message).not.toContain("radarr.test");
+  });
+});
+
+describe("deleteMovies", () => {
+  it("allows a longer timeout than reads, because deleting files can be slow", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    serveEditor(() => new Response(null, { status: 200 }));
+    await deleteMovies({ movieIds: [1], deleteFiles: true, addImportExclusion: false });
+    expect(timeout).toHaveBeenCalledWith(DELETE_TIMEOUT_MS);
+    expect(DELETE_TIMEOUT_MS).toBeGreaterThan(ARR_TIMEOUT_MS);
+    timeout.mockRestore();
+  });
+
+  it("sends a DELETE to the movie editor with the key in a header and the exact body", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await deleteMovies({ movieIds: [1, 2], deleteFiles: true, addImportExclusion: false });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("DELETE");
+    expect(new URL(req.url).pathname).toBe("/api/v3/movie/editor");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toStrictEqual({ movieIds: [1, 2], deleteFiles: true, addImportExclusion: false });
+  });
+
+  it.each([
+    ["both false", { deleteFiles: false, addImportExclusion: false }],
+    ["files only", { deleteFiles: true, addImportExclusion: false }],
+    ["exclusion only", { deleteFiles: false, addImportExclusion: true }],
+    ["both true", { deleteFiles: true, addImportExclusion: true }],
+  ])("always sends both booleans explicitly (%s)", async (_name, flags) => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await deleteMovies({ movieIds: [9], ...flags });
+
+    const body = await sentBody();
+    expect(body).toStrictEqual({ movieIds: [9], ...flags });
+    expect(typeof body.deleteFiles).toBe("boolean");
+    expect(typeof body.addImportExclusion).toBe("boolean");
+  });
+
+  it("never sends other editor fields, even when the caller passes extras", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    // A caller that passes extra keys (the type forbids it) must still not get them forwarded.
+    const sneaky = { movieIds: [1], deleteFiles: false, addImportExclusion: false, moveFiles: true, tags: [3] };
+    await deleteMovies(sneaky as Parameters<typeof deleteMovies>[0]);
+
+    expect(Object.keys(await sentBody()).sort()).toEqual(["addImportExclusion", "deleteFiles", "movieIds"]);
+  });
+
+  it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
+    serveEditor(() => new Response(`boom ${FAKE_KEY} at http://radarr.test:7878`, { status: 500 }));
+
+    const error = await rejectionOf(deleteMovies({ movieIds: [1], deleteFiles: false, addImportExclusion: false }));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr movie delete request failed: HTTP 500");
+    expect(error.message).not.toContain(FAKE_KEY);
+    expect(error.message).not.toContain("radarr.test");
+  });
+
+  it("throws ArrRequestError on a network failure without exposing the host", async () => {
+    serveEditor(() => {
+      throw new TypeError("fetch failed for http://radarr.test:7878/api/v3/movie/editor");
+    });
+
+    const error = await rejectionOf(deleteMovies({ movieIds: [1], deleteFiles: true, addImportExclusion: true }));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr movie delete request failed: network error");
     expect(error.message).not.toContain("radarr.test");
   });
 });

@@ -78,7 +78,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
 
 async function getList<T>(label: string, get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>): Promise<T[]> {
   const data = await arrRequest(label, get);
-  if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`);
+  if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`, "invalid");
   return data;
 }
 
@@ -129,4 +129,27 @@ export async function editMovies(edit: MovieEdit): Promise<void> {
   const client = radarrClient();
   const body = movieEditorBody(edit);
   await arrRequest("Radarr movie edit", (signal) => client.PUT("/api/v3/movie/editor", { body, signal }));
+}
+
+/**
+ * A bulk delete. Both booleans are always sent, so Radarr never falls back to its own defaults
+ * for either one.
+ */
+export type MovieDelete = { movieIds: number[]; deleteFiles: boolean; addImportExclusion: boolean };
+
+/** Builds the delete body with exactly these three fields. Nothing else from the editor resource is sent. */
+function movieDeleteBody(del: MovieDelete): MovieEditorResource {
+  return { movieIds: del.movieIds, deleteFiles: del.deleteFiles, addImportExclusion: del.addImportExclusion };
+}
+
+/** Deleting many movies with their files can take a while on a NAS, so deletes get longer than the default. */
+export const DELETE_TIMEOUT_MS = 120_000;
+
+/** Deletes the given Radarr movies, optionally with their files and with an import exclusion. */
+export async function deleteMovies(del: MovieDelete): Promise<void> {
+  const client = radarrClient();
+  const body = movieDeleteBody(del);
+  await arrRequest("Radarr movie delete", (signal) => client.DELETE("/api/v3/movie/editor", { body, signal }), {
+    timeoutMs: DELETE_TIMEOUT_MS,
+  });
 }

@@ -195,6 +195,7 @@ describe("server actions in src/", () => {
     const actions = results.flatMap((r) => r.actions);
     expect(actions.length).toBeGreaterThanOrEqual(2);
     expect(actions).toContain("app/(app)/movies/actions.ts#updateMovies");
+    expect(actions).toContain("app/(app)/movies/actions.ts#removeMovies");
     expect(actions).toContain("app/(app)/actions.ts#signOut");
   });
 
