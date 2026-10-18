@@ -25,7 +25,7 @@ import {
   type StatusFilter,
   profileOptions,
 } from "./movie-filters";
-import { formatAdded, formatSize } from "./movie-format";
+import { formatAdded, formatCount, formatSize } from "./movie-format";
 import {
   pruneSelection,
   selectAllState,
@@ -234,7 +234,7 @@ export function MoviesTable({
           ))}
         </select>
         <p className="ml-auto text-sm text-muted-foreground" aria-live="polite">
-          {filtered.length.toLocaleString("en-GB")} of {rows.length.toLocaleString("en-GB")} {noun}
+          {formatCount(filtered.length)} of {formatCount(rows.length)} {noun}
         </p>
       </div>
 
@@ -245,7 +245,7 @@ export function MoviesTable({
           </p>
           {selectedIds.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-              <span className="font-medium">{selectedIds.size.toLocaleString("en-GB")} selected</span>
+              <span className="font-medium">{formatCount(selectedIds.size)} selected</span>
               <Button size="sm" onClick={() => openEditor([...selectedIds], true)}>
                 Edit…
               </Button>

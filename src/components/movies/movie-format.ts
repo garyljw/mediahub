@@ -1,18 +1,22 @@
 // Display formatting for the Movies table. Pure, so it can be tested without a DOM.
 
-// Fixed time zone so the server render and the browser agree (no hydration mismatch near midnight).
-const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
+// These run during the server render and again in the browser, and the two must produce identical
+// text. Intl output depends on each runtime's ICU data (Node said "Sept", Safari said "Sep"), so dates
+// and counts are formatted by hand. UTC so both sides agree near midnight.
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "12 Mar 2024" for an ISO date-time, or an em dash when missing or unparseable. */
+/** "12 Mar 2024" for an ISO date-time (in UTC), or an em dash when missing or unparseable. */
 export function formatAdded(iso: string | null): string {
   if (iso === null) return "—";
   const time = Date.parse(iso);
-  return Number.isNaN(time) ? "—" : DATE_FORMAT.format(new Date(time));
+  if (Number.isNaN(time)) return "—";
+  const date = new Date(time);
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/** "1,234": thousands separated by commas, without Intl, for the same reason as dates. */
+export function formatCount(count: number): string {
+  return String(Math.trunc(count)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 const UNITS = ["B", "KB", "MB", "GB", "TB"];

@@ -20,6 +20,7 @@ import {
   listedMovies,
   type DeleteMovie,
 } from "./movie-delete";
+import { formatCount } from "./movie-format";
 import { MAX_EDIT_MOVIES } from "./movie-edit";
 
 /**
@@ -146,7 +147,7 @@ export function MovieDeleteDialog({
 
           {tooMany && (
             <p role="alert" className="text-sm text-destructive">
-              Select at most {MAX_EDIT_MOVIES.toLocaleString("en-GB")} movies per delete.
+              Select at most {formatCount(MAX_EDIT_MOVIES)} movies per delete.
             </p>
           )}
           {error && (
