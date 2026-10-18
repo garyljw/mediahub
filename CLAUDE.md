@@ -11,7 +11,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 1. **API keys never reach the browser.** All Radarr/Sonarr calls live in `src/server/**`, and every file there starts with `import "server-only";`.
 2. **Read config only via `env()` from `src/server/env.ts`.** Never read `process.env` directly elsewhere, and never prefix secrets with `NEXT_PUBLIC_`.
 3. **No open pass-through proxy.** Each upstream action is an explicit route handler or server action that:
-   - calls `requireRole(...)` first,
+   - calls `requireRole(...)` first (only `await connection()` may come before it, because it just stops Next prerendering the route),
    - validates input with Zod,
    - calls a typed client function,
    - returns only the fields the UI needs.
