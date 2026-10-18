@@ -23,7 +23,7 @@ export function Poster({ src }: { src: string | null }) {
 
   if (src !== null && !failed) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the source is already a 250px thumbnail. The alt is empty because the title sits right next to it.
+      // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it.
       <img
         ref={imgRef}
         data-poster-thumb
@@ -52,7 +52,7 @@ export function Poster({ src }: { src: string | null }) {
  */
 export function PosterPreview({ src, top, left }: { src: string; top: number; left: number }) {
   return createPortal(
-    // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the source is already a 250px thumbnail. The alt is empty because the title sits right next to it.
+    // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it.
     <img
       src={src}
       alt=""
