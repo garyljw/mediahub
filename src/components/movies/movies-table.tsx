@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { searchLibraryMovies } from "@/app/(app)/movies/actions";
+import { refreshLibraryMovies, searchLibraryMovies } from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { MovieRow, MovieStatus, QualityProfileOption } from "@/server/arr/movies";
@@ -35,6 +35,7 @@ import {
   updatedMessage,
 } from "./movie-edit";
 import { deletedMessage } from "./movie-delete";
+import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
 import { MovieDeleteDialog } from "./movie-delete-dialog";
 import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
@@ -104,7 +105,7 @@ export function MoviesTable({
 }: {
   rows: MovieRow[];
   profiles: QualityProfileOption[];
-  /** Admins also get Edit and Delete. Everyone can select movies and search for them. */
+  /** Admins also get Refresh & scan, Edit and Delete. Everyone can select movies and search for them. */
   isAdmin: boolean;
 }) {
   const [filters, setFilters] = useState<MovieFilters>(DEFAULT_FILTERS);
@@ -117,6 +118,7 @@ export function MoviesTable({
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
   // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
   const posterPreview = usePosterPreview<number>();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -208,8 +210,23 @@ export function MoviesTable({
     });
   }
 
+  // Starts a Radarr refresh and disk rescan. A bulk refresh keeps its selection, like search.
+  function refreshMovies(ids: number[]) {
+    setStatus(null);
+    startRefresh(async () => {
+      try {
+        const result = await refreshLibraryMovies({ movieIds: ids });
+        setStatus(result.ok ? refreshStartedMessage(result.refreshed) : result.error);
+      } catch {
+        // The request never got an answer (connection lost, server restarted), so say so instead of failing the page.
+        setStatus("Couldn't reach MediaHub. Check your connection and try again.");
+      }
+    });
+  }
+
   const noun = rows.length === 1 ? "movie" : "movies";
   const tooManyToSearch = selectedIds.size > MAX_SEARCH_MOVIES;
+  const tooManyToRefresh = selectedIds.size > MAX_REFRESH_MOVIES;
 
   return (
     <div className="space-y-3">
@@ -280,6 +297,15 @@ export function MoviesTable({
           </Button>
           {isAdmin && (
             <>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => refreshMovies([...selectedIds])}
+                disabled={refreshing || tooManyToRefresh}
+                aria-busy={refreshing}
+              >
+                Refresh &amp; scan
+              </Button>
               <Button size="sm" variant="secondary" onClick={() => openEditor([...selectedIds], true)}>
                 Edit…
               </Button>
@@ -294,6 +320,11 @@ export function MoviesTable({
           {tooManyToSearch && (
             <span role="alert" className="text-destructive">
               Select at most {formatCount(MAX_SEARCH_MOVIES)} movies to search.
+            </span>
+          )}
+          {isAdmin && tooManyToRefresh && (
+            <span role="alert" className="text-destructive">
+              Select at most {formatCount(MAX_REFRESH_MOVIES)} movies to refresh.
             </span>
           )}
         </div>
@@ -391,6 +422,15 @@ export function MoviesTable({
                     </Button>
                     {isAdmin && (
                       <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Refresh and scan ${row.title}`}
+                          onClick={() => refreshMovies([row.id])}
+                          disabled={refreshing}
+                        >
+                          <RefreshCw aria-hidden />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"

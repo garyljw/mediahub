@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   lookupMovies: vi.fn(),
   addMovie: vi.fn(),
   searchMovieReleases: vi.fn(),
+  refreshMovies: vi.fn(),
   listRootFolders: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock("@/server/arr/movies", () => ({
   deleteMovies: mocks.deleteMovies,
   listQualityProfiles: mocks.listQualityProfiles,
   searchMovieReleases: mocks.searchMovieReleases,
+  refreshMovies: mocks.refreshMovies,
 }));
 
 vi.mock("@/server/arr/movie-add", () => {
@@ -49,8 +51,9 @@ vi.mock("@/server/arr/movie-add", () => {
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { addLibraryMovie, removeMovies, searchLibraryMovies, searchMovies, updateMovies } from "./actions";
+import { addLibraryMovie, refreshLibraryMovies, removeMovies, searchLibraryMovies, searchMovies, updateMovies } from "./actions";
 import { MovieAddError } from "@/server/arr/movie-add";
+import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
 
 const DENIED = "You don't have permission to edit movies.";
 const DELETE_DENIED = "You don't have permission to delete movies.";
@@ -61,6 +64,7 @@ beforeEach(() => {
   mocks.editMovies.mockResolvedValue(undefined);
   mocks.deleteMovies.mockResolvedValue(undefined);
   mocks.searchMovieReleases.mockResolvedValue(undefined);
+  mocks.refreshMovies.mockResolvedValue(undefined);
   mocks.listQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
@@ -629,5 +633,85 @@ describe("searchLibraryMovies", () => {
   it("rethrows errors that are not Radarr request failures", async () => {
     mocks.searchMovieReleases.mockRejectedValue(new Error("config broken"));
     await expect(searchLibraryMovies({ movieIds: [1] })).rejects.toThrow("config broken");
+  });
+});
+
+describe("refreshLibraryMovies", () => {
+  const REFRESH_DENIED = "You don't have permission to refresh movies.";
+
+  it("checks for the admin role only", async () => {
+    await refreshLibraryMovies({ movieIds: [1] });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  });
+
+  it("rejects a requester and never calls Radarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+    const result = await refreshLibraryMovies({ movieIds: [1] });
+    expect(result).toEqual({ ok: false, error: REFRESH_DENIED });
+    expect(mocks.refreshMovies).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-out caller (401) and never calls Radarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await refreshLibraryMovies({ movieIds: [1] });
+    expect(result).toEqual({ ok: false, error: REFRESH_DENIED });
+    expect(mocks.refreshMovies).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a non-authorization failure from the role check", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("db down"));
+    await expect(refreshLibraryMovies({ movieIds: [1] })).rejects.toThrow("db down");
+    expect(mocks.refreshMovies).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no ids", { movieIds: [] }],
+    ["too many ids", { movieIds: Array.from({ length: MAX_REFRESH_MOVIES + 1 }, (_, i) => i + 1) }],
+    ["a zero id", { movieIds: [0] }],
+    ["a fractional id", { movieIds: [1.5] }],
+    ["a string id", { movieIds: ["1"] }],
+    ["an extra key", { movieIds: [1], monitored: true }],
+    ["a missing list", {}],
+    ["null", null],
+  ])("rejects %s without calling Radarr", async (_name, input) => {
+    const result = await refreshLibraryMovies(input);
+    expect(result).toEqual({ ok: false, error: "Invalid refresh." });
+    expect(mocks.refreshMovies).not.toHaveBeenCalled();
+  });
+
+  it("accepts exactly MAX_REFRESH_MOVIES ids", async () => {
+    const ids = Array.from({ length: MAX_REFRESH_MOVIES }, (_, i) => i + 1);
+    const result = await refreshLibraryMovies({ movieIds: ids });
+    expect(result).toEqual({ ok: true, refreshed: MAX_REFRESH_MOVIES });
+  });
+
+  it("sends each id once and reports the unique count", async () => {
+    const result = await refreshLibraryMovies({ movieIds: [4, 5, 4] });
+    expect(mocks.refreshMovies).toHaveBeenCalledWith([4, 5]);
+    expect(result).toEqual({ ok: true, refreshed: 2 });
+  });
+
+  it("does not re-render the page, since Radarr only queues the refresh", async () => {
+    await refreshLibraryMovies({ movieIds: [1] });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives a friendly error and logs only the safe message when Radarr fails", async () => {
+    mocks.refreshMovies.mockRejectedValue(new ArrRequestError("Radarr movie refresh command request failed: HTTP 500"));
+    const result = await refreshLibraryMovies({ movieIds: [1] });
+    expect(result).toEqual({ ok: false, error: "Radarr didn't start the refresh. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Movie refresh: Radarr movie refresh command request failed: HTTP 500");
+  });
+
+  it("warns that the refresh may have started after a timeout", async () => {
+    mocks.refreshMovies.mockRejectedValue(new ArrRequestError("timed out", "timeout"));
+    const result = await refreshLibraryMovies({ movieIds: [1] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("may still have started");
+  });
+
+  it("rethrows errors that are not Radarr request failures", async () => {
+    mocks.refreshMovies.mockRejectedValue(new Error("config broken"));
+    await expect(refreshLibraryMovies({ movieIds: [1] })).rejects.toThrow("config broken");
   });
 });
