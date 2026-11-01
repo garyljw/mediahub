@@ -1,10 +1,10 @@
 // Pure display logic for the Activity column. Must not import from src/server at runtime.
-import type { ActivityState, MovieActivity } from "@/server/arr/activity";
+import type { ActivityState, QueueActivity } from "@/server/arr/activity";
 import { formatEta } from "@/components/library/format";
 
 /** How often the browser asks for queue state, while the tab is visible. */
 export const ACTIVITY_POLL_MS = 10_000;
-/** Longer than the server's 15 s Radarr timeout, so a slow but live reply is never cut short by the browser. */
+/** Longer than the server's 15 s upstream timeout, so a slow but live reply is never cut short by the browser. */
 export const ACTIVITY_TIMEOUT_MS = 20_000;
 
 const BASE_LABEL: Record<ActivityState, string> = {
@@ -24,12 +24,12 @@ const BASE_LABEL: Record<ActivityState, string> = {
  * True for a downloading or paused item whose progress is known. Only these show a percent and a bar.
  * The type guard lets callers read `progress` as a number once this is true.
  */
-export function showsProgress(activity: MovieActivity): activity is MovieActivity & { progress: number } {
+export function showsProgress(activity: QueueActivity): activity is QueueActivity & { progress: number } {
   return (activity.state === "downloading" || activity.state === "paused") && activity.progress !== null;
 }
 
 /** The text shown beside the icon, e.g. "Downloading 75% · 1h 5m (+1 more)". */
-export function activityLabel(activity: MovieActivity): string {
+export function activityLabel(activity: QueueActivity): string {
   let label = BASE_LABEL[activity.state];
   if (showsProgress(activity)) label += ` ${activity.progress}%`;
   if (activity.state === "downloading") {
@@ -40,7 +40,7 @@ export function activityLabel(activity: MovieActivity): string {
   return label;
 }
 
-/** Index the poll result by movie id for the table rows. */
-export function activityByMovie(items: MovieActivity[]): Map<number, MovieActivity> {
-  return new Map(items.map((activity) => [activity.movieId, activity]));
+/** Index the poll result by row id (movie id, series id or episode id) for the table rows. */
+export function activityById(items: QueueActivity[]): Map<number, QueueActivity> {
+  return new Map(items.map((activity) => [activity.id, activity]));
 }

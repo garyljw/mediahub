@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MovieActivity } from "@/server/arr/activity";
+import type { QueueActivity } from "@/server/arr/activity";
 import { type ActivityPollerOptions, createActivityPoller } from "./activity-poller";
 
 const POLL_MS = 10_000;
 const TIMEOUT_MS = 20_000;
 
-const ITEM: MovieActivity = {
-  movieId: 1,
+const ITEM: QueueActivity = {
+  id: 1,
   state: "downloading",
   severity: "ok",
   progress: 10,
@@ -14,7 +14,7 @@ const ITEM: MovieActivity = {
   messages: [],
   count: 1,
 };
-const OTHER: MovieActivity = { ...ITEM, movieId: 2, state: "paused", progress: null };
+const OTHER: QueueActivity = { ...ITEM, id: 2, state: "paused", progress: null };
 
 /** A clock that only moves when the test calls advance(). Timers run in order of their due time. */
 function fakeClock() {

@@ -8,6 +8,12 @@ import { formatAdded, formatCount, formatSize } from "@/components/library/forma
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
 import {
+  EpisodeActivityCell,
+  EpisodeActivityHead,
+  SeasonActivitySummary,
+  SeriesActivityProvider,
+} from "@/components/tv/series-activity";
+import {
   EpisodeMonitorToggle,
   EpisodeSearchButton,
   SeasonMonitorToggle,
@@ -66,6 +72,7 @@ function SeasonDetails({
         </span>
         <span className="tabular-nums text-muted-foreground">{formatCount(season.totalEpisodeCount)} total</span>
         <span className="tabular-nums text-muted-foreground">{formatSize(season.sizeOnDisk)}</span>
+        <SeasonActivitySummary episodeIds={season.episodes.map((episode) => episode.id)} label={season.label} />
         <SeasonSearchButton
           seriesId={seriesId}
           seasonNumber={season.seasonNumber}
@@ -84,6 +91,9 @@ function SeasonDetails({
                 <TableHead className={HEAD}>Title</TableHead>
                 <TableHead className={HEAD}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
+                <TableHead className={`${HEAD} w-48`}>
+                  <EpisodeActivityHead />
+                </TableHead>
                 <TableHead className={HEAD}>Quality</TableHead>
                 <TableHead className={`${HEAD} text-right`}>Size</TableHead>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>
@@ -116,6 +126,10 @@ function SeasonDetails({
                       {EPISODE_STATUS_LABEL[episode.status]}
                     </Badge>
                   </TableCell>
+                  <EpisodeActivityCell
+                    episodeId={episode.id}
+                    name={`${season.label} episode ${episode.episodeNumber}`}
+                  />
                   <TableCell className={`${CELL} text-muted-foreground`}>{episode.quality ?? "—"}</TableCell>
                   <TableCell className={`${CELL} text-right tabular-nums`}>{formatSize(episode.size)}</TableCell>
                   <TableCell className={`${CELL} text-right`}>
@@ -169,15 +183,17 @@ function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolea
         {detail.seasons.length === 0 ? (
           <p className="text-sm text-muted-foreground">No seasons.</p>
         ) : (
-          detail.seasons.map((season) => (
-            <SeasonDetails
-              key={season.seasonNumber}
-              seriesId={detail.id}
-              season={season}
-              open={season.seasonNumber === openSeason}
-              isAdmin={isAdmin}
-            />
-          ))
+          <SeriesActivityProvider key={detail.id} seriesId={detail.id}>
+            {detail.seasons.map((season) => (
+              <SeasonDetails
+                key={season.seasonNumber}
+                seriesId={detail.id}
+                season={season}
+                open={season.seasonNumber === openSeason}
+                isAdmin={isAdmin}
+              />
+            ))}
+          </SeriesActivityProvider>
         )}
       </section>
     </div>

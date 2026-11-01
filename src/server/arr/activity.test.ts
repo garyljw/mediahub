@@ -1,18 +1,24 @@
 import "server-only";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { components as RadarrComponents } from "./generated/radarr";
+import type { components as SonarrComponents } from "./generated/sonarr";
 import queueFixture from "./__fixtures__/radarr-queue-details.json";
+import sonarrQueueFixture from "./__fixtures__/sonarr-queue-details.json";
 import { ArrRequestError } from "./request";
 import {
   MAX_ACTIVITY_MESSAGES,
   MAX_ACTIVITY_MESSAGE_CHARS,
+  listEpisodeActivity,
   listMovieActivity,
-  toMovieActivity,
+  listSeriesActivity,
+  toActivity,
 } from "./activity";
 
 type QueueResource = RadarrComponents["schemas"]["QueueResource"];
+type SonarrQueueResource = SonarrComponents["schemas"]["QueueResource"];
 
 const queue = queueFixture as QueueResource[];
+const sonarrQueue = sonarrQueueFixture as SonarrQueueResource[];
 
 const NOW = Date.parse("2026-10-18T12:00:00Z");
 
@@ -33,7 +39,11 @@ vi.mock("@/server/env", () => ({
   env: () => fakeEnv,
 }));
 
-const ALLOWED_KEYS = ["count", "etaSeconds", "messages", "movieId", "progress", "severity", "state"].sort();
+const ALLOWED_KEYS = ["count", "etaSeconds", "id", "messages", "progress", "severity", "state"].sort();
+
+const byMovieId = (item: QueueResource) => item.movieId;
+const bySeriesId = (item: SonarrQueueResource) => item.seriesId;
+const byEpisodeId = (item: SonarrQueueResource) => item.episodeId;
 
 /** A queue item with working defaults; overrides change one rule at a time. */
 function item(overrides: Partial<QueueResource> = {}): QueueResource {
@@ -49,13 +59,28 @@ function item(overrides: Partial<QueueResource> = {}): QueueResource {
   };
 }
 
+/** A Sonarr queue item with working defaults. */
+function sonarrItem(overrides: Partial<SonarrQueueResource> = {}): SonarrQueueResource {
+  return {
+    id: 1,
+    seriesId: 1,
+    episodeId: 1,
+    status: "downloading",
+    trackedDownloadStatus: "ok",
+    trackedDownloadState: "downloading",
+    size: 1000,
+    sizeleft: 500,
+    ...overrides,
+  };
+}
+
 /** The activity for one item, with messages included. */
 function one(overrides: Partial<QueueResource>, includeMessages = true) {
-  const [entry] = toMovieActivity([item(overrides)], NOW, { includeMessages });
+  const [entry] = toActivity([item(overrides)], byMovieId, NOW, { includeMessages });
   return entry;
 }
 
-describe("toMovieActivity state", () => {
+describe("toActivity state", () => {
   it.each([
     ["downloadClientUnavailable", "importing", "clientUnavailable"],
     ["downloading", "importBlocked", "importBlocked"],
@@ -83,7 +108,7 @@ describe("toMovieActivity state", () => {
   });
 });
 
-describe("toMovieActivity severity", () => {
+describe("toActivity severity", () => {
   it("starts from the tracked download status", () => {
     expect(one({ trackedDownloadStatus: "ok" }).severity).toBe("ok");
     expect(one({ trackedDownloadStatus: "warning" }).severity).toBe("warning");
@@ -101,13 +126,13 @@ describe("toMovieActivity severity", () => {
     expect(one({ status: "warning", trackedDownloadStatus: "ok" }).severity).toBe("warning");
   });
 
-  it("never lowers the severity Radarr gave", () => {
+  it("never lowers the severity the app gave", () => {
     expect(one({ trackedDownloadStatus: "error", status: "queued", trackedDownloadState: "downloading" }).severity).toBe("error");
     expect(one({ trackedDownloadStatus: "warning", status: "paused", trackedDownloadState: "downloading" }).severity).toBe("warning");
   });
 });
 
-describe("toMovieActivity progress", () => {
+describe("toActivity progress", () => {
   it("is the whole percent downloaded, rounded down", () => {
     expect(one({ size: 1000, sizeleft: 250 }).progress).toBe(75);
     expect(one({ size: 3, sizeleft: 1 }).progress).toBe(66);
@@ -131,7 +156,7 @@ describe("toMovieActivity progress", () => {
   });
 });
 
-describe("toMovieActivity eta", () => {
+describe("toActivity eta", () => {
   it("is the rounded seconds until a future completion time", () => {
     expect(one({ estimatedCompletionTime: "2026-10-18T13:00:00Z" }).etaSeconds).toBe(3600);
     expect(one({ estimatedCompletionTime: new Date(NOW + 1400).toISOString() }).etaSeconds).toBe(1);
@@ -149,7 +174,7 @@ describe("toMovieActivity eta", () => {
   });
 });
 
-describe("toMovieActivity messages", () => {
+describe("toActivity messages", () => {
   const longText = "a".repeat(400);
 
   it("returns no messages unless includeMessages is set", () => {
@@ -204,14 +229,15 @@ describe("toMovieActivity messages", () => {
   });
 });
 
-describe("toMovieActivity several items for one movie", () => {
+describe("toActivity several items for one key", () => {
   it("keeps one entry with the count, and takes the message from the most severe item", () => {
-    const [entry] = toMovieActivity(
+    const [entry] = toActivity(
       [
         item({ id: 1, trackedDownloadStatus: "ok", errorMessage: null }),
         item({ id: 2, trackedDownloadStatus: "error", status: "failed", errorMessage: "Sample failure" }),
         item({ id: 3, trackedDownloadStatus: "warning", errorMessage: "Sample warning" }),
       ],
+      byMovieId,
       NOW,
       { includeMessages: true },
     );
@@ -222,8 +248,9 @@ describe("toMovieActivity several items for one movie", () => {
   });
 
   it("keeps the earlier item when two items tie on severity", () => {
-    const [entry] = toMovieActivity(
+    const [entry] = toActivity(
       [item({ id: 1, size: 1000, sizeleft: 100 }), item({ id: 2, size: 1000, sizeleft: 500 })],
+      byMovieId,
       NOW,
       { includeMessages: false },
     );
@@ -232,8 +259,9 @@ describe("toMovieActivity several items for one movie", () => {
   });
 
   it("lets a warning item beat an ok item even when the ok item comes first", () => {
-    const [entry] = toMovieActivity(
+    const [entry] = toActivity(
       [item({ id: 1, trackedDownloadStatus: "ok" }), item({ id: 2, status: "warning", trackedDownloadStatus: "ok" })],
+      byMovieId,
       NOW,
       { includeMessages: false },
     );
@@ -241,33 +269,99 @@ describe("toMovieActivity several items for one movie", () => {
   });
 
   it("returns entries in order of first appearance", () => {
-    const result = toMovieActivity(
+    const result = toActivity(
       [item({ id: 1, movieId: 5 }), item({ id: 2, movieId: 2 }), item({ id: 3, movieId: 5 }), item({ id: 4, movieId: 3 })],
+      byMovieId,
       NOW,
       { includeMessages: false },
     );
-    expect(result.map((entry) => entry.movieId)).toEqual([5, 2, 3]);
+    expect(result.map((entry) => entry.id)).toEqual([5, 2, 3]);
     expect(result.map((entry) => entry.count)).toEqual([2, 1, 1]);
   });
 });
 
-describe("toMovieActivity movie ids", () => {
-  it.each([null, undefined, 0, -1, 1.5, Number.NaN])("skips an item whose movieId is %j", (movieId) => {
-    expect(toMovieActivity([item({ movieId: movieId as number | null })], NOW, { includeMessages: false })).toEqual([]);
+describe("toActivity download count", () => {
+  it("counts one download once, however many items it has", () => {
+    const [entry] = toActivity(
+      [1, 2, 3].map((n) => sonarrItem({ id: n, seriesId: 7, episodeId: n, downloadId: "PACK-A" })),
+      bySeriesId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(entry).toMatchObject({ id: 7, count: 1 });
+  });
+
+  it("counts two different downloads for one series as 2", () => {
+    const [entry] = toActivity(
+      [
+        sonarrItem({ id: 1, seriesId: 7, episodeId: 1, downloadId: "PACK-A" }),
+        sonarrItem({ id: 2, seriesId: 7, episodeId: 2, downloadId: "PACK-A" }),
+        sonarrItem({ id: 3, seriesId: 7, episodeId: 3, downloadId: "SINGLE-B" }),
+      ],
+      bySeriesId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(entry).toMatchObject({ id: 7, count: 2 });
+  });
+
+  it("falls back to the title when the downloadId is missing or empty", () => {
+    const [entry] = toActivity(
+      [
+        sonarrItem({ id: 1, seriesId: 7, downloadId: null, title: "Same title" }),
+        sonarrItem({ id: 2, seriesId: 7, downloadId: "", title: "Same title" }),
+      ],
+      bySeriesId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(entry.count).toBe(1);
+  });
+
+  it("falls back to the item id when there is no downloadId or title", () => {
+    const [entry] = toActivity(
+      [
+        sonarrItem({ id: 1, seriesId: 7, downloadId: null, title: null }),
+        sonarrItem({ id: 2, seriesId: 7, downloadId: null, title: "" }),
+      ],
+      bySeriesId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(entry.count).toBe(2);
+  });
+
+  it("counts an item with no identifying field as its own download", () => {
+    const [entry] = toActivity(
+      [
+        sonarrItem({ id: undefined, seriesId: 7, downloadId: null, title: null }),
+        sonarrItem({ id: undefined, seriesId: 7, downloadId: null, title: null }),
+      ],
+      bySeriesId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(entry.count).toBe(2);
   });
 });
 
-describe("toMovieActivity on the fixture", () => {
-  const result = toMovieActivity(queue, NOW, { includeMessages: false });
-  const withMessages = toMovieActivity(queue, NOW, { includeMessages: true });
+describe("toActivity keys", () => {
+  it.each([null, undefined, 0, -1, 1.5, Number.NaN])("skips an item whose key is %j", (key) => {
+    expect(toActivity([item({ movieId: key as number | null })], byMovieId, NOW, { includeMessages: false })).toEqual([]);
+  });
+});
+
+describe("toActivity on the Radarr fixture", () => {
+  const result = toActivity(queue, byMovieId, NOW, { includeMessages: false });
+  const withMessages = toActivity(queue, byMovieId, NOW, { includeMessages: true });
 
   it("reduces the fixture to one entry per valid movie, in order", () => {
-    expect(result.map((entry) => entry.movieId)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(result.map((entry) => entry.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it("maps the downloading item", () => {
     expect(result[0]).toEqual({
-      movieId: 1,
+      id: 1,
       state: "downloading",
       severity: "ok",
       progress: 75,
@@ -299,15 +393,15 @@ describe("toMovieActivity on the fixture", () => {
   });
 
   it("uses the warning item for a movie with two items, and counts both", () => {
-    expect(result[5]).toMatchObject({ movieId: 6, state: "downloading", severity: "warning", count: 2 });
+    expect(result[5]).toMatchObject({ id: 6, state: "downloading", severity: "warning", count: 2 });
     expect(withMessages[5].messages).toEqual(["Sample indexer warning for the second release of movie six."]);
   });
 
   it("gives no progress or eta when sizeleft is larger than size", () => {
-    expect(result[6]).toMatchObject({ movieId: 7, progress: null, etaSeconds: 5400 });
+    expect(result[6]).toMatchObject({ id: 7, progress: null, etaSeconds: 5400 });
   });
 
-  it("only ever returns the MovieActivity fields", () => {
+  it("only ever returns the QueueActivity fields", () => {
     for (const entry of withMessages) {
       expect(Object.keys(entry).sort()).toEqual(ALLOWED_KEYS);
     }
@@ -320,6 +414,64 @@ describe("toMovieActivity on the fixture", () => {
     expect(serialized).not.toContain("volume1");
     expect(serialized).not.toContain("outputPath");
     expect(serialized).not.toContain("downloadId");
+  });
+});
+
+describe("toActivity on the Sonarr fixture", () => {
+  const seriesOnly = toActivity(sonarrQueue, bySeriesId, NOW, { includeMessages: true });
+
+  it("gives the season pack one series entry with count 1, not one per episode", () => {
+    const pack = seriesOnly.find((entry) => entry.id === 10);
+    expect(pack).toEqual({
+      id: 10,
+      state: "downloading",
+      severity: "ok",
+      progress: 66,
+      etaSeconds: 3600,
+      messages: [],
+      count: 1,
+    });
+  });
+
+  it("gives the season pack three episode entries with count 1 each", () => {
+    const episodes = toActivity(
+      sonarrQueue.filter((entry) => entry.seriesId === 10),
+      byEpisodeId,
+      NOW,
+      { includeMessages: false },
+    );
+    expect(episodes.map((entry) => [entry.id, entry.count, entry.progress])).toEqual([
+      [101, 1, 66],
+      [102, 1, 66],
+      [103, 1, 66],
+    ]);
+  });
+
+  it("skips the item with a null seriesId from the series list", () => {
+    expect(seriesOnly.map((entry) => entry.id)).toEqual([10, 20, 30]);
+  });
+
+  it("gives the import-blocked series a warning, with its messages when admins ask", () => {
+    const blocked = seriesOnly.find((entry) => entry.id === 20);
+    expect(blocked).toMatchObject({ state: "importBlocked", severity: "warning", progress: 100 });
+    expect(blocked?.messages).toEqual([
+      "Sample import error text for episode 201.",
+      "Manual import required: no matching episode was found for this download.",
+      "Sample second line for the same import problem.",
+    ]);
+  });
+
+  it("gives the pending item with no downloadId its own entry", () => {
+    expect(seriesOnly.find((entry) => entry.id === 30)).toMatchObject({ state: "delayed", count: 1 });
+  });
+
+  it("never carries paths, download ids, client or indexer names, or release titles", () => {
+    const serialized = JSON.stringify(seriesOnly);
+    for (const entry of sonarrQueue) {
+      for (const secret of [entry.downloadId, entry.outputPath, entry.indexer, entry.downloadClient, entry.title]) {
+        if (typeof secret === "string" && secret !== "") expect(serialized).not.toContain(secret);
+      }
+    }
   });
 });
 
@@ -367,13 +519,108 @@ describe("listMovieActivity", () => {
     expect(withoutMessages.every((entry) => entry.messages.length === 0)).toBe(true);
 
     const withMessages = await listMovieActivity({ includeMessages: true });
-    expect(withMessages.find((entry) => entry.movieId === 4)?.messages.length).toBeGreaterThan(0);
+    expect(withMessages.find((entry) => entry.id === 4)?.messages.length).toBeGreaterThan(0);
   });
 
   it("throws an invalid ArrRequestError when the reply is not a list", async () => {
     fetchMock.mockImplementation(async () => reply({ records: [] }));
 
     const error = await listMovieActivity({ includeMessages: false }).then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("invalid");
+  });
+});
+
+describe("Sonarr queue listings", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => reply(sonarrQueue));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function reply(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
+
+  function requestAt(call: number): URL & { headers: Headers } {
+    const req = fetchMock.mock.calls[call][0] as Request;
+    return Object.assign(new URL(req.url), { headers: req.headers });
+  }
+
+  it("lists the whole queue for the series table with the key in a header only", async () => {
+    await listSeriesActivity({ includeMessages: false });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = requestAt(0);
+    expect(url.host).toBe("sonarr.test:8989");
+    expect(url.pathname).toBe("/api/v3/queue/details");
+    expect([...url.searchParams.entries()]).toEqual([
+      ["includeSeries", "false"],
+      ["includeEpisode", "false"],
+    ]);
+    expect(url.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(url.toString()).not.toContain("apikey");
+    expect(url.toString()).not.toContain(FAKE_KEY);
+  });
+
+  it("asks for one series' queue, with the same flags, for the episode list", async () => {
+    await listEpisodeActivity(10, { includeMessages: false });
+
+    const url = requestAt(0);
+    expect(url.pathname).toBe("/api/v3/queue/details");
+    expect(url.searchParams.get("seriesId")).toBe("10");
+    expect(url.searchParams.get("includeSeries")).toBe("false");
+    expect(url.searchParams.get("includeEpisode")).toBe("false");
+  });
+
+  it("drops items from another series when the episode list is built", async () => {
+    const episodes = await listEpisodeActivity(10, { includeMessages: false });
+    expect(episodes.map((entry) => entry.id)).toEqual([101, 102, 103]);
+
+    const other = await listEpisodeActivity(20, { includeMessages: false });
+    expect(other.map((entry) => entry.id)).toEqual([201]);
+  });
+
+  it("gives requesters no messages on either list", async () => {
+    const series = await listSeriesActivity({ includeMessages: false });
+    const episodes = await listEpisodeActivity(20, { includeMessages: false });
+    expect(series.every((entry) => entry.messages.length === 0)).toBe(true);
+    expect(episodes.every((entry) => entry.messages.length === 0)).toBe(true);
+  });
+
+  it("gives admins the messages on the episode list", async () => {
+    const [episode] = await listEpisodeActivity(20, { includeMessages: true });
+    expect(episode.messages[0]).toBe("Sample import error text for episode 201.");
+  });
+
+  it("never returns the download id, path, indexer, client or release title on either list", async () => {
+    const series = JSON.stringify(await listSeriesActivity({ includeMessages: true }));
+    const episodes = JSON.stringify(await listEpisodeActivity(20, { includeMessages: true }));
+    for (const entry of sonarrQueue) {
+      for (const secret of [entry.downloadId, entry.outputPath, entry.indexer, entry.downloadClient, entry.title]) {
+        if (typeof secret === "string" && secret !== "") {
+          expect(series).not.toContain(secret);
+          expect(episodes).not.toContain(secret);
+        }
+      }
+    }
+  });
+
+  it("throws an invalid ArrRequestError when the reply is not a list", async () => {
+    fetchMock.mockImplementation(async () => reply({ records: [] }));
+
+    const error = await listSeriesActivity({ includeMessages: false }).then(
       () => {
         throw new Error("expected rejection");
       },

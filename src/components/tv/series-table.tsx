@@ -42,15 +42,17 @@ import { MAX_SEARCH_SERIES, searchStartedMessage } from "./series-search";
 import { STATUS_CLASS, STATUS_LABEL } from "./series-status";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
+import { ActivityCell, ActivityHead } from "@/components/library/activity-cell";
+import { useActivity } from "@/components/library/use-activity";
 
 /** A row's thumbnail and preview come from MediaHub's own poster route, and only when Sonarr has a poster. */
 function seriesPosterSrc(row: SeriesRow): string | null {
   return row.hasPoster ? `/api/tv/${row.id}/poster` : null;
 }
 
-// Eight data columns: title, year, status, episodes, monitored, profile, size and added. Every role also gets
-// the checkbox and actions columns, since requesters can select series and search for them.
-const DATA_COLUMN_COUNT = 8;
+// Nine data columns: title, year, status, activity, episodes, monitored, profile, size and added. Every role also
+// gets the checkbox and actions columns, since requesters can select series and search for them.
+const DATA_COLUMN_COUNT = 9;
 const STATUS_MS = 4000;
 
 /**
@@ -104,6 +106,8 @@ export function SeriesTable({
   const [refreshing, startRefresh] = useTransition();
   // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
   const posterPreview = usePosterPreview<number>();
+  // Live Sonarr queue state per series, polled from the browser. Empty until the first reply arrives.
+  const activity = useActivity("/api/tv/activity");
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -333,7 +337,7 @@ export function SeriesTable({
         className="max-h-[70vh] overflow-auto rounded-md border"
         onScroll={() => posterPreview.clear()}
       >
-        <Table className="table-fixed min-w-[56rem]">
+        <Table className="table-fixed min-w-[68rem]">
           <TableHeader>
             <TableRow>
               <TableHead className={cn(HEAD, "w-8")}>
@@ -352,6 +356,9 @@ export function SeriesTable({
               <SortHeader label="Title" sortKey="title" sort={sort} onSort={changeSort} />
               <SortHeader label="Year" sortKey="year" sort={sort} onSort={changeSort} width="w-16" />
               <TableHead className={cn(HEAD, "w-28")}>Status</TableHead>
+              <TableHead className={cn(HEAD, "w-48")}>
+                <ActivityHead failed={activity.failed} source="Sonarr" />
+              </TableHead>
               <SortHeader label="Episodes" sortKey="episodes" sort={sort} onSort={changeSort} width="w-28" />
               <TableHead className={cn(HEAD, "w-24 text-center")}>Monitored</TableHead>
               <TableHead className={cn(HEAD, "w-28")}>Quality profile</TableHead>
@@ -401,6 +408,7 @@ export function SeriesTable({
                     {STATUS_LABEL[row.status]}
                   </Badge>
                 </TableCell>
+                <ActivityCell name={row.title} activity={activity.byId.get(row.id)} />
                 <EpisodesCell row={row} />
                 <TableCell className={cn(CELL, "text-center")}>
                   {row.monitored ? (

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ActivityState, MovieActivity } from "@/server/arr/activity";
-import { ACTIVITY_POLL_MS, ACTIVITY_TIMEOUT_MS, activityByMovie, activityLabel, showsProgress } from "./movie-activity";
+import type { ActivityState, QueueActivity } from "@/server/arr/activity";
+import { ACTIVITY_POLL_MS, ACTIVITY_TIMEOUT_MS, activityById, activityLabel, showsProgress } from "./activity";
 
-function activity(overrides: Partial<MovieActivity> = {}): MovieActivity {
-  return { movieId: 1, state: "downloading", severity: "ok", progress: null, etaSeconds: null, messages: [], count: 1, ...overrides };
+function activity(overrides: Partial<QueueActivity> = {}): QueueActivity {
+  return { id: 1, state: "downloading", severity: "ok", progress: null, etaSeconds: null, messages: [], count: 1, ...overrides };
 }
 
 describe("poll constants", () => {
@@ -82,9 +82,9 @@ describe("showsProgress", () => {
   });
 });
 
-describe("activityByMovie", () => {
-  it("indexes the items by movie id", () => {
-    const map = activityByMovie([activity({ movieId: 3 }), activity({ movieId: 9, state: "paused" })]);
+describe("activityById", () => {
+  it("indexes the items by id", () => {
+    const map = activityById([activity({ id: 3 }), activity({ id: 9, state: "paused" })]);
     expect(map.size).toBe(2);
     expect(map.get(3)?.state).toBe("downloading");
     expect(map.get(9)?.state).toBe("paused");
@@ -92,6 +92,6 @@ describe("activityByMovie", () => {
   });
 
   it("returns an empty map for no items", () => {
-    expect(activityByMovie([]).size).toBe(0);
+    expect(activityById([]).size).toBe(0);
   });
 });

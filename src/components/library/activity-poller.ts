@@ -1,8 +1,8 @@
 // The polling loop behind the Activity column, kept out of React so it can be tested in plain node.
 // Must not import from src/server at runtime (type imports only).
-import type { MovieActivity } from "@/server/arr/activity";
+import type { QueueActivity } from "@/server/arr/activity";
 
-export type ActivityReport = { items: MovieActivity[]; failed: boolean };
+export type ActivityReport = { items: QueueActivity[]; failed: boolean };
 
 export type ActivityPollerOptions = {
   /** One request to the activity route. The signal aborts it on timeout or stop. */
@@ -31,7 +31,7 @@ export type ActivityPoller = {
 type InFlight = { controller: AbortController; timedOut: boolean; timeout: unknown };
 
 /** A light shape check. The server builds the items, so only the outer shape is checked here. */
-function isActivityBody(body: unknown): body is { items: MovieActivity[] } {
+function isActivityBody(body: unknown): body is { items: QueueActivity[] } {
   return typeof body === "object" && body !== null && Array.isArray((body as { items?: unknown }).items);
 }
 
@@ -43,7 +43,7 @@ export function createActivityPoller(options: ActivityPollerOptions): ActivityPo
   const { fetchActivity, isHidden, setTimer, clearTimer, onChange, pollMs, timeoutMs } = options;
 
   // The last good items, as both the array and its JSON, so an identical reply is cheap to recognise.
-  let items: MovieActivity[] = [];
+  let items: QueueActivity[] = [];
   let itemsJson = "[]";
   let failed = false;
   // What onChange last reported. Only a difference from this is worth a re-render.
@@ -61,7 +61,7 @@ export function createActivityPoller(options: ActivityPollerOptions): ActivityPo
     onChange({ items, failed });
   }
 
-  function succeed(next: MovieActivity[]) {
+  function succeed(next: QueueActivity[]) {
     const json = JSON.stringify(next);
     if (json !== itemsJson) {
       items = next;
