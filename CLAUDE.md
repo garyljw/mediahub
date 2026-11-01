@@ -15,12 +15,13 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
    - validates input with Zod,
    - calls a typed client function,
    - returns only the fields the UI needs.
-4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB, add, trigger a Radarr release search for library movies, view queue/calendar/history; no delete, edit or settings).
+4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB/TVDB, add, trigger a release search for library movies and for library series, seasons or episodes, view queue/calendar/history; no delete, edit, monitoring changes or settings).
 5. **Never commit real secrets.** `.env.example` holds placeholders only, and real values go in `.env.local`. A gitleaks pre-commit hook enforces this; don't bypass it with `--no-verify`.
 6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`.** Send the key as the `X-Api-Key` header, not as a query parameter.
 
 ## Conventions
 - Use the generated Radarr/Sonarr types in `src/server/arr/generated/`. Don't hand-write upstream response types or guess endpoints.
+- Don't state how Radarr/Sonarr behave (what a search covers, what a flag changes) in UI text or comments unless it has been checked against their source or a live instance. If it hasn't, leave the claim out.
 - Merge logic goes in `src/server/merge/` as pure functions with Vitest tests that use JSON fixtures in `src/server/merge/__fixtures__/`.
 - Prefer server components. Add `"use client"` only for interactivity.
 - Text that a client component renders must come out identical on the server and in the browser. Don't format it with `Intl`, `toLocaleString` or `toLocaleDateString`: Node and the browser ship different ICU data (Node printed "Sept" where Safari printed "Sep"), which causes hydration errors. Use the helpers in `src/components/library/format.ts`, with dates in UTC.
