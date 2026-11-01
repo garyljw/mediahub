@@ -145,6 +145,34 @@ export async function deleteSeries(del: SeriesDelete): Promise<void> {
   });
 }
 
+/**
+ * Asks Sonarr to search for releases for one series (its SeriesSearch command). Sonarr's command takes one
+ * series, so a bulk search is one call per series. Sonarr queues the command and answers at once; the
+ * searching and any grabbing happen afterwards. Only the command name and the id are sent.
+ */
+export async function searchSeriesReleases(seriesId: number): Promise<void> {
+  const client = sonarrClient();
+  // CommandResource doesn't declare the command's own fields (seriesId), so the body is built as a variable.
+  const body = { name: "SeriesSearch", seriesId };
+  await arrRequest("Sonarr series search command", (signal) => client.POST("/api/v3/command", { body, signal }));
+}
+
+/**
+ * Asks Sonarr to refresh metadata and rescan disk for the given series (its RefreshSeries command). Sonarr
+ * re-reads each series' folder on disk. It queues the command and answers at once. Only the command name and
+ * the ids are sent.
+ *
+ * An empty list must never be sent: Sonarr reads an empty seriesIds as "refresh the whole library". So this
+ * throws before any request is made.
+ */
+export async function refreshSeries(seriesIds: number[]): Promise<void> {
+  if (seriesIds.length === 0) throw new Error("refreshSeries needs at least one series id");
+  const client = sonarrClient();
+  // CommandResource doesn't declare the command's own fields (seriesIds), so the body is built as a variable.
+  const body = { name: "RefreshSeries", seriesIds };
+  await arrRequest("Sonarr series refresh command", (signal) => client.POST("/api/v3/command", { body, signal }));
+}
+
 /** The one Sonarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const POSTER_FILENAME = "poster-250.jpg";
 

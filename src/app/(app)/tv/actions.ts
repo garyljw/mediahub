@@ -7,6 +7,8 @@ import {
   deleteSeries,
   editSeries,
   listSeriesQualityProfiles,
+  refreshSeries,
+  searchSeriesReleases,
   type SeriesEdit,
 } from "@/server/arr/series";
 import {
@@ -20,6 +22,8 @@ import { ArrRequestError } from "@/server/arr/request";
 import { MAX_EDIT_SERIES } from "@/components/tv/series-edit";
 import { SERIES_MONITOR_OPTIONS, SERIES_TYPE_OPTIONS } from "@/components/tv/series-add";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
+import { MAX_SEARCH_SERIES } from "@/components/tv/series-search";
+import { MAX_REFRESH_SERIES } from "@/components/tv/series-refresh";
 
 export type EditResult = { ok: true } | { ok: false; error: string };
 
@@ -235,4 +239,108 @@ export async function addLibrarySeries(input: unknown): Promise<AddResult> {
     }
     return { ok: false, error: "Sonarr didn't accept the series. Try again." };
   }
+}
+
+/** startedIds is set when a bulk search stops partway: the series Sonarr did accept, so the table can deselect them. */
+export type SearchNowResult = { ok: true; searched: number } | { ok: false; error: string; startedIds?: number[] };
+
+// strictObject rejects unknown keys. Only ids cross from the browser.
+const SeriesSearchNowInput = z.strictObject({
+  seriesIds: z.array(z.number().int().positive()).min(1).max(MAX_SEARCH_SERIES),
+});
+
+/**
+ * Asks Sonarr to search for releases for library series (admin and requester). Sonarr's SeriesSearch command
+ * takes one series, so each series is a separate call, made one after another. The role check runs first,
+ * inside try, and the catch always returns or throws. Nothing on the page changes, so there is no refresh().
+ */
+export async function searchLibrarySeries(input: unknown): Promise<SearchNowResult> {
+  try {
+    await requireRole("admin", "requester");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to search for series." };
+    throw error;
+  }
+
+  const parsed = SeriesSearchNowInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid search." };
+
+  // A Set drops duplicate ids, so Sonarr searches each series once.
+  const seriesIds = [...new Set(parsed.data.seriesIds)];
+  // The searches Sonarr accepted, so a failure partway through can say how far it got.
+  const startedIds: number[] = [];
+  try {
+    for (const seriesId of seriesIds) {
+      await searchSeriesReleases(seriesId);
+      startedIds.push(seriesId);
+    }
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Series search now: ${error.message}`);
+    // Earlier searches were accepted, so stop here rather than send more. The table deselects the started ones.
+    if (startedIds.length > 0) {
+      const progress = `Sonarr started searches for ${startedIds.length} of ${seriesIds.length} series`;
+      // After a timeout Sonarr may have queued that search too, so don't call it failed.
+      const next =
+        error.kind === "timeout" ? "then took too long on the next one, which may also have started" : "then the next one failed";
+      return {
+        ok: false,
+        error: `${progress}, ${next}. Those are now deselected; check Sonarr before searching the rest.`,
+        startedIds,
+      };
+    }
+    // After a timeout Sonarr may have queued the search anyway, so don't tell the user to just retry.
+    if (error.kind === "timeout") {
+      return {
+        ok: false,
+        error: "Sonarr took too long to answer. The search may still have started, so check Sonarr before trying again.",
+      };
+    }
+    return { ok: false, error: "Sonarr didn't start the search. Try again." };
+  }
+  return { ok: true, searched: seriesIds.length };
+}
+
+export type RefreshResult = { ok: true; refreshed: number } | { ok: false; error: string };
+
+// strictObject rejects unknown keys. Only ids cross from the browser.
+const SeriesRefreshInput = z.strictObject({
+  seriesIds: z.array(z.number().int().positive()).min(1).max(MAX_REFRESH_SERIES),
+});
+
+/**
+ * Asks Sonarr to refresh metadata and rescan disk for library series (admin only). Same shape as the other
+ * actions: the role check runs first inside try, and the catch always returns or throws. Sonarr queues the
+ * refresh and answers at once, so the data on the page is the same afterwards and there is no refresh().
+ */
+export async function refreshLibrarySeries(input: unknown): Promise<RefreshResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to refresh series." };
+    throw error;
+  }
+
+  const parsed = SeriesRefreshInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid refresh." };
+
+  // A Set drops duplicate ids, so Sonarr refreshes each series once.
+  const seriesIds = [...new Set(parsed.data.seriesIds)];
+  try {
+    await refreshSeries(seriesIds);
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Series refresh: ${error.message}`);
+    // After a timeout Sonarr may have queued the refresh anyway, so don't tell the user to just retry.
+    if (error.kind === "timeout") {
+      return {
+        ok: false,
+        error: "Sonarr took too long to answer. The refresh may still have started, so check Sonarr before trying again.",
+      };
+    }
+    return { ok: false, error: "Sonarr didn't start the refresh. Try again." };
+  }
+  return { ok: true, refreshed: seriesIds.length };
 }
