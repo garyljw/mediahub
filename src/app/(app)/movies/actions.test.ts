@@ -533,7 +533,7 @@ describe("addLibraryMovie resolution and results", () => {
       rootFolderPath: "/invented/other/",
       monitored: false,
       searchForMovie: false,
-    });
+    }, expect.any(Function));
   });
 
   it("returns the title and year from addMovie, then refreshes", async () => {
@@ -572,7 +572,10 @@ describe("addLibraryMovie resolution and results", () => {
   });
 
   it("says the movie may still have been added when the add times out, and logs the safe message", async () => {
-    mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie add request failed: timed out", "timeout"));
+    mocks.addMovie.mockImplementation(async (_add: unknown, onSend: () => void) => {
+      onSend();
+      throw new ArrRequestError("Radarr movie add request failed: timed out", "timeout");
+    });
     const result = await addLibraryMovie(validAdd);
     expect(result).toEqual({
       ok: false,
@@ -580,6 +583,12 @@ describe("addLibraryMovie resolution and results", () => {
     });
     expect(console.error).toHaveBeenCalledWith("Movie add: Radarr movie add request failed: timed out");
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not claim the movie may have been added when the lookup before the add timed out", async () => {
+    mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie lookup request failed: timed out", "timeout"));
+    const result = await addLibraryMovie(validAdd);
+    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
   });
 
   it("does not claim the movie may have been added when only the root folder read timed out", async () => {

@@ -1,0 +1,64 @@
+[
+  {
+    "id": 11,
+    "title": "Harbour Lights",
+    "sortTitle": "harbour lights",
+    "status": "continuing",
+    "overview": "Invented overview for a series already in the library.",
+    "network": "Northwind TV",
+    "year": 2018,
+    "tvdbId": 200001,
+    "titleSlug": "harbour-lights",
+    "remotePoster": "https://artworks.thetvdb.com/banners/v4/series/200001/posters/5f2e8d5ae9d1c.jpg",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-harbour.jpg", "remoteUrl": "https://artworks.thetvdb.com/banners/v4/series/200001/posters/5f2e8d5ae9d1c.jpg" }
+    ],
+    "seasons": [],
+    "monitored": true
+  },
+  {
+    "id": 0,
+    "title": "Copper Meridian",
+    "sortTitle": "copper meridian",
+    "status": "ended",
+    "overview": "Invented overview with no id, so it is not in the library.",
+    "network": "",
+    "year": 1998,
+    "tvdbId": 200002,
+    "titleSlug": "copper-meridian",
+    "images": [
+      { "coverType": "poster", "url": "https://artworks.thetvdb.com/banners/posters/200002-10.jpg", "remoteUrl": "https://artworks.thetvdb.com/banners/posters/200002-10.jpg" }
+    ]
+  },
+  {
+    "tvdbId": 200003,
+    "overview": "Invented entry with no title, which must be skipped.",
+    "year": 2005
+  },
+  {
+    "id": 0,
+    "title": "Glass Orchard",
+    "sortTitle": "glass orchard",
+    "status": "upcoming",
+    "overview": "",
+    "year": 0,
+    "tvdbId": 200004,
+    "remotePoster": "https://evil.example/banners/v4/series/200004/posters/abc.jpg",
+    "images": [
+      { "coverType": "poster", "url": "http://artworks.thetvdb.com/banners/v4/series/200004/posters/abc.jpg", "remoteUrl": "http://artworks.thetvdb.com/banners/v4/series/200004/posters/abc.jpg" }
+    ]
+  },
+  {
+    "id": 0,
+    "title": "Signal Dust",
+    "sortTitle": "signal dust",
+    "status": "ended",
+    "overview": "Invented entry whose poster URLs are hostile: a query string, a traversal segment and a port.",
+    "year": 2015,
+    "tvdbId": 200005,
+    "remotePoster": "https://artworks.thetvdb.com/banners/../../x.jpg?token=abc",
+    "images": [
+      { "coverType": "poster", "url": "https://artworks.thetvdb.com:8443/banners/v4/series/200005/posters/abc.jpg", "remoteUrl": "https://artworks.thetvdb.com:8443/banners/v4/series/200005/posters/abc.jpg" }
+    ]
+  }
+]

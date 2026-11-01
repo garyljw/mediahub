@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ArrRequestError } from "@/server/arr/request";
+import { SeriesAddError } from "@/server/arr/series-add";
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
@@ -7,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   deleteSeries: vi.fn(),
   listSeriesQualityProfiles: vi.fn(),
   refresh: vi.fn(),
+  lookupSeries: vi.fn(),
+  addSeries: vi.fn(),
+  listSeriesRootFolders: vi.fn(),
 }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
@@ -26,10 +30,25 @@ vi.mock("@/server/arr/series", () => ({
   listSeriesQualityProfiles: mocks.listSeriesQualityProfiles,
 }));
 
+vi.mock("@/server/arr/series-add", () => {
+  class SeriesAddError extends Error {
+    constructor(readonly reason: "not-found" | "exists") {
+      super(reason);
+      this.name = "SeriesAddError";
+    }
+  }
+  return {
+    SeriesAddError,
+    lookupSeries: mocks.lookupSeries,
+    addSeries: mocks.addSeries,
+    listSeriesRootFolders: mocks.listSeriesRootFolders,
+  };
+});
+
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { removeSeries, updateSeries } from "./actions";
+import { addLibrarySeries, removeSeries, searchSeries, updateSeries } from "./actions";
 import { MAX_EDIT_SERIES } from "@/components/tv/series-edit";
 
 const DENIED = "You don't have permission to edit series.";
@@ -324,5 +343,202 @@ describe("removeSeries deletes", () => {
     await expect(removeSeries({ seriesIds: [1], deleteFiles: false, addImportListExclusion: false, confirmCount: 1 })).rejects.toThrow(
       "config broken",
     );
+  });
+});
+
+const SEARCH_DENIED = "You don't have permission to add series.";
+
+describe("searchSeries", () => {
+  beforeEach(() => {
+    mocks.lookupSeries.mockResolvedValue([{ tvdbId: 200001, title: "Harbour Lights", year: 2018, network: null, overview: "", inLibrary: false, posterPath: null }]);
+  });
+
+  it("allows both admin and requester", async () => {
+    mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "requester" } });
+    await searchSeries({ term: "Harbour" });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+    expect(mocks.lookupSeries).toHaveBeenCalledWith("Harbour");
+  });
+
+  it("rejects a signed-out caller and never calls Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    expect(await searchSeries({ term: "Harbour" })).toEqual({ ok: false, error: SEARCH_DENIED });
+    expect(mocks.lookupSeries).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(searchSeries({ term: "Harbour" })).rejects.toThrow("database down");
+  });
+
+  it("rejects an empty or whitespace term, an unknown key and a non-string term without searching", async () => {
+    for (const input of [{ term: "" }, { term: "   " }, { term: "x", tvdbId: 1 }, { term: 5 }, null]) {
+      expect(await searchSeries(input)).toEqual({ ok: false, error: "Enter a series title to search for." });
+    }
+    expect(mocks.lookupSeries).not.toHaveBeenCalled();
+  });
+
+  it("trims the term and accepts exactly 100 characters", async () => {
+    await searchSeries({ term: `  ${"x".repeat(100)}  ` });
+    expect(mocks.lookupSeries).toHaveBeenCalledWith("x".repeat(100));
+    expect(await searchSeries({ term: "x".repeat(101) })).toEqual({ ok: false, error: "Enter a series title to search for." });
+  });
+
+  it("returns the results on success", async () => {
+    const result = await searchSeries({ term: "Harbour" });
+    expect(result).toEqual({ ok: true, results: expect.any(Array) });
+  });
+
+  it("gives a friendly error and logs only the safe message when Sonarr fails", async () => {
+    mocks.lookupSeries.mockRejectedValue(new ArrRequestError("Sonarr series lookup request failed: HTTP 500", "http", 500));
+    expect(await searchSeries({ term: "Harbour" })).toEqual({ ok: false, error: "Sonarr couldn't complete the search. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series search: Sonarr series lookup request failed: HTTP 500");
+  });
+
+  it("rethrows errors that are not Sonarr request failures", async () => {
+    mocks.lookupSeries.mockRejectedValue(new Error("unexpected"));
+    await expect(searchSeries({ term: "Harbour" })).rejects.toThrow("unexpected");
+  });
+});
+
+const ADD_DENIED = "You don't have permission to add series.";
+
+const VALID_ADD = {
+  tvdbId: 200001,
+  qualityProfileId: 1,
+  rootFolderId: 7,
+  monitor: "all",
+  seriesType: "standard",
+  searchForMissingEpisodes: true,
+};
+
+describe("addLibrarySeries", () => {
+  beforeEach(() => {
+    mocks.listSeriesRootFolders.mockResolvedValue([{ id: 7, path: "/invented/tv/", freeSpace: null }]);
+    mocks.addSeries.mockResolvedValue({ title: "Harbour Lights", year: 2018 });
+  });
+
+  describe("authorization", () => {
+    it("allows both admin and requester", async () => {
+      mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "requester" } });
+      await expect(addLibrarySeries(VALID_ADD)).resolves.toEqual({ ok: true, title: "Harbour Lights", year: 2018 });
+      expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+    });
+
+    it("rejects a signed-out caller (401) without calling Sonarr", async () => {
+      mocks.requireRole.mockRejectedValue(new AuthzError(401));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: ADD_DENIED });
+      expect(mocks.addSeries).not.toHaveBeenCalled();
+      expect(mocks.listSeriesRootFolders).not.toHaveBeenCalled();
+    });
+
+    it("rethrows errors that are not authorization failures", async () => {
+      mocks.requireRole.mockRejectedValue(new Error("database down"));
+      await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("database down");
+    });
+  });
+
+  describe("input validation", () => {
+    const invalid: [string, unknown][] = [
+      ["an unknown key", { ...VALID_ADD, title: "Harbour Lights" }],
+      ["a path", { ...VALID_ADD, rootFolderPath: "/invented/tv/" }],
+      ["a bad monitor", { ...VALID_ADD, monitor: "lastSeason" }],
+      ["a monitor that is not offered", { ...VALID_ADD, monitor: "pilot" }],
+      ["a bad series type", { ...VALID_ADD, seriesType: "special" }],
+      ["a missing monitor", { ...VALID_ADD, monitor: undefined }],
+      ["a missing series type", { ...VALID_ADD, seriesType: undefined }],
+      ["a missing search flag", { ...VALID_ADD, searchForMissingEpisodes: undefined }],
+      ["a zero tvdbId", { ...VALID_ADD, tvdbId: 0 }],
+      ["a string root folder id", { ...VALID_ADD, rootFolderId: "7" }],
+      ["a non-boolean search flag", { ...VALID_ADD, searchForMissingEpisodes: "yes" }],
+      ["null", null],
+    ];
+
+    it.each(invalid)("rejects %s without calling Sonarr", async (_name, input) => {
+      expect(await addLibrarySeries(input)).toEqual({ ok: false, error: "Invalid add." });
+      expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+      expect(mocks.addSeries).not.toHaveBeenCalled();
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("resolution and results", () => {
+    it("refuses an unknown quality profile without adding", async () => {
+      expect(await addLibrarySeries({ ...VALID_ADD, qualityProfileId: 99 })).toEqual({ ok: false, error: "That quality profile no longer exists." });
+      expect(mocks.addSeries).not.toHaveBeenCalled();
+    });
+
+    it("refuses an unknown root folder id without adding", async () => {
+      expect(await addLibrarySeries({ ...VALID_ADD, rootFolderId: 99 })).toEqual({ ok: false, error: "That root folder no longer exists." });
+      expect(mocks.addSeries).not.toHaveBeenCalled();
+    });
+
+    it("passes the resolved root folder path, not the id, to addSeries", async () => {
+      await addLibrarySeries(VALID_ADD);
+      expect(mocks.addSeries).toHaveBeenCalledWith({
+        tvdbId: 200001,
+        qualityProfileId: 1,
+        rootFolderPath: "/invented/tv/",
+        monitor: "all",
+        seriesType: "standard",
+        searchForMissingEpisodes: true,
+      }, expect.any(Function));
+    });
+
+    it("refreshes after a successful add", async () => {
+      await addLibrarySeries(VALID_ADD);
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("maps an exists error to the library message and does not refresh", async () => {
+      mocks.addSeries.mockRejectedValue(new SeriesAddError("exists"));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "That series is already in your library." });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("maps a not-found error to the Sonarr message and does not refresh", async () => {
+      mocks.addSeries.mockRejectedValue(new SeriesAddError("not-found"));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr couldn't find that series." });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("gives the friendly error and logs the safe message when Sonarr rejects the add", async () => {
+      mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series add request failed: HTTP 400", "http", 400));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+      expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: HTTP 400");
+    });
+
+    it("gives the friendly error when the root folder list cannot be fetched", async () => {
+      mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: HTTP 500", "http", 500));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+      expect(mocks.addSeries).not.toHaveBeenCalled();
+    });
+
+    it("says the series may still have been added when the add times out, and logs the safe message", async () => {
+      mocks.addSeries.mockImplementation(async (_add: unknown, onSend: () => void) => {
+        onSend();
+        throw new ArrRequestError("Sonarr series add request failed: timed out", "timeout");
+      });
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({
+        ok: false,
+        error: "Sonarr took too long to answer. The series may still have been added, so reload the page to check.",
+      });
+      expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: timed out");
+    });
+
+    it("does not claim the series may have been added when the lookup before the add timed out", async () => {
+      mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series lookup request failed: timed out", "timeout"));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+    });
+
+    it("does not claim the series may have been added when only the folder read timed out", async () => {
+      mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: timed out", "timeout"));
+      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+    });
+
+    it("rethrows errors that are not Sonarr request failures", async () => {
+      mocks.addSeries.mockRejectedValue(new Error("unexpected"));
+      await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("unexpected");
+    });
   });
 });

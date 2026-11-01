@@ -20,7 +20,7 @@ import {
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
 import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases, type ReleaseRow, type ReleaseTotals } from "@/server/arr/releases";
-import { MAX_TERM_LENGTH } from "@/components/movies/movie-add";
+import { MAX_TERM_LENGTH } from "@/components/library/add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
 import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
@@ -194,7 +194,8 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
   if (!parsed.success) return { ok: false, error: "Invalid add." };
   const { tmdbId, qualityProfileId, rootFolderId, monitored, searchForMovie } = parsed.data;
 
-  // Set just before the add is sent. Only a timeout after that point can mean Radarr added the movie.
+  // Set by addMovie's onSend, just before the add request goes out. Only a timeout after that point can mean
+  // Radarr added the movie; a timeout in the lookup or the library check before it cannot.
   let addSent = false;
   try {
     const [profiles, folders] = await Promise.all([listQualityProfiles(), listRootFolders()]);
@@ -204,8 +205,9 @@ export async function addLibraryMovie(input: unknown): Promise<AddResult> {
     const folder = folders.find((option) => option.id === rootFolderId);
     if (!folder) return { ok: false, error: "That root folder no longer exists." };
 
-    addSent = true;
-    const added = await addMovie({ tmdbId, qualityProfileId, rootFolderPath: folder.path, monitored, searchForMovie });
+    const added = await addMovie({ tmdbId, qualityProfileId, rootFolderPath: folder.path, monitored, searchForMovie }, () => {
+      addSent = true;
+    });
     // The Movies page reads Radarr on every request, so refresh() is enough for the new row to appear.
     refresh();
     return { ok: true, title: added.title, year: added.year };
