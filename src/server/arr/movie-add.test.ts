@@ -4,7 +4,6 @@ import type { components as RadarrComponents } from "./generated/radarr";
 import lookupFixture from "./__fixtures__/radarr-movie-lookup.json";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
-type RootFolderResource = RadarrComponents["schemas"]["RootFolderResource"];
 
 // movie-add.ts imports the client, which imports env. Only the pure functions are tested here.
 vi.mock("@/server/env", () => ({ env: () => ({}) }));
@@ -18,7 +17,6 @@ import {
   movieAddBody,
   tmdbPosterFile,
   toLookupResults,
-  toRootFolderOptions,
   type MovieAdd,
 } from "./movie-add";
 
@@ -108,21 +106,6 @@ describe("toLookupResults", () => {
       ...Array.from({ length: 3 }, (_, i) => ({ tmdbId: i + 1, title: `Film ${i + 1}` }) as MovieResource),
     ];
     expect(toLookupResults(mixed, new Set())).toHaveLength(3);
-  });
-});
-
-describe("toRootFolderOptions", () => {
-  it("skips entries without a numeric id or a path, sorts by path, and keeps free space", () => {
-    const folders: RootFolderResource[] = [
-      { id: 2, path: "/invented/movies-b", freeSpace: 500 },
-      { id: 3, path: "", freeSpace: 1 },
-      { path: "/invented/no-id", freeSpace: 2 },
-      { id: 1, path: "/invented/movies-a" },
-    ];
-    expect(toRootFolderOptions(folders)).toEqual([
-      { id: 1, path: "/invented/movies-a", freeSpace: null },
-      { id: 2, path: "/invented/movies-b", freeSpace: 500 },
-    ]);
   });
 });
 

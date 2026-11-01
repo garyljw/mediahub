@@ -1,11 +1,11 @@
 import "server-only";
 import { radarrClient } from "./client";
-import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./poster";
+import { fetchFixedJpeg } from "./poster";
 import { ArrRequestError, arrRequest, getList } from "./request";
+import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
-type RootFolderResource = RadarrComponents["schemas"]["RootFolderResource"];
 
 /** One TMDB search hit, reduced to what the add dialog shows. Nothing else from Radarr's resource reaches the browser. */
 export type LookupResult = {
@@ -18,9 +18,6 @@ export type LookupResult = {
   /** The TMDB poster file name (e.g. "abc123.jpg"), or null when there is no usable poster. Validated by tmdbPosterFile. */
   posterFile: string | null;
 };
-
-/** A root folder the add dialog can choose. The browser sends its id; the server resolves the path. */
-export type RootFolderOption = { id: number; path: string; freeSpace: number | null };
 
 /** What the server needs to add one movie. The browser never sends a path or a title. */
 export type MovieAdd = {
@@ -127,21 +124,6 @@ export async function lookupMovies(term: string): Promise<LookupResult[]> {
   return toLookupResults(hits, libraryTmdbIds);
 }
 
-/** Pure: root folders to dialog options. Skips entries without a numeric id or a path. Sorted by path. */
-export function toRootFolderOptions(folders: RootFolderResource[]): RootFolderOption[] {
-  const options: RootFolderOption[] = [];
-  for (const folder of folders) {
-    if (typeof folder.id !== "number" || !folder.path) continue;
-    options.push({
-      id: folder.id,
-      path: folder.path,
-      freeSpace: typeof folder.freeSpace === "number" ? folder.freeSpace : null,
-    });
-  }
-  options.sort((a, b) => a.path.localeCompare(b.path, "en", { numeric: true }));
-  return options;
-}
-
 /** Root folders Radarr can add movies to, as dropdown options. */
 export async function listRootFolders(): Promise<RootFolderOption[]> {
   const client = radarrClient();
@@ -173,9 +155,10 @@ export function movieAddBody(add: MovieAdd, title: string, year: number | null):
 
 /**
  * Adds one movie to Radarr. Looks the id up again so the title and year come from Radarr, not from
- * the browser. Refuses a movie that is already in the library.
+ * the browser. Refuses a movie that is already in the library. `onSend` runs just before the add request
+ * goes out, so the caller knows that a later timeout may mean Radarr added the movie.
  */
-export async function addMovie(add: MovieAdd): Promise<{ title: string; year: number | null }> {
+export async function addMovie(add: MovieAdd, onSend: () => void = () => {}): Promise<{ title: string; year: number | null }> {
   const client = radarrClient();
 
   let found: MovieResource | undefined;
@@ -198,6 +181,7 @@ export async function addMovie(add: MovieAdd): Promise<{ title: string; year: nu
   if (existing.length > 0) throw new MovieAddError("exists");
 
   const body = movieAddBody(add, title, year);
+  onSend();
   await arrRequest("Radarr movie add", (signal) => client.POST("/api/v3/movie", { body, signal }));
 
   return { title, year };
@@ -209,20 +193,5 @@ export async function addMovie(add: MovieAdd): Promise<{ title: string; year: nu
  */
 export async function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {
   if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError("TMDB poster request failed: invalid name", "invalid");
-  const data = await arrRequest("TMDB poster", async (signal) => {
-    const response = await fetch(`${TMDB_POSTER_BASE}${file}`, { redirect: "error", signal });
-    // Only read the body of a good response. For a failed one, drop the body so the socket is released.
-    // A cancel error is ignored: the status is what gets reported.
-    if (!response.ok) {
-      try {
-        await response.body?.cancel();
-      } catch {
-        // Ignored on purpose, see above.
-      }
-      return { data: undefined, response };
-    }
-    return { data: await readCapped(response.body, MAX_POSTER_BYTES), response };
-  });
-  if (!data || !isJpeg(data)) throw new ArrRequestError("TMDB poster response was not a usable image", "invalid");
-  return data;
+  return fetchFixedJpeg("TMDB poster", `${TMDB_POSTER_BASE}${file}`);
 }

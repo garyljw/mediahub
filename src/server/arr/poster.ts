@@ -58,6 +58,27 @@ export async function fetchPosterBytes(
   return data;
 }
 
+/**
+ * Fetches one fixed image URL as JPEG bytes. The fetch refuses redirects and sends no headers, so the caller
+ * must pass a URL it built itself. Used for TMDB and TVDB posters. `label` names the request in errors.
+ */
+export async function fetchFixedJpeg(label: string, url: string): Promise<Uint8Array<ArrayBuffer>> {
+  return fetchPosterBytes(label, async (signal) => {
+    const response = await fetch(url, { redirect: "error", signal });
+    // Only read the body of a good response. For a failed one, drop the body so the socket is released.
+    // A cancel error is ignored: the status is what gets reported.
+    if (!response.ok) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignored on purpose, see above.
+      }
+      return { data: undefined, response };
+    }
+    return { data: response.body, response };
+  });
+}
+
 /** Poster ids are positive 32-bit integers written without leading zeros. */
 const posterId = z
   .string()

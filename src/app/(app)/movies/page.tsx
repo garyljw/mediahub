@@ -1,6 +1,7 @@
 import { requirePageUser } from "@/server/authz";
 import { listMovies } from "@/server/arr/movies";
-import { listRootFolders, type RootFolderOption } from "@/server/arr/movie-add";
+import { listRootFolders } from "@/server/arr/movie-add";
+import type { RootFolderOption } from "@/server/arr/root-folders";
 import { ArrRequestError } from "@/server/arr/request";
 import { MoviesTable } from "@/components/movies/movies-table";
 import { MovieAddDialog } from "@/components/movies/movie-add-dialog";

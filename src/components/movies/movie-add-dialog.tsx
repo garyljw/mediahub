@@ -12,22 +12,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
+import type { LookupResult } from "@/server/arr/movie-add";
+import type { RootFolderOption } from "@/server/arr/root-folders";
 import type { QualityProfileOption } from "@/server/arr/profiles";
 import { SELECT_CLASS } from "@/components/library/table-parts";
-import { Poster } from "@/components/poster/poster";
-import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import {
   GENERIC_ERROR,
+  MAX_TERM_LENGTH,
   addedMessage,
-  buildAddRequest,
-  defaultOptions,
   folderLabel,
-  isInLibrary,
   normalizeTerm,
   resultLabel,
-  type AddOptions,
-} from "./movie-add";
+} from "@/components/library/add";
+import { Poster } from "@/components/poster/poster";
+import { usePosterPreview } from "@/components/poster/use-poster-preview";
+import { buildAddRequest, defaultOptions, isInLibrary, type AddOptions } from "./movie-add";
 
 /** A search result's thumbnail, from MediaHub's lookup route. Null when TMDB had no usable poster. */
 function lookupPosterSrc(result: LookupResult): string | null {
@@ -155,7 +154,7 @@ export function MovieAddDialog({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Movie title…"
-              maxLength={100}
+              maxLength={MAX_TERM_LENGTH}
               disabled={searching}
               className="h-9"
             />
