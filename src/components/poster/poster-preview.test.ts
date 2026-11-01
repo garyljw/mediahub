@@ -27,4 +27,19 @@ describe("previewPosition", () => {
   it("pins to the top margin when the viewport is shorter than the preview", () => {
     expect(previewPosition(thumb, { width: 1000, height: 200 }).top).toBe(8);
   });
+
+  it("opens on the left when asked and there is room", () => {
+    const wide = { top: 300, left: 400, right: 700, height: 36 };
+    expect(previewPosition(wide, viewport, "left").left).toBe(400 - 8 - PREVIEW_WIDTH);
+  });
+
+  it("falls back to the right of the rect when the left has no room", () => {
+    const wide = { top: 300, left: 100, right: 400, height: 36 };
+    expect(previewPosition(wide, viewport, "left").left).toBe(408);
+  });
+
+  it("stays inside the viewport when neither side has room", () => {
+    const wide = { top: 300, left: 100, right: 900, height: 36 };
+    expect(previewPosition(wide, viewport, "left").left).toBe(1000 - 8 - PREVIEW_WIDTH);
+  });
 });

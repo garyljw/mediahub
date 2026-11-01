@@ -1,0 +1,68 @@
+{
+  "id": 10,
+  "title": "Lantern Row",
+  "sortTitle": "lantern row",
+  "status": "continuing",
+  "overview": "Invented overview text for the series detail page.",
+  "network": "Northwind TV",
+  "year": 2020,
+  "path": "/invented/tv/Lantern Row",
+  "rootFolderPath": "/invented/tv/",
+  "qualityProfileId": 1,
+  "seasonFolder": true,
+  "monitored": true,
+  "added": "2024-03-01T10:00:00Z",
+  "images": [
+    { "coverType": "poster", "url": "https://example.invalid/poster-10.jpg", "remoteUrl": "https://example.invalid/poster-10.jpg" },
+    { "coverType": "fanart", "url": "https://example.invalid/fanart-10.jpg", "remoteUrl": "https://example.invalid/fanart-10.jpg" }
+  ],
+  "seasons": [
+    {
+      "seasonNumber": 0,
+      "monitored": false,
+      "statistics": {
+        "episodeFileCount": 0,
+        "episodeCount": 1,
+        "totalEpisodeCount": 1,
+        "sizeOnDisk": 0,
+        "percentOfEpisodes": 0
+      }
+    },
+    {
+      "seasonNumber": 1,
+      "monitored": true,
+      "statistics": {
+        "episodeFileCount": 1,
+        "episodeCount": 4,
+        "totalEpisodeCount": 6,
+        "sizeOnDisk": 1073741824,
+        "percentOfEpisodes": 25
+      }
+    },
+    {
+      "seasonNumber": 2,
+      "monitored": true,
+      "statistics": {
+        "episodeFileCount": 1,
+        "episodeCount": 2,
+        "totalEpisodeCount": 2,
+        "sizeOnDisk": 0,
+        "percentOfEpisodes": 50
+      }
+    }
+  ],
+  "tvdbId": 100010,
+  "imdbId": "tt0000101",
+  "genres": ["Drama"],
+  "tags": [],
+  "seriesType": "standard",
+  "statistics": {
+    "seasonCount": 3,
+    "episodeFileCount": 2,
+    "episodeCount": 7,
+    "totalEpisodeCount": 9,
+    "sizeOnDisk": 1073741824,
+    "releaseGroups": ["INVENTED"],
+    "percentOfEpisodes": 28.6
+  }
+}

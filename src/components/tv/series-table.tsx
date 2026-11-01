@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { QualityProfileOption } from "@/server/arr/profiles";
-import type { SeriesRow, SeriesStatus } from "@/server/arr/series";
+import type { SeriesRow } from "@/server/arr/series";
 import { refreshLibrarySeries, removeSeries, searchLibrarySeries, updateSeries } from "@/app/(app)/tv/actions";
 import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
 import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
@@ -38,21 +39,9 @@ import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/c
 import { MAX_EDIT_SERIES, buildEditPayload } from "./series-edit";
 import { MAX_REFRESH_SERIES, refreshStartedMessage } from "./series-refresh";
 import { MAX_SEARCH_SERIES, searchStartedMessage } from "./series-search";
+import { STATUS_CLASS, STATUS_LABEL } from "./series-status";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
-
-const STATUS_LABEL: Record<SeriesStatus, string> = {
-  continuing: "Continuing",
-  ended: "Ended",
-  upcoming: "Upcoming",
-};
-
-// Same colours as the Movies badges: continuing reads as downloaded, upcoming as missing, ended as unreleased.
-const STATUS_CLASS: Record<SeriesStatus, string> = {
-  continuing: "border-transparent bg-emerald-600/15 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  ended: "border-transparent bg-muted text-muted-foreground",
-  upcoming: "border-transparent bg-amber-500/20 text-amber-800 dark:text-amber-300",
-};
 
 /** A row's thumbnail and preview come from MediaHub's own poster route, and only when Sonarr has a poster. */
 function seriesPosterSrc(row: SeriesRow): string | null {
@@ -389,12 +378,14 @@ export function SeriesTable({
                     className="size-4 accent-primary"
                   />
                 </TableCell>
-                <TableCell className={CELL}>
+                <TableCell className={CELL} data-poster-anchor>
                   <div className="flex min-w-0 items-center gap-2">
                     <Poster src={seriesPosterSrc(row)} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate" title={row.title}>
-                        <span className="font-medium">{row.title}</span>
+                        <Link href={`/tv/${row.id}`} className="font-medium hover:underline">
+                          {row.title}
+                        </Link>
                       </div>
                       {row.network !== null && (
                         <p className="truncate text-xs text-muted-foreground">{row.network}</p>

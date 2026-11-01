@@ -37,7 +37,7 @@ export type SeriesRow = {
  * state for either, so both show as "ended": neither is still airing, and neither should look upcoming or
  * continuing. The status filter uses the same three values.
  */
-function seriesStatus(series: SeriesResource): SeriesStatus {
+export function seriesStatus(series: SeriesResource): SeriesStatus {
   if (series.status === "continuing" || series.status === "upcoming") return series.status;
   return "ended";
 }
@@ -79,7 +79,8 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
   return rows;
 }
 
-async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
+/** Every quality profile from Sonarr. Shared with series-detail.ts so the request code lives in one place. */
+export async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
   const client = sonarrClient();
   return getList("Sonarr quality profile", (signal) => client.GET("/api/v3/qualityprofile", { signal }));
 }
