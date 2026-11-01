@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "HD-1080p",
+    "upgradeAllowed": true,
+    "cutoff": 7,
+    "items": [],
+    "minFormatScore": 0,
+    "cutoffFormatScore": 0,
+    "minUpgradeFormatScore": 1,
+    "formatItems": [],
+    "language": { "id": 1, "name": "English" }
+  },
+  {
+    "id": 2,
+    "name": "Any",
+    "upgradeAllowed": false,
+    "cutoff": 1,
+    "items": [],
+    "minFormatScore": 0,
+    "cutoffFormatScore": 0,
+    "minUpgradeFormatScore": 1,
+    "formatItems": [],
+    "language": { "id": 1, "name": "English" }
+  },
+  {
+    "id": 3,
+    "name": "Ultra-HD",
+    "upgradeAllowed": true,
+    "cutoff": 19,
+    "items": [],
+    "minFormatScore": 0,
+    "cutoffFormatScore": 0,
+    "minUpgradeFormatScore": 1,
+    "formatItems": [],
+    "language": { "id": 1, "name": "English" }
+  }
+]

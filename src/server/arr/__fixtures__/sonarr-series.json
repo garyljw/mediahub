@@ -1,0 +1,154 @@
+[
+  {
+    "id": 1,
+    "title": "Harbour Lights",
+    "sortTitle": "harbour lights",
+    "status": "continuing",
+    "overview": "Invented overview text that must never reach the table.",
+    "network": "Northwind TV",
+    "year": 2018,
+    "path": "/invented/tv/Harbour Lights",
+    "rootFolderPath": "/invented/tv/",
+    "qualityProfileId": 1,
+    "seasonFolder": true,
+    "monitored": true,
+    "added": "2024-02-10T09:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-1.jpg", "remoteUrl": "https://example.invalid/poster-1.jpg" },
+      { "coverType": "fanart", "url": "https://example.invalid/fanart-1.jpg", "remoteUrl": "https://example.invalid/fanart-1.jpg" }
+    ],
+    "tvdbId": 100001,
+    "imdbId": "tt0000011",
+    "genres": ["Drama"],
+    "tags": [],
+    "seriesType": "standard",
+    "statistics": {
+      "seasonCount": 3,
+      "episodeFileCount": 24,
+      "episodeCount": 24,
+      "totalEpisodeCount": 30,
+      "sizeOnDisk": 48318382080,
+      "releaseGroups": ["INVENTED"],
+      "percentOfEpisodes": 100
+    }
+  },
+  {
+    "id": 2,
+    "title": "The Long Quiet",
+    "sortTitle": "long quiet, the",
+    "status": "ended",
+    "network": null,
+    "year": 2011,
+    "path": "/invented/tv/The Long Quiet",
+    "qualityProfileId": 2,
+    "monitored": false,
+    "added": "2023-05-01T12:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-2.jpg", "remoteUrl": "https://example.invalid/poster-2.jpg" }
+    ],
+    "statistics": {
+      "seasonCount": 2,
+      "episodeFileCount": 10,
+      "episodeCount": 12,
+      "totalEpisodeCount": 12,
+      "sizeOnDisk": 5368709120
+    }
+  },
+  {
+    "id": 3,
+    "title": "Coming Soon Show",
+    "status": "upcoming",
+    "network": "Lakeside",
+    "year": 2026,
+    "qualityProfileId": 1,
+    "monitored": true,
+    "added": "2026-01-05T08:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-3.jpg", "remoteUrl": "https://example.invalid/poster-3.jpg" }
+    ],
+    "statistics": {
+      "seasonCount": 0,
+      "episodeFileCount": 0,
+      "episodeCount": 0,
+      "totalEpisodeCount": 8,
+      "sizeOnDisk": 0
+    }
+  },
+  {
+    "id": 4,
+    "title": "Removed From Sonarr",
+    "status": "deleted",
+    "network": "Old Net",
+    "year": 2015,
+    "qualityProfileId": 1,
+    "monitored": false,
+    "added": "2020-01-01T00:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-4.jpg", "remoteUrl": "https://example.invalid/poster-4.jpg" }
+    ],
+    "statistics": {
+      "seasonCount": 1,
+      "episodeFileCount": 3,
+      "episodeCount": 4,
+      "totalEpisodeCount": 4,
+      "sizeOnDisk": 1073741824
+    }
+  },
+  {
+    "id": 5,
+    "title": "No Statistics Show",
+    "status": "continuing",
+    "year": 2019,
+    "qualityProfileId": 3,
+    "monitored": true,
+    "added": "2024-07-20T10:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-5.jpg", "remoteUrl": "https://example.invalid/poster-5.jpg" }
+    ]
+  },
+  {
+    "id": 6,
+    "title": "Orphan Profile Show",
+    "status": "continuing",
+    "year": 2020,
+    "qualityProfileId": 99,
+    "monitored": true,
+    "added": "2024-08-01T10:00:00Z",
+    "images": [
+      { "coverType": "poster", "url": "https://example.invalid/poster-6.jpg", "remoteUrl": "https://example.invalid/poster-6.jpg" }
+    ],
+    "statistics": {
+      "seasonCount": 1,
+      "episodeFileCount": 2,
+      "episodeCount": 6,
+      "totalEpisodeCount": 6,
+      "sizeOnDisk": 2147483648
+    }
+  },
+  {
+    "title": "No Id Show",
+    "status": "continuing",
+    "year": 2010,
+    "qualityProfileId": 1,
+    "monitored": true
+  },
+  {
+    "id": 8,
+    "title": "No Poster Show",
+    "status": "ended",
+    "year": 0,
+    "qualityProfileId": 2,
+    "monitored": true,
+    "added": "2022-03-03T00:00:00Z",
+    "images": [
+      { "coverType": "fanart", "url": "https://example.invalid/fanart-8.jpg", "remoteUrl": "https://example.invalid/fanart-8.jpg" }
+    ],
+    "statistics": {
+      "seasonCount": 1,
+      "episodeFileCount": 6,
+      "episodeCount": 6,
+      "totalEpisodeCount": 6,
+      "sizeOnDisk": 3221225472
+    }
+  }
+]
