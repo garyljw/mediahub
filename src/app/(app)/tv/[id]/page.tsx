@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bookmark, BookmarkCheck } from "lucide-react";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
+import { MonitoredIcon } from "@/components/tv/series-monitored";
+import {
+  EpisodeMonitorToggle,
+  EpisodeSearchButton,
+  SeasonMonitorToggle,
+  SeasonSearchButton,
+} from "@/components/tv/series-detail-actions";
 import { requirePageUser } from "@/server/authz";
 import { ArrRequestError } from "@/server/arr/request";
 import { getSeriesDetail, type SeasonRow, type SeriesDetail } from "@/server/arr/series-detail";
@@ -27,33 +33,44 @@ const seriesId = z
 const CELL = "py-1.5 px-2";
 const HEAD = "h-8 border-b py-1.5 px-2";
 
-function MonitoredIcon({ monitored }: { monitored: boolean }) {
-  return monitored ? (
-    <>
-      <BookmarkCheck aria-hidden className="inline size-4 text-primary" />
-      <span className="sr-only">Monitored</span>
-    </>
-  ) : (
-    <>
-      <Bookmark aria-hidden className="inline size-4 text-muted-foreground/60" />
-      <span className="sr-only">Unmonitored</span>
-    </>
-  );
-}
-
-function SeasonDetails({ season, open }: { season: SeasonRow; open: boolean }) {
+function SeasonDetails({
+  seriesId,
+  season,
+  open,
+  isAdmin,
+}: {
+  seriesId: number;
+  season: SeasonRow;
+  open: boolean;
+  /** Admins get the monitor buttons. Everyone gets the search button. */
+  isAdmin: boolean;
+}) {
   return (
     <details open={open} className="rounded-md border">
       <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-sm">
         <span className="font-medium">{season.label}</span>
         <span className="inline-flex items-center">
-          <MonitoredIcon monitored={season.monitored} />
+          {isAdmin ? (
+            <SeasonMonitorToggle
+              seriesId={seriesId}
+              seasonNumber={season.seasonNumber}
+              label={season.label}
+              monitored={season.monitored}
+            />
+          ) : (
+            <MonitoredIcon monitored={season.monitored} />
+          )}
         </span>
         <span className="tabular-nums">
           {formatCount(season.episodeFileCount)} / {formatCount(season.episodeCount)} episodes
         </span>
         <span className="tabular-nums text-muted-foreground">{formatCount(season.totalEpisodeCount)} total</span>
         <span className="tabular-nums text-muted-foreground">{formatSize(season.sizeOnDisk)}</span>
+        <SeasonSearchButton
+          seriesId={seriesId}
+          seasonNumber={season.seasonNumber}
+          label={season.label}
+        />
       </summary>
       {season.episodes.length === 0 ? (
         <p className="border-t px-3 py-2 text-sm text-muted-foreground">No episodes.</p>
@@ -62,17 +79,33 @@ function SeasonDetails({ season, open }: { season: SeasonRow; open: boolean }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className={`${HEAD} w-px whitespace-nowrap`}>Monitored</TableHead>
                 <TableHead className={HEAD}>#</TableHead>
                 <TableHead className={HEAD}>Title</TableHead>
                 <TableHead className={HEAD}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
                 <TableHead className={HEAD}>Quality</TableHead>
                 <TableHead className={`${HEAD} text-right`}>Size</TableHead>
+                <TableHead className={`${HEAD} w-px whitespace-nowrap`}>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {season.episodes.map((episode) => (
                 <TableRow key={episode.id}>
+                  <TableCell className={`${CELL} text-center`}>
+                    {isAdmin ? (
+                      <EpisodeMonitorToggle
+                        episodeId={episode.id}
+                        episodeNumber={episode.episodeNumber}
+                        seasonLabel={season.label}
+                        monitored={episode.monitored}
+                      />
+                    ) : (
+                      <MonitoredIcon monitored={episode.monitored} />
+                    )}
+                  </TableCell>
                   <TableCell className={`${CELL} tabular-nums`}>{episode.episodeNumber}</TableCell>
                   <TableCell className={CELL}>{episode.title}</TableCell>
                   <TableCell className={`${CELL} tabular-nums text-muted-foreground`}>
@@ -85,6 +118,13 @@ function SeasonDetails({ season, open }: { season: SeasonRow; open: boolean }) {
                   </TableCell>
                   <TableCell className={`${CELL} text-muted-foreground`}>{episode.quality ?? "—"}</TableCell>
                   <TableCell className={`${CELL} text-right tabular-nums`}>{formatSize(episode.size)}</TableCell>
+                  <TableCell className={`${CELL} text-right`}>
+                    <EpisodeSearchButton
+                      episodeId={episode.id}
+                      episodeNumber={episode.episodeNumber}
+                      seasonLabel={season.label}
+                    />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -95,7 +135,7 @@ function SeasonDetails({ season, open }: { season: SeasonRow; open: boolean }) {
   );
 }
 
-function SeriesView({ detail }: { detail: SeriesDetail }) {
+function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolean }) {
   // The newest season that isn't Specials starts open. Seasons arrive newest first.
   const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
   const meta = [detail.year === null ? null : String(detail.year), detail.network].filter(
@@ -130,7 +170,13 @@ function SeriesView({ detail }: { detail: SeriesDetail }) {
           <p className="text-sm text-muted-foreground">No seasons.</p>
         ) : (
           detail.seasons.map((season) => (
-            <SeasonDetails key={season.seasonNumber} season={season} open={season.seasonNumber === openSeason} />
+            <SeasonDetails
+              key={season.seasonNumber}
+              seriesId={detail.id}
+              season={season}
+              open={season.seasonNumber === openSeason}
+              isAdmin={isAdmin}
+            />
           ))
         )}
       </section>
@@ -139,7 +185,8 @@ function SeriesView({ detail }: { detail: SeriesDetail }) {
 }
 
 export default async function SeriesDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePageUser("admin", "requester");
+  const user = await requirePageUser("admin", "requester");
+  const isAdmin = user.role === "admin";
 
   const parsed = seriesId.safeParse((await params).id);
   if (!parsed.success) notFound();
@@ -163,5 +210,5 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
   }
 
   if (detail === null) notFound();
-  return <SeriesView detail={detail} />;
+  return <SeriesView detail={detail} isAdmin={isAdmin} />;
 }
