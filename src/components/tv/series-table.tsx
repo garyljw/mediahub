@@ -1,47 +1,41 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Bookmark, BookmarkCheck, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Bookmark, BookmarkCheck, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { QualityProfileOption } from "@/server/arr/movies";
+import type { QualityProfileOption } from "@/server/arr/profiles";
 import type { SeriesRow, SeriesStatus } from "@/server/arr/series";
+import { removeSeries, updateSeries } from "@/app/(app)/tv/actions";
+import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
+import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
+import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
+import { LibraryEditDialog } from "@/components/library/edit-dialog";
+import { SERIES } from "@/components/library/nouns";
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
-  clampPage,
+  FIRST_DIR,
   episodeFraction,
   filterSeries,
   hasActiveFilters,
   isMissing,
-  nextSort,
-  pageCount,
-  pageSlice,
-  profileOptions,
   sortSeries,
   type MissingFilter,
-  type MonitoredFilter,
   type SeriesFilters,
   type SortKey,
   type SortState,
   type StatusFilter,
 } from "./series-filters";
-import { formatAdded, formatCount, formatSize } from "@/components/movies/movie-format";
-import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/movies/movie-edit";
-import { SELECT_CLASS } from "@/components/movies/movie-edit-dialog";
-import { deletedMessage } from "./series-delete";
-import { updatedMessage } from "./series-edit";
-import { SeriesDeleteDialog } from "./series-delete-dialog";
-import { SeriesEditDialog } from "./series-edit-dialog";
+import { formatAdded, formatCount, formatSize } from "@/components/library/format";
+import { updatedMessage } from "@/components/library/edit";
+import { deletedMessage } from "@/components/library/delete";
+import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/library/selection";
+import { MAX_EDIT_SERIES, buildEditPayload } from "./series-edit";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 
@@ -63,46 +57,9 @@ function seriesPosterSrc(row: SeriesRow): string | null {
   return row.hasPoster ? `/api/tv/${row.id}/poster` : null;
 }
 
-const CELL = "py-1.5 px-2";
-const HEAD = "sticky top-0 z-10 h-8 border-b bg-background py-1.5 px-2";
 // Title, year, status, episodes, monitored, profile, size and added. Admins also get the checkbox and actions columns.
 const DATA_COLUMN_COUNT = 8;
 const STATUS_MS = 4000;
-
-function SortHeader({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  align = "left",
-  width,
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: SortState;
-  onSort: (key: SortKey) => void;
-  align?: "left" | "right";
-  /** A fixed column width class. Only the Title column has none, so it takes the remaining space. */
-  width?: string;
-}) {
-  const active = sort.key === sortKey;
-  const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <TableHead
-      className={cn(HEAD, width, align === "right" && "text-right")}
-      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="inline-flex items-center gap-1 font-medium hover:text-foreground"
-      >
-        {label}
-        <Icon aria-hidden className={cn("size-3.5", !active && "text-muted-foreground/60")} />
-      </button>
-    </TableHead>
-  );
-}
 
 /**
  * One series' episode cell: "have/want" and a thin bar. Green when every expected episode is on disk, amber
@@ -127,57 +84,6 @@ function EpisodesCell({ row }: { row: SeriesRow }) {
         <div className={cn("h-full", missing ? "bg-amber-500" : "bg-emerald-600")} style={{ width: `${percent}%` }} />
       </div>
     </TableCell>
-  );
-}
-
-/**
- * The ⋯ menu for one admin row. Edit and Delete open dialogs, so their onSelect only remembers the action.
- * The action runs from onCloseAutoFocus. Radix calls that handler and then focuses the ⋯ trigger in the same
- * timeout callback. The state change from this handler renders after that focus, so the dialog's FocusScope
- * saves the trigger as the element to return focus to. The menu is non-modal because a modal menu locks the
- * page with body pointer-events, and that lock fights a dialog opened while it closes.
- */
-function RowMenu({
-  title,
-  onOpen,
-  onClosed,
-  onEdit,
-  onDelete,
-}: {
-  title: string;
-  onOpen: () => void;
-  /** Called once the menu has closed, whatever the reason. */
-  onClosed: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const pending = useRef<(() => void) | null>(null);
-  return (
-    <DropdownMenu modal={false} onOpenChange={(open) => open && onOpen()}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${title}`}>
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={() => {
-          const run = pending.current;
-          pending.current = null;
-          onClosed();
-          run?.();
-        }}
-      >
-        <DropdownMenuItem onSelect={() => (pending.current = onEdit)}>
-          <Pencil aria-hidden />
-          Edit…
-        </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onSelect={() => (pending.current = onDelete)}>
-          <Trash2 aria-hidden />
-          Delete…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -241,7 +147,7 @@ export function SeriesTable({
   }
 
   function changeSort(key: SortKey) {
-    setSort((previous) => nextSort(previous, key));
+    setSort((previous) => nextSort(previous, key, FIRST_DIR));
     setPage(1);
   }
 
@@ -265,7 +171,7 @@ export function SeriesTable({
     // A single-row edit leaves the bulk selection alone. Only a bulk edit uses it up.
     if (editing?.fromSelection) setSelected(new Set());
     setEditing(null);
-    setStatus(updatedMessage(seriesCount));
+    setStatus(updatedMessage(seriesCount, SERIES));
   }
 
   function openDeleter(series: SeriesRow[]) {
@@ -278,7 +184,7 @@ export function SeriesTable({
     const gone = new Set(deleting?.series.map((entry) => entry.id));
     setSelected((previous) => new Set([...previous].filter((id) => !gone.has(id))));
     setDeleting(null);
-    setStatus(deletedMessage(seriesCount));
+    setStatus(deletedMessage(seriesCount, SERIES));
   }
 
   return (
@@ -459,9 +365,20 @@ export function SeriesTable({
                         title={row.title}
                         onOpen={() => setMenuRowId(row.id)}
                         onClosed={() => setMenuRowId((previous) => (previous === row.id ? null : previous))}
-                        onEdit={() => openEditor([row.id], false, row.title)}
-                        onDelete={() => openDeleter([row])}
-                      />
+                      >
+                        {(defer) => (
+                          <>
+                            <DropdownMenuItem onSelect={() => defer(() => openEditor([row.id], false, row.title))}>
+                              <Pencil aria-hidden />
+                              Edit…
+                            </DropdownMenuItem>
+                            <DropdownMenuItem variant="destructive" onSelect={() => defer(() => openDeleter([row]))}>
+                              <Trash2 aria-hidden />
+                              Delete…
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </RowMenu>
                     </div>
                   </TableCell>
                 )}
@@ -490,10 +407,14 @@ export function SeriesTable({
       </div>
 
       {isAdmin && editing && (
-        <SeriesEditDialog
+        <LibraryEditDialog
           ids={editing.ids}
           title={editing.title}
+          noun={SERIES}
+          max={MAX_EDIT_SERIES}
           profiles={profiles}
+          buildPayload={(profileId, monitor) => buildEditPayload(editing.ids, profileId, monitor)}
+          submit={updateSeries}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />
@@ -508,31 +429,21 @@ export function SeriesTable({
         posterPreview.preview}
 
       {isAdmin && deleting && (
-        <SeriesDeleteDialog
-          series={deleting.series}
+        <LibraryDeleteDialog
+          items={deleting.series}
+          noun={SERIES}
+          max={MAX_EDIT_SERIES}
+          appName="Sonarr"
+          exclusionLabel="Prevent this series from being re-added by import lists"
+          submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>
+            removeSeries({ seriesIds: ids, deleteFiles, addImportListExclusion: addExclusion, confirmCount })
+          }
           onClose={() => setDeleting(null)}
           onDeleted={handleDeleted}
         />
       )}
 
-      {pages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center justify-between gap-2 text-sm">
-          <Button variant="outline" size="sm" disabled={current <= 1} onClick={() => setPage(current - 1)}>
-            Prev
-          </Button>
-          <span>
-            Page {current} of {pages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={current >= pages}
-            onClick={() => setPage(current + 1)}
-          >
-            Next
-          </Button>
-        </nav>
-      )}
+      <Pagination current={current} pages={pages} onPage={setPage} />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { updateMovies } from "@/app/(app)/movies/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,31 +10,44 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { QualityProfileOption } from "@/server/arr/movies";
-import { formatCount } from "./movie-format";
-import { MAX_EDIT_MOVIES, buildEditPayload, editTitle, type MonitorChoice } from "./movie-edit";
-
-export const SELECT_CLASS =
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30";
+import type { QualityProfileOption } from "@/server/arr/profiles";
+import { editTitle, type MonitorChoice } from "./edit";
+import { formatCount } from "./format";
+import type { Noun } from "./nouns";
+import { SELECT_CLASS } from "./table-parts";
 
 const KEEP = "keep";
 
+/** What a server edit action answers. */
+export type SaveOutcome = { ok: true } | { ok: false; error: string };
+
 /**
- * Edits the quality profile and/or monitored flag for the given movies. Mounted only while open, so each
- * opening starts from "Keep current". `title` is set for a single movie (its own title) and omitted for bulk.
+ * Edits the quality profile and/or monitored flag for the given movies or series. Mounted only while open, so
+ * each opening starts from "Keep current". `title` is set for a single row (its own title) and omitted for bulk.
+ * The table passes `buildPayload`, which returns the edit to send (or null when nothing would change), and
+ * `submit`, which calls its server action.
  */
-export function MovieEditDialog({
+export function LibraryEditDialog<P>({
   ids,
   title,
+  noun,
+  max,
   profiles,
+  buildPayload,
+  submit,
   onClose,
   onSaved,
 }: {
   ids: number[];
   title?: string;
+  noun: Noun;
+  /** The most rows one edit may change. The server refuses more than this. */
+  max: number;
   profiles: QualityProfileOption[];
+  buildPayload: (profileId: number | null, monitor: MonitorChoice) => P | null;
+  submit: (payload: P) => Promise<SaveOutcome>;
   onClose: () => void;
-  onSaved: (movieCount: number) => void;
+  onSaved: (count: number) => void;
 }) {
   const [profileValue, setProfileValue] = useState(KEEP);
   const [monitor, setMonitor] = useState<MonitorChoice>("keep");
@@ -45,15 +57,15 @@ export function MovieEditDialog({
   const monitorId = useId();
   const errorId = useId();
 
-  const payload = buildEditPayload(ids, profileValue === KEEP ? null : Number(profileValue), monitor);
+  const payload = buildPayload(profileValue === KEEP ? null : Number(profileValue), monitor);
   // The server refuses more than this, so say so here rather than returning a bare "Invalid edit.".
-  const tooMany = ids.length > MAX_EDIT_MOVIES;
+  const tooMany = ids.length > max;
 
   function save() {
     if (payload === null) return;
     setError(null);
     startTransition(async () => {
-      const result = await updateMovies(payload);
+      const result = await submit(payload);
       if (result.ok) onSaved(ids.length);
       else setError(result.error);
     });
@@ -69,7 +81,7 @@ export function MovieEditDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editTitle(ids.length, title)}</DialogTitle>
+          <DialogTitle>{editTitle(ids.length, noun, title)}</DialogTitle>
           <DialogDescription>Options left at Keep current stay as they are.</DialogDescription>
         </DialogHeader>
 
@@ -121,7 +133,7 @@ export function MovieEditDialog({
 
           {tooMany && (
             <p className="text-sm text-destructive">
-              Select at most {formatCount(MAX_EDIT_MOVIES)} movies per edit.
+              Select at most {formatCount(max)} {noun.many} per edit.
             </p>
           )}
 

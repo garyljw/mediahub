@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
-import type { QualityProfileOption } from "@/server/arr/movies";
-import { SELECT_CLASS } from "./movie-edit-dialog";
+import type { QualityProfileOption } from "@/server/arr/profiles";
+import { SELECT_CLASS } from "@/components/library/table-parts";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import {

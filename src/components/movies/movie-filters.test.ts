@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MovieRow } from "@/server/arr/movies";
+import { nextSort, profileOptions } from "@/components/library/list";
 import {
   DEFAULT_FILTERS,
-  PAGE_SIZE,
-  clampPage,
+  FIRST_DIR,
   filterMovies,
   hasActiveFilters,
   matchesSearch,
-  nextSort,
-  pageCount,
-  pageSlice,
-  profileOptions,
   sortMovies,
   type MovieFilters,
 } from "./movie-filters";
@@ -156,57 +152,15 @@ describe("sortMovies", () => {
 
 describe("nextSort", () => {
   it("flips direction when the active column is clicked again", () => {
-    expect(nextSort({ key: "title", dir: "asc" }, "title")).toEqual({ key: "title", dir: "desc" });
-    expect(nextSort({ key: "title", dir: "desc" }, "title")).toEqual({ key: "title", dir: "asc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "title", FIRST_DIR)).toEqual({ key: "title", dir: "desc" });
+    expect(nextSort({ key: "title", dir: "desc" }, "title", FIRST_DIR)).toEqual({ key: "title", dir: "asc" });
   });
 
   it("starts a new column in its first direction", () => {
-    expect(nextSort({ key: "title", dir: "asc" }, "year")).toEqual({ key: "year", dir: "desc" });
-    expect(nextSort({ key: "year", dir: "desc" }, "title")).toEqual({ key: "title", dir: "asc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "size")).toEqual({ key: "size", dir: "desc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "added")).toEqual({ key: "added", dir: "desc" });
-  });
-});
-
-describe("pagination", () => {
-  it("uses 100 rows per page", () => {
-    expect(PAGE_SIZE).toBe(100);
-  });
-
-  it("always has at least one page", () => {
-    expect(pageCount(0)).toBe(1);
-    expect(pageCount(1)).toBe(1);
-    expect(pageCount(100)).toBe(1);
-    expect(pageCount(101)).toBe(2);
-    expect(pageCount(250)).toBe(3);
-  });
-
-  it("clamps the page number into range", () => {
-    expect(clampPage(0, 250)).toBe(1);
-    expect(clampPage(-4, 250)).toBe(1);
-    expect(clampPage(2, 250)).toBe(2);
-    expect(clampPage(9, 250)).toBe(3);
-    expect(clampPage(5, 0)).toBe(1);
-    expect(clampPage(Number.NaN, 250)).toBe(1);
-    expect(clampPage(2.7, 250)).toBe(2);
-  });
-
-  it("slices one page of items", () => {
-    const items = Array.from({ length: 250 }, (_, i) => i + 1);
-    expect(pageSlice(items, 1)).toHaveLength(100);
-    expect(pageSlice(items, 1)[0]).toBe(1);
-    expect(pageSlice(items, 2)[0]).toBe(101);
-    expect(pageSlice(items, 3)).toEqual(items.slice(200));
-  });
-
-  it("returns the last page when asked for a page past the end", () => {
-    const items = Array.from({ length: 250 }, (_, i) => i + 1);
-    expect(pageSlice(items, 99)).toEqual(items.slice(200));
-  });
-
-  it("returns an empty slice for no items", () => {
-    expect(pageSlice([], 1)).toEqual([]);
-    expect(pageSlice([], 5)).toEqual([]);
+    expect(nextSort({ key: "title", dir: "asc" }, "year", FIRST_DIR)).toEqual({ key: "year", dir: "desc" });
+    expect(nextSort({ key: "year", dir: "desc" }, "title", FIRST_DIR)).toEqual({ key: "title", dir: "asc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "size", FIRST_DIR)).toEqual({ key: "size", dir: "desc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "added", FIRST_DIR)).toEqual({ key: "added", dir: "desc" });
   });
 });
 

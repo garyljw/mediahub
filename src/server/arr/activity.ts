@@ -1,6 +1,6 @@
 import "server-only";
 import { radarrClient } from "./client";
-import { getList } from "./movies";
+import { getList } from "./request";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type QueueResource = RadarrComponents["schemas"]["QueueResource"];

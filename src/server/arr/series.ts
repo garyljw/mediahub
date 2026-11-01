@@ -1,8 +1,8 @@
 import "server-only";
 import { sonarrClient } from "./client";
-import { DELETE_TIMEOUT_MS, getList, type QualityProfileOption } from "./movies";
-import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./poster";
-import { ArrRequestError, arrRequest } from "./request";
+import { fetchPosterBytes } from "./poster";
+import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
+import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -43,18 +43,6 @@ function seriesStatus(series: SeriesResource): SeriesStatus {
 }
 
 /**
- * Profiles with an id and a name, as dropdown options. toSeriesRows and listSeries both use this, so the row
- * labels and the filter options always agree on which profiles exist.
- */
-function usableProfiles(profiles: QualityProfileResource[]): QualityProfileOption[] {
-  const options: QualityProfileOption[] = [];
-  for (const profile of profiles) {
-    if (typeof profile.id === "number" && profile.name) options.push({ id: profile.id, name: profile.name });
-  }
-  return options;
-}
-
-/**
  * Pure: maps upstream series to table rows, in upstream order. Skips series without an id or title. Sorting is
  * the table's job (series-filters.ts), so it lives in one place.
  */
@@ -89,13 +77,6 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
   }
 
   return rows;
-}
-
-/** Upstream profiles, reduced to usable options and sorted by name. */
-function sortedProfileOptions(profiles: QualityProfileResource[]): QualityProfileOption[] {
-  const options = usableProfiles(profiles);
-  options.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
-  return options;
 }
 
 async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
@@ -170,19 +151,11 @@ const POSTER_FILENAME = "poster-250.jpg";
 /** Fetches Sonarr's cached 250px poster for one series as JPEG bytes. Only the fixed poster file is requested. */
 export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = sonarrClient();
-  // The body is read inside the request callback, so the timeout covers it and read failures are
-  // reported like any other request failure. On an error response body is undefined (openapi-fetch
-  // has already consumed it), and arrRequest throws on the status.
-  const data = await arrRequest("Sonarr poster", async (signal) => {
-    const { data: body, response } = await client.GET("/api/v3/mediacover/{seriesId}/{filename}", {
+  return fetchPosterBytes("Sonarr poster", (signal) =>
+    client.GET("/api/v3/mediacover/{seriesId}/{filename}", {
       params: { path: { seriesId, filename: POSTER_FILENAME } },
       parseAs: "stream",
       signal,
-    });
-    return { data: await readCapped(body, MAX_POSTER_BYTES), response };
-  });
-  if (!data || !isJpeg(data)) {
-    throw new ArrRequestError("Sonarr poster response was not a usable image", "invalid");
-  }
-  return data;
+    }),
+  );
 }

@@ -1,7 +1,6 @@
 import "server-only";
 import { radarrClient } from "./client";
-import { getList } from "./movies";
-import { ArrRequestError, arrRequest } from "./request";
+import { ArrRequestError, arrRequest, getList } from "./request";
 import { releaseCache } from "./release-cache";
 import type { components as RadarrComponents } from "./generated/radarr";
 

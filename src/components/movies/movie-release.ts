@@ -1,6 +1,6 @@
 // Pure "pick a release" display logic. Must not import from src/server at runtime.
 import type { ReleaseRow } from "@/server/arr/releases";
-import { formatCount, formatSize } from "./movie-format";
+import { formatCount, formatSize } from "@/components/library/format";
 
 const PROTOCOL_LABEL: Record<ReleaseRow["protocol"], string | null> = {
   usenet: "Usenet",
