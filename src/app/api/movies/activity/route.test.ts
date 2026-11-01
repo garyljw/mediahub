@@ -26,7 +26,7 @@ const ADMIN = { user: { id: "u", email: "e", name: "n", role: "admin" as const }
 const REQUESTER = { user: { id: "r", email: "e", name: "n", role: "requester" as const } };
 
 const ITEM = {
-  movieId: 42,
+  id: 42,
   state: "downloading" as const,
   severity: "ok" as const,
   progress: 50,

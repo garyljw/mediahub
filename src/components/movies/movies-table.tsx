@@ -2,12 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  AlertTriangle,
   Bookmark,
   BookmarkCheck,
-  Clock,
-  Download,
-  Pause,
   Pencil,
   RefreshCw,
   Search,
@@ -33,7 +29,6 @@ import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/com
 import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
 import { LibraryEditDialog } from "@/components/library/edit-dialog";
 import { MOVIE } from "@/components/library/nouns";
-import type { ActivitySeverity, ActivityState, MovieActivity } from "@/server/arr/activity";
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
@@ -51,8 +46,8 @@ import { updatedMessage } from "@/components/library/edit";
 import { deletedMessage } from "@/components/library/delete";
 import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/library/selection";
 import { MAX_EDIT_MOVIES, buildEditPayload } from "./movie-edit";
-import { activityLabel, showsProgress } from "./movie-activity";
-import { useMovieActivity } from "./use-movie-activity";
+import { ActivityCell, ActivityHead } from "@/components/library/activity-cell";
+import { useActivity } from "@/components/library/use-activity";
 import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
 import { MovieReleaseDialog } from "./movie-release-dialog";
@@ -77,65 +72,10 @@ function moviePosterSrc(row: MovieRow): string | null {
   return row.hasPoster ? `/api/movies/${row.id}/poster` : null;
 }
 
-/** Text colour for each Activity severity. Warning reuses the amber of the "Missing" badge. */
-const ACTIVITY_CLASS: Record<ActivitySeverity, string> = {
-  ok: "text-muted-foreground",
-  warning: "text-amber-800 dark:text-amber-300",
-  error: "text-destructive",
-};
-
-/** One icon per activity state. Download and pause are the two that show progress. */
-const ACTIVITY_ICON: Record<ActivityState, typeof Clock> = {
-  queued: Clock,
-  delayed: Clock,
-  importPending: Clock,
-  importing: Clock,
-  unknown: Clock,
-  downloading: Download,
-  paused: Pause,
-  importBlocked: AlertTriangle,
-  failed: AlertTriangle,
-  clientUnavailable: AlertTriangle,
-};
-
 // Nine data columns plus the checkbox and the actions column, which every role gets (Search is open to requesters).
 const COLUMN_COUNT = 11;
 // How long the "Updated N movies" line stays before it clears itself.
 const STATUS_MS = 4000;
-
-/**
- * One movie's Activity cell: an icon and label, a progress bar while downloading or paused, and the first
- * message. Admins get messages; requesters never do, so for them the cell only shows state.
- */
-function ActivityCell({ title, activity }: { title: string; activity: MovieActivity | undefined }) {
-  if (!activity) return <TableCell className={CELL} />;
-  const Icon = ACTIVITY_ICON[activity.state];
-  // The label can be cut off in the cell, so the hover text always has it. Messages (admins only) follow it.
-  const tooltip = [activityLabel(activity), ...activity.messages].join("\n");
-  return (
-    <TableCell className={CELL} title={tooltip}>
-      <span className={cn("flex min-w-0 items-center gap-1.5", ACTIVITY_CLASS[activity.severity])}>
-        <Icon aria-hidden className="size-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{activityLabel(activity)}</span>
-      </span>
-      {showsProgress(activity) && (
-        <div
-          role="progressbar"
-          aria-label={`Download progress for ${title}`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={activity.progress}
-          className="mt-1 h-1 w-24 overflow-hidden rounded bg-muted"
-        >
-          <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
-        </div>
-      )}
-      {activity.messages.length > 0 && (
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{activity.messages[0]}</p>
-      )}
-    </TableCell>
-  );
-}
 
 export function MoviesTable({
   rows,
@@ -165,7 +105,7 @@ export function MoviesTable({
   // The large poster shown beside the hovered row's thumbnail (mouse only, see the hook).
   const posterPreview = usePosterPreview<number>();
   // Live Radarr queue state, polled from the browser. Empty until the first reply arrives.
-  const activity = useMovieActivity();
+  const activity = useActivity("/api/movies/activity");
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -406,15 +346,7 @@ export function MoviesTable({
               <SortHeader label="Year" sortKey="year" sort={sort} onSort={changeSort} width="w-16" />
               <TableHead className={cn(HEAD, "w-28")}>Status</TableHead>
               <TableHead className={cn(HEAD, "w-48")}>
-                <span className="inline-flex items-center gap-1">
-                  Activity
-                  {activity.failed && (
-                    <span title="Couldn't update activity from Radarr" className="inline-flex">
-                      <AlertTriangle aria-hidden className="size-3.5 text-amber-800 dark:text-amber-300" />
-                    </span>
-                  )}
-                  {activity.failed && <span className="sr-only">Couldn&apos;t update activity from Radarr</span>}
-                </span>
+                <ActivityHead failed={activity.failed} source="Radarr" />
               </TableHead>
               <TableHead className={cn(HEAD, "w-24 text-center")}>Monitored</TableHead>
               <TableHead className={cn(HEAD, "w-28")}>Quality profile</TableHead>
@@ -458,7 +390,7 @@ export function MoviesTable({
                     {STATUS_LABEL[row.status]}
                   </Badge>
                 </TableCell>
-                <ActivityCell title={row.title} activity={activity.byMovie.get(row.id)} />
+                <ActivityCell name={row.title} activity={activity.byId.get(row.id)} />
                 <TableCell className={cn(CELL, "text-center")}>
                   {row.monitored ? (
                     <BookmarkCheck aria-hidden className="inline size-4 text-primary" />

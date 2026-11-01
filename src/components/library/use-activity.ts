@@ -1,29 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { MovieActivity } from "@/server/arr/activity";
+import type { QueueActivity } from "@/server/arr/activity";
 import { createActivityPoller } from "./activity-poller";
-import { ACTIVITY_POLL_MS, ACTIVITY_TIMEOUT_MS, activityByMovie } from "./movie-activity";
+import { ACTIVITY_POLL_MS, ACTIVITY_TIMEOUT_MS, activityById } from "./activity";
 
-const ACTIVITY_URL = "/api/movies/activity";
-
-export type MovieActivityState = { byMovie: Map<number, MovieActivity>; failed: boolean };
+export type ActivityResult = { byId: Map<number, QueueActivity>; failed: boolean };
 
 /**
- * Live Radarr queue state per movie. The polling rules live in activity-poller.ts; this hook only wires the
- * browser's fetch, timers and tab visibility to it.
+ * Live queue state per row id, polled from one activity route (Radarr for Movies, Sonarr for TV). The polling
+ * rules live in activity-poller.ts; this hook only wires the browser's fetch, timers and tab visibility to it.
  */
-export function useMovieActivity(): MovieActivityState {
+export function useActivity(url: string): ActivityResult {
   // Empty on the server and on the first browser render, so the column never mismatches during hydration.
-  const [state, setState] = useState<MovieActivityState>({ byMovie: new Map(), failed: false });
+  const [state, setState] = useState<ActivityResult>({ byId: new Map(), failed: false });
 
   useEffect(() => {
     const poller = createActivityPoller({
-      fetchActivity: (signal) => fetch(ACTIVITY_URL, { cache: "no-store", signal }),
+      fetchActivity: (signal) => fetch(url, { cache: "no-store", signal }),
       isHidden: () => document.visibilityState === "hidden",
       setTimer: (run, ms) => window.setTimeout(run, ms),
       clearTimer: (handle) => window.clearTimeout(handle as number),
-      onChange: ({ items, failed }) => setState({ byMovie: activityByMovie(items), failed }),
+      onChange: ({ items, failed }) => setState({ byId: activityById(items), failed }),
       pollMs: ACTIVITY_POLL_MS,
       timeoutMs: ACTIVITY_TIMEOUT_MS,
     });
@@ -34,7 +32,7 @@ export function useMovieActivity(): MovieActivityState {
       poller.stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [url]);
 
   return state;
 }
