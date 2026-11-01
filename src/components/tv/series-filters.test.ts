@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { SeriesRow } from "@/server/arr/series";
+import { nextSort, profileOptions } from "@/components/library/list";
 import {
   DEFAULT_FILTERS,
-  PAGE_SIZE,
-  clampPage,
+  FIRST_DIR,
   episodeFraction,
   filterSeries,
   hasActiveFilters,
   isMissing,
   matchesSearch,
-  nextSort,
-  pageCount,
-  pageSlice,
-  profileOptions,
   sortSeries,
   type SeriesFilters,
+  type SortKey,
 } from "./series-filters";
 
 function row(overrides: Partial<SeriesRow> & { id: number; title: string }): SeriesRow {
@@ -116,7 +113,7 @@ describe("filterSeries", () => {
 });
 
 describe("sortSeries", () => {
-  const sortedIds = (key: Parameters<typeof nextSort>[1], dir: "asc" | "desc") => ids(sortSeries(SAMPLE, { key, dir }));
+  const sortedIds = (key: SortKey, dir: "asc" | "desc") => ids(sortSeries(SAMPLE, { key, dir }));
 
   it("sorts by title with accents and numbers collated", () => {
     // "Éclair" sorts with the E words, and "Coming Soon" comes before "Harbour".
@@ -155,15 +152,15 @@ describe("sortSeries", () => {
 
 describe("nextSort", () => {
   it("flips the direction of the active column", () => {
-    expect(nextSort({ key: "title", dir: "asc" }, "title")).toEqual({ key: "title", dir: "desc" });
-    expect(nextSort({ key: "episodes", dir: "desc" }, "episodes")).toEqual({ key: "episodes", dir: "asc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "title", FIRST_DIR)).toEqual({ key: "title", dir: "desc" });
+    expect(nextSort({ key: "episodes", dir: "desc" }, "episodes", FIRST_DIR)).toEqual({ key: "episodes", dir: "asc" });
   });
 
   it("starts a new column at its first direction", () => {
-    expect(nextSort({ key: "title", dir: "asc" }, "year")).toEqual({ key: "year", dir: "desc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "episodes")).toEqual({ key: "episodes", dir: "asc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "size")).toEqual({ key: "size", dir: "desc" });
-    expect(nextSort({ key: "title", dir: "asc" }, "added")).toEqual({ key: "added", dir: "desc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "year", FIRST_DIR)).toEqual({ key: "year", dir: "desc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "episodes", FIRST_DIR)).toEqual({ key: "episodes", dir: "asc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "size", FIRST_DIR)).toEqual({ key: "size", dir: "desc" });
+    expect(nextSort({ key: "title", dir: "asc" }, "added", FIRST_DIR)).toEqual({ key: "added", dir: "desc" });
   });
 });
 
@@ -183,26 +180,5 @@ describe("hasActiveFilters", () => {
     expect(hasActiveFilters(DEFAULT_FILTERS)).toBe(false);
     expect(hasActiveFilters({ ...DEFAULT_FILTERS, missing: "missing" })).toBe(true);
     expect(hasActiveFilters({ ...DEFAULT_FILTERS, search: "  " })).toBe(false);
-  });
-});
-
-describe("paging", () => {
-  it("uses 100 per page", () => {
-    expect(PAGE_SIZE).toBe(100);
-    expect(pageCount(0)).toBe(1);
-    expect(pageCount(100)).toBe(1);
-    expect(pageCount(101)).toBe(2);
-  });
-
-  it("clamps the page number and treats non-numbers as page 1", () => {
-    expect(clampPage(Number.NaN, 300)).toBe(1);
-    expect(clampPage(0, 300)).toBe(1);
-    expect(clampPage(9, 300)).toBe(3);
-  });
-
-  it("returns the slice for the page, clamped so a stale page is never empty", () => {
-    const items = Array.from({ length: 150 }, (_, i) => i);
-    expect(pageSlice(items, 2)).toHaveLength(50);
-    expect(pageSlice(items, 9)[0]).toBe(100);
   });
 });

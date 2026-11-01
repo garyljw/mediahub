@@ -1,7 +1,7 @@
 // Pure logic for the Add movie dialog. Must not import from src/server at runtime (type imports are fine).
 import type { LookupResult, RootFolderOption } from "@/server/arr/movie-add";
-import type { QualityProfileOption } from "@/server/arr/movies";
-import { formatSize } from "./movie-format";
+import type { QualityProfileOption } from "@/server/arr/profiles";
+import { formatSize } from "@/components/library/format";
 
 /** The dialog's options. They apply to whichever result the admin or requester clicks Add on. */
 export type AddOptions = {

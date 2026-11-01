@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SELECT_CLASS } from "./movie-edit-dialog";
+import { SELECT_CLASS } from "@/components/library/table-parts";
 import {
   PROTOCOL_FILTERS,
   filterReleases,

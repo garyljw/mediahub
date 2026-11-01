@@ -3,14 +3,10 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   Bookmark,
   BookmarkCheck,
   Clock,
   Download,
-  MoreHorizontal,
   Pause,
   Pencil,
   RefreshCw,
@@ -20,51 +16,45 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { refreshLibraryMovies, searchLibraryMovies } from "@/app/(app)/movies/actions";
+import {
+  refreshLibraryMovies,
+  removeMovies,
+  searchLibraryMovies,
+  updateMovies,
+} from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { MovieRow, MovieStatus, QualityProfileOption } from "@/server/arr/movies";
+import type { MovieRow, MovieStatus } from "@/server/arr/movies";
+import type { QualityProfileOption } from "@/server/arr/profiles";
+import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
+import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
+import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
+import { LibraryEditDialog } from "@/components/library/edit-dialog";
+import { MOVIE } from "@/components/library/nouns";
 import type { ActivitySeverity, ActivityState, MovieActivity } from "@/server/arr/activity";
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
-  clampPage,
+  FIRST_DIR,
   filterMovies,
   hasActiveFilters,
-  nextSort,
-  pageCount,
-  pageSlice,
   sortMovies,
-  type MonitoredFilter,
   type MovieFilters,
   type SortKey,
   type SortState,
   type StatusFilter,
-  profileOptions,
 } from "./movie-filters";
-import { formatAdded, formatCount, formatSize } from "./movie-format";
-import {
-  pruneSelection,
-  selectAllState,
-  toggleAllFiltered,
-  toggleId,
-  updatedMessage,
-} from "./movie-edit";
-import { deletedMessage } from "./movie-delete";
+import { formatAdded, formatCount, formatSize } from "@/components/library/format";
+import { updatedMessage } from "@/components/library/edit";
+import { deletedMessage } from "@/components/library/delete";
+import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/library/selection";
+import { MAX_EDIT_MOVIES, buildEditPayload } from "./movie-edit";
 import { activityLabel, showsProgress } from "./movie-activity";
 import { useMovieActivity } from "./use-movie-activity";
 import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
-import { MovieDeleteDialog } from "./movie-delete-dialog";
-import { MovieEditDialog, SELECT_CLASS } from "./movie-edit-dialog";
 import { MovieReleaseDialog } from "./movie-release-dialog";
 import { grabbedMessage } from "./movie-release";
 import { Poster } from "@/components/poster/poster";
@@ -108,47 +98,10 @@ const ACTIVITY_ICON: Record<ActivityState, typeof Clock> = {
   clientUnavailable: AlertTriangle,
 };
 
-const CELL = "py-1.5 px-2";
-const HEAD = "sticky top-0 z-10 h-8 border-b bg-background py-1.5 px-2";
 // Nine data columns plus the checkbox and the actions column, which every role gets (Search is open to requesters).
 const COLUMN_COUNT = 11;
 // How long the "Updated N movies" line stays before it clears itself.
 const STATUS_MS = 4000;
-
-function SortHeader({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  align = "left",
-  width,
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: SortState;
-  onSort: (key: SortKey) => void;
-  align?: "left" | "right";
-  /** A fixed column width class. Only the Title column has none, so it takes the remaining space. */
-  width?: string;
-}) {
-  const active = sort.key === sortKey;
-  const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <TableHead
-      className={cn(HEAD, width, align === "right" && "text-right")}
-      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="inline-flex items-center gap-1 font-medium hover:text-foreground"
-      >
-        {label}
-        <Icon aria-hidden className={cn("size-3.5", !active && "text-muted-foreground/60")} />
-      </button>
-    </TableHead>
-  );
-}
 
 /**
  * One movie's Activity cell: an icon and label, a progress bar while downloading or paused, and the first
@@ -181,72 +134,6 @@ function ActivityCell({ title, activity }: { title: string; activity: MovieActiv
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{activity.messages[0]}</p>
       )}
     </TableCell>
-  );
-}
-
-/**
- * The ⋯ menu for one admin row. Pick, Edit and Delete open dialogs, so their onSelect only remembers the
- * action. The action runs from onCloseAutoFocus. Radix calls that handler and then focuses the ⋯ trigger
- * in the same timeout callback. The state change from this handler renders after that focus, so the
- * dialog's FocusScope saves the trigger as the element to return focus to. The menu is non-modal because a
- * modal menu locks the page with body pointer-events, and that lock fights a dialog opened while it closes.
- */
-function RowMenu({
-  title,
-  refreshing,
-  onOpen,
-  onClosed,
-  onPick,
-  onRefresh,
-  onEdit,
-  onDelete,
-}: {
-  title: string;
-  refreshing: boolean;
-  onOpen: () => void;
-  /** Called once the menu has closed, whatever the reason. */
-  onClosed: () => void;
-  onPick: () => void;
-  onRefresh: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const pending = useRef<(() => void) | null>(null);
-  return (
-    <DropdownMenu modal={false} onOpenChange={(open) => open && onOpen()}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${title}`}>
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={() => {
-          const run = pending.current;
-          pending.current = null;
-          onClosed();
-          run?.();
-        }}
-      >
-        <DropdownMenuItem onSelect={() => (pending.current = onPick)}>
-          <UserSearch aria-hidden />
-          Pick a release…
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={refreshing} onSelect={onRefresh}>
-          <RefreshCw aria-hidden />
-          Refresh &amp; scan
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => (pending.current = onEdit)}>
-          <Pencil aria-hidden />
-          Edit…
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => (pending.current = onDelete)}>
-          <Trash2 aria-hidden />
-          Delete…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -316,7 +203,7 @@ export function MoviesTable({
   }
 
   function changeSort(key: SortKey) {
-    setSort((previous) => nextSort(previous, key));
+    setSort((previous) => nextSort(previous, key, FIRST_DIR));
     setPage(1);
   }
 
@@ -340,7 +227,7 @@ export function MoviesTable({
     // A single-row edit leaves the bulk selection alone. Only a bulk edit uses it up.
     if (editing?.fromSelection) setSelected(new Set());
     setEditing(null);
-    setStatus(updatedMessage(movieCount));
+    setStatus(updatedMessage(movieCount, MOVIE));
   }
 
   function openPicker(row: MovieRow) {
@@ -358,7 +245,7 @@ export function MoviesTable({
     const gone = new Set(deleting?.movies.map((movie) => movie.id));
     setSelected((previous) => new Set([...previous].filter((id) => !gone.has(id))));
     setDeleting(null);
-    setStatus(deletedMessage(movieCount));
+    setStatus(deletedMessage(movieCount, MOVIE));
   }
 
   // Starts a Radarr release search. A bulk search keeps its selection so the user can see what was searched.
@@ -389,7 +276,7 @@ export function MoviesTable({
     });
   }
 
-  const noun = rows.length === 1 ? "movie" : "movies";
+  const noun = rows.length === 1 ? MOVIE.one : MOVIE.many;
   const tooManyToSearch = selectedIds.size > MAX_SEARCH_MOVIES;
   const tooManyToRefresh = selectedIds.size > MAX_REFRESH_MOVIES;
 
@@ -600,14 +487,31 @@ export function MoviesTable({
                     {isAdmin && (
                       <RowMenu
                         title={row.title}
-                        refreshing={refreshing}
                         onOpen={() => setMenuRowId(row.id)}
                         onClosed={() => setMenuRowId((previous) => (previous === row.id ? null : previous))}
-                        onPick={() => openPicker(row)}
-                        onRefresh={() => refreshMovies([row.id])}
-                        onEdit={() => openEditor([row.id], false, row.title)}
-                        onDelete={() => openDeleter([row])}
-                      />
+                      >
+                        {(defer) => (
+                          <>
+                            <DropdownMenuItem onSelect={() => defer(() => openPicker(row))}>
+                              <UserSearch aria-hidden />
+                              Pick a release…
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled={refreshing} onSelect={() => refreshMovies([row.id])}>
+                              <RefreshCw aria-hidden />
+                              Refresh &amp; scan
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => defer(() => openEditor([row.id], false, row.title))}>
+                              <Pencil aria-hidden />
+                              Edit…
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onSelect={() => defer(() => openDeleter([row]))}>
+                              <Trash2 aria-hidden />
+                              Delete…
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </RowMenu>
                     )}
                   </div>
                 </TableCell>
@@ -636,10 +540,14 @@ export function MoviesTable({
       </div>
 
       {isAdmin && editing && (
-        <MovieEditDialog
+        <LibraryEditDialog
           ids={editing.ids}
           title={editing.title}
+          noun={MOVIE}
+          max={MAX_EDIT_MOVIES}
           profiles={profiles}
+          buildPayload={(profileId, monitor) => buildEditPayload(editing.ids, profileId, monitor)}
+          submit={updateMovies}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />
@@ -667,31 +575,21 @@ export function MoviesTable({
         posterPreview.preview}
 
       {isAdmin && deleting && (
-        <MovieDeleteDialog
-          movies={deleting.movies}
+        <LibraryDeleteDialog
+          items={deleting.movies}
+          noun={MOVIE}
+          max={MAX_EDIT_MOVIES}
+          appName="Radarr"
+          exclusionLabel="Prevent Radarr from re-adding (add to import exclusions)"
+          submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>
+            removeMovies({ movieIds: ids, deleteFiles, addImportExclusion: addExclusion, confirmCount })
+          }
           onClose={() => setDeleting(null)}
           onDeleted={handleDeleted}
         />
       )}
 
-      {pages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center justify-between gap-2 text-sm">
-          <Button variant="outline" size="sm" disabled={current <= 1} onClick={() => setPage(current - 1)}>
-            Prev
-          </Button>
-          <span>
-            Page {current} of {pages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={current >= pages}
-            onClick={() => setPage(current + 1)}
-          >
-            Next
-          </Button>
-        </nav>
-      )}
+      <Pagination current={current} pages={pages} onPage={setPage} />
     </div>
   );
 }

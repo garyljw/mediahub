@@ -1,6 +1,6 @@
-// Pure selection and edit-payload logic for the TV table. Must not import from src/server at runtime.
+// Pure edit-payload logic for the TV table. Must not import from src/server at runtime.
 import type { SeriesEdit } from "@/server/arr/series";
-import type { MonitorChoice } from "@/components/movies/movie-edit";
+import type { MonitorChoice } from "@/components/library/edit";
 
 /** Largest bulk edit the server accepts (src/app/(app)/tv/actions.ts uses this same value). */
 export const MAX_EDIT_SERIES = 2000;
@@ -19,15 +19,4 @@ export function buildEditPayload(
   if (profileId !== null) edit.qualityProfileId = profileId;
   if (monitor !== "keep") edit.monitored = monitor === "monitored";
   return edit.qualityProfileId === undefined && edit.monitored === undefined ? null : edit;
-}
-
-/** Dialog title: the series' own title for a single edit, otherwise "Edit N series". */
-export function editTitle(seriesCount: number, seriesTitle?: string): string {
-  if (seriesTitle !== undefined) return seriesTitle;
-  return `Edit ${seriesCount} series`;
-}
-
-/** The brief status line after a successful edit. The word is the same in singular and plural. */
-export function updatedMessage(seriesCount: number): string {
-  return `Updated ${seriesCount} series`;
 }

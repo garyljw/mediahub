@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatCount, formatEta, formatSize } from "./movie-format";
+import { formatAdded, formatCount, formatEta, formatSize } from "./format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {

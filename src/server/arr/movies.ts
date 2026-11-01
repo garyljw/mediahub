@@ -1,7 +1,8 @@
 import "server-only";
 import { radarrClient } from "./client";
-import { ArrRequestError, arrRequest } from "./request";
-import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./poster";
+import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
+import { fetchPosterBytes } from "./poster";
+import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -27,24 +28,10 @@ export type MovieRow = {
   hasPoster: boolean;
 };
 
-export type QualityProfileOption = { id: number; name: string };
-
 function movieStatus(movie: MovieResource): MovieStatus {
   if (movie.hasFile) return "downloaded";
   if (movie.isAvailable) return "missing";
   return "unreleased";
-}
-
-/**
- * Profiles with an id and a name, as dropdown options. toMovieRows and listMovies both use this,
- * so the row labels and the filter options always agree on which profiles exist.
- */
-function usableProfiles(profiles: QualityProfileResource[]): QualityProfileOption[] {
-  const options: QualityProfileOption[] = [];
-  for (const profile of profiles) {
-    if (typeof profile.id === "number" && profile.name) options.push({ id: profile.id, name: profile.name });
-  }
-  return options;
 }
 
 /**
@@ -78,24 +65,6 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
   }
 
   return rows;
-}
-
-/** Runs a list request and checks the reply is a list. Exported for movie-add.ts and releases.ts. */
-export async function getList<T>(
-  label: string,
-  get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>,
-  options?: { timeoutMs?: number },
-): Promise<T[]> {
-  const data = await arrRequest(label, get, options);
-  if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`, "invalid");
-  return data;
-}
-
-/** Upstream profiles, reduced to usable options and sorted by name. Shared by listMovies and listQualityProfiles. */
-function sortedProfileOptions(profiles: QualityProfileResource[]): QualityProfileOption[] {
-  const options = usableProfiles(profiles);
-  options.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
-  return options;
 }
 
 async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
@@ -151,9 +120,6 @@ function movieDeleteBody(del: MovieDelete): MovieEditorResource {
   return { movieIds: del.movieIds, deleteFiles: del.deleteFiles, addImportExclusion: del.addImportExclusion };
 }
 
-/** Deleting many movies with their files can take a while on a NAS, so deletes get longer than the default. */
-export const DELETE_TIMEOUT_MS = 120_000;
-
 /** Deletes the given Radarr movies, optionally with their files and with an import exclusion. */
 export async function deleteMovies(del: MovieDelete): Promise<void> {
   const client = radarrClient();
@@ -193,19 +159,11 @@ const POSTER_FILENAME = "poster-250.jpg";
 /** Fetches Radarr's cached 250px poster for one movie as JPEG bytes. Only the fixed poster file is requested. */
 export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = radarrClient();
-  // The body is read inside the request callback, so the timeout covers it and read failures are
-  // reported like any other request failure. On an error response body is undefined (openapi-fetch
-  // has already consumed it), and arrRequest throws on the status.
-  const data = await arrRequest("Radarr poster", async (signal) => {
-    const { data: body, response } = await client.GET("/api/v3/mediacover/{movieId}/{filename}", {
+  return fetchPosterBytes("Radarr poster", (signal) =>
+    client.GET("/api/v3/mediacover/{movieId}/{filename}", {
       params: { path: { movieId, filename: POSTER_FILENAME } },
       parseAs: "stream",
       signal,
-    });
-    return { data: await readCapped(body, MAX_POSTER_BYTES), response };
-  });
-  if (!data || !isJpeg(data)) {
-    throw new ArrRequestError("Radarr poster response was not a usable image", "invalid");
-  }
-  return data;
+    }),
+  );
 }

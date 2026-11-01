@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_EDIT_SERIES, buildEditPayload, editTitle, updatedMessage } from "./series-edit";
+import { MAX_EDIT_SERIES, buildEditPayload } from "./series-edit";
 
 describe("buildEditPayload", () => {
   it("sends only the fields that were changed", () => {
@@ -33,20 +33,5 @@ describe("buildEditPayload", () => {
 
   it("matches the server's limit", () => {
     expect(MAX_EDIT_SERIES).toBe(2000);
-  });
-});
-
-describe("editTitle", () => {
-  it("uses the series title for a single edit and a count for a bulk edit", () => {
-    expect(editTitle(1, "Harbour Lights")).toBe("Harbour Lights");
-    expect(editTitle(1)).toBe("Edit 1 series");
-    expect(editTitle(3)).toBe("Edit 3 series");
-  });
-});
-
-describe("updatedMessage", () => {
-  it("uses the same word for one series and many", () => {
-    expect(updatedMessage(1)).toBe("Updated 1 series");
-    expect(updatedMessage(3)).toBe("Updated 3 series");
   });
 });

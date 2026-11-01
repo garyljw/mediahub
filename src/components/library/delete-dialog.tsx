@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { removeSeries } from "@/app/(app)/tv/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,23 +11,42 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { CONFIRM_WORD, canConfirmDelete } from "@/components/movies/movie-delete";
-import { MAX_EDIT_SERIES } from "./series-edit";
-import { confirmLabel, deleteTitle, listedSeries, type DeleteSeries } from "./series-delete";
-import { formatCount } from "@/components/movies/movie-format";
+import { CONFIRM_WORD, canConfirmDelete, confirmLabel, deleteTitle, listedItems, type DeleteItem } from "./delete";
+import { formatCount } from "./format";
+import type { Noun } from "./nouns";
+
+/** What the table sends to its server delete action. `ids` is the snapshot's ids; the server compares `confirmCount` with them. */
+export type DeleteRequest = { ids: number[]; deleteFiles: boolean; addExclusion: boolean; confirmCount: number };
+
+/** What a server delete action answers. */
+export type DeleteOutcome = { ok: true; deleted: number } | { ok: false; error: string };
 
 /**
- * Deletes the given series from Sonarr (admin only). `series` is the snapshot taken when the dialog
- * opened, so the titles shown and the ids sent are the same set. Mounted only while open.
+ * Deletes the given movies or series from their Arr (admin only). `items` is the snapshot taken when the dialog
+ * opened, so the titles shown and the ids sent are the same set. Mounted only while open. `appName` and
+ * `exclusionLabel` are the words that differ between Radarr and Sonarr.
  */
-export function SeriesDeleteDialog({
-  series,
+export function LibraryDeleteDialog({
+  items,
+  noun,
+  max,
+  appName,
+  exclusionLabel,
+  submit,
   onClose,
   onDeleted,
 }: {
-  series: (DeleteSeries & { id: number })[];
+  items: (DeleteItem & { id: number })[];
+  noun: Noun;
+  /** The most rows one delete may remove. The server refuses more than this. */
+  max: number;
+  /** "Radarr" or "Sonarr", named in the line that says what is removed. */
+  appName: string;
+  /** The label of the checkbox that adds an import exclusion. */
+  exclusionLabel: string;
+  submit: (request: DeleteRequest) => Promise<DeleteOutcome>;
   onClose: () => void;
-  onDeleted: (seriesCount: number) => void;
+  onDeleted: (count: number) => void;
 }) {
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [addExclusion, setAddExclusion] = useState(false);
@@ -40,22 +58,17 @@ export function SeriesDeleteDialog({
   const typedId = useId();
   const errorId = useId();
 
-  const ids = series.map((entry) => entry.id);
-  const list = listedSeries(series);
-  const tooMany = ids.length > MAX_EDIT_SERIES;
+  const ids = items.map((item) => item.id);
+  const list = listedItems(items);
+  const tooMany = ids.length > max;
   const confirmEnabled = !pending && !tooMany && canConfirmDelete(deleteFiles, typed);
 
   function confirm() {
     if (!confirmEnabled) return;
     setError(null);
     startTransition(async () => {
-      // confirmCount is the snapshot's size. The server refuses the delete if its unique id count differs (it compares counts, not which series).
-      const result = await removeSeries({
-        seriesIds: ids,
-        deleteFiles,
-        addImportListExclusion: addExclusion,
-        confirmCount: ids.length,
-      });
+      // confirmCount is the snapshot's size. The server refuses the delete if its unique id count differs (it compares counts, not which rows).
+      const result = await submit({ ids, deleteFiles, addExclusion, confirmCount: ids.length });
       if (result.ok) onDeleted(result.deleted);
       else setError(result.error);
     });
@@ -71,8 +84,8 @@ export function SeriesDeleteDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{deleteTitle(series)}</DialogTitle>
-          <DialogDescription>The selected series are removed from Sonarr.</DialogDescription>
+          <DialogTitle>{deleteTitle(items, noun)}</DialogTitle>
+          <DialogDescription>The selected {noun.many} are removed from {appName}.</DialogDescription>
         </DialogHeader>
 
         <form
@@ -84,7 +97,7 @@ export function SeriesDeleteDialog({
         >
           <ul className="max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-sm">
             {list.shown.map((label, index) => (
-              // Index key: two different series can share a title and year, so the label alone isn't unique.
+              // Index key: two different rows can share a title and year, so the label alone isn't unique.
               <li key={index}>{label}</li>
             ))}
             {list.more && <li className="list-none pl-0 text-muted-foreground">{list.more}</li>}
@@ -104,7 +117,7 @@ export function SeriesDeleteDialog({
                 disabled={pending}
                 className="mt-0.5 size-4 accent-primary"
               />
-              <span>Also delete the series files from disk</span>
+              <span>Also delete the {noun.one} files from disk</span>
             </label>
 
             {deleteFiles && (
@@ -136,12 +149,12 @@ export function SeriesDeleteDialog({
               disabled={pending}
               className="mt-0.5 size-4 accent-primary"
             />
-            <span>Prevent this series from being re-added by import lists</span>
+            <span>{exclusionLabel}</span>
           </label>
 
           {tooMany && (
             <p role="alert" className="text-sm text-destructive">
-              Select at most {formatCount(MAX_EDIT_SERIES)} series per delete.
+              Select at most {formatCount(max)} {noun.many} per delete.
             </p>
           )}
           {error && (
@@ -155,7 +168,7 @@ export function SeriesDeleteDialog({
               Cancel
             </Button>
             <Button type="submit" variant="destructive" disabled={!confirmEnabled} aria-busy={pending}>
-              {pending ? "Deleting…" : confirmLabel(ids.length, deleteFiles)}
+              {pending ? "Deleting…" : confirmLabel(ids.length, deleteFiles, noun)}
             </Button>
           </DialogFooter>
         </form>

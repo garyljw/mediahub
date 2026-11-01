@@ -1,8 +1,7 @@
 import "server-only";
 import { radarrClient } from "./client";
-import { getList } from "./movies";
 import { MAX_POSTER_BYTES, isJpeg, readCapped } from "./poster";
-import { ArrRequestError, arrRequest } from "./request";
+import { ArrRequestError, arrRequest, getList } from "./request";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];

@@ -47,6 +47,20 @@ export async function arrRequest<T>(
   return result.data;
 }
 
+/** Runs a list request and checks the reply is a list. Shared by the Radarr and Sonarr modules. */
+export async function getList<T>(
+  label: string,
+  get: (signal: AbortSignal) => Promise<{ data?: T[]; response: Response }>,
+  options?: { timeoutMs?: number },
+): Promise<T[]> {
+  const data = await arrRequest(label, get, options);
+  if (!Array.isArray(data)) throw new ArrRequestError(`${label} response was not a list`, "invalid");
+  return data;
+}
+
+/** Deleting many movies with their files can take a while on a NAS, so deletes get longer than the default. */
+export const DELETE_TIMEOUT_MS = 120_000;
+
 const FAILURE_TEXT: Record<Exclude<ArrFailureKind, "http">, string> = {
   timeout: "timed out",
   invalid: "invalid response",

@@ -1,6 +1,6 @@
 // Pure display logic for the Activity column. Must not import from src/server at runtime.
 import type { ActivityState, MovieActivity } from "@/server/arr/activity";
-import { formatEta } from "./movie-format";
+import { formatEta } from "@/components/library/format";
 
 /** How often the browser asks for queue state, while the tab is visible. */
 export const ACTIVITY_POLL_MS = 10_000;
