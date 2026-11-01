@@ -43,16 +43,18 @@ export function usePosterPreview<K extends string | number>() {
           setActive(null);
           return;
         }
-        // A row can mark a wider element (e.g. a title cell with a link) with data-poster-anchor, so the
-        // preview opens beside it instead of covering the title. Vertically it stays centred on the thumbnail.
+        // A row can mark its title cell with data-poster-anchor when the title is a link. The preview then
+        // opens left of the thumbnail, so it never covers the link, and falls back to the right of the whole
+        // cell when the left has no room. Vertically it stays centred on the thumbnail.
         const thumbRect = thumb.getBoundingClientRect();
         const anchor = event.currentTarget.querySelector<HTMLElement>("[data-poster-anchor]");
-        const anchorRect = anchor?.getBoundingClientRect() ?? thumbRect;
-        const rect = { top: thumbRect.top, height: thumbRect.height, left: anchorRect.left, right: anchorRect.right };
+        const rect = anchor
+          ? { top: thumbRect.top, height: thumbRect.height, left: thumbRect.left, right: anchor.getBoundingClientRect().right }
+          : thumbRect;
         const position = previewPosition(rect, {
           width: window.innerWidth,
           height: window.innerHeight,
-        });
+        }, anchor ? "left" : "right");
         setActive({ key, src, ...position });
       },
       onPointerLeave() {

@@ -5,14 +5,24 @@ const MARGIN = 8;
 
 export type Rect = { top: number; left: number; right: number; height: number };
 
-/** Where the fixed-position preview goes: right of the thumbnail, vertically centred on it, kept inside the viewport. */
+/**
+ * Where the fixed-position preview goes: beside the thumbnail, vertically centred on it, kept inside the viewport.
+ * By default it opens on the right and flips left when there is no room. With side "left" it opens on the left
+ * and flips right when there is no room.
+ */
 export function previewPosition(
   thumb: Rect,
   viewport: { width: number; height: number },
+  side: "right" | "left" = "right",
 ): { top: number; left: number } {
-  // Flip to the left of the thumbnail when the right side has no room.
-  let left = thumb.right + GAP;
-  if (left + PREVIEW_WIDTH > viewport.width - MARGIN) left = thumb.left - GAP - PREVIEW_WIDTH;
+  const rightOf = thumb.right + GAP;
+  const leftOf = thumb.left - GAP - PREVIEW_WIDTH;
+  let left: number;
+  if (side === "left") {
+    left = leftOf >= MARGIN ? leftOf : rightOf;
+  } else {
+    left = rightOf + PREVIEW_WIDTH > viewport.width - MARGIN ? leftOf : rightOf;
+  }
   left = Math.max(left, MARGIN);
 
   // On a viewport shorter than the preview, pin to the top margin rather than clamp backwards.
