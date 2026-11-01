@@ -196,6 +196,8 @@ describe("server actions in src/", () => {
     expect(actions.length).toBeGreaterThanOrEqual(2);
     expect(actions).toContain("app/(app)/movies/actions.ts#updateMovies");
     expect(actions).toContain("app/(app)/movies/actions.ts#removeMovies");
+    expect(actions).toContain("app/(app)/tv/actions.ts#updateSeries");
+    expect(actions).toContain("app/(app)/tv/actions.ts#removeSeries");
     expect(actions).toContain("app/(app)/actions.ts#signOut");
   });
 
