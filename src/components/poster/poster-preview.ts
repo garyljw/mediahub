@@ -23,7 +23,8 @@ export function previewPosition(
   } else {
     left = rightOf + PREVIEW_WIDTH > viewport.width - MARGIN ? leftOf : rightOf;
   }
-  left = Math.max(left, MARGIN);
+  // Keep it on screen whichever side was picked. On a viewport narrower than the preview, the left margin wins.
+  left = Math.max(Math.min(left, viewport.width - MARGIN - PREVIEW_WIDTH), MARGIN);
 
   // On a viewport shorter than the preview, pin to the top margin rather than clamp backwards.
   const centred = thumb.top + thumb.height / 2 - PREVIEW_HEIGHT / 2;

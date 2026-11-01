@@ -21,6 +21,10 @@ export type EpisodeRow = {
   /** The local date it aired, "YYYY-MM-DD", or null. */
   airDate: string | null;
   status: EpisodeStatus;
+  /**
+   * The episode's own flag, as Sonarr sends it. It ignores series and season monitoring, so it doesn't say
+   * whether Sonarr will search; `status` does. Kept for the per-episode monitor toggle.
+   */
   monitored: boolean;
   /** The file's quality name when the episode has a file, otherwise null. */
   quality: string | null;

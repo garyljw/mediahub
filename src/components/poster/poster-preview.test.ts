@@ -37,4 +37,9 @@ describe("previewPosition", () => {
     const wide = { top: 300, left: 100, right: 400, height: 36 };
     expect(previewPosition(wide, viewport, "left").left).toBe(408);
   });
+
+  it("stays inside the viewport when neither side has room", () => {
+    const wide = { top: 300, left: 100, right: 900, height: 36 };
+    expect(previewPosition(wide, viewport, "left").left).toBe(1000 - 8 - PREVIEW_WIDTH);
+  });
 });
