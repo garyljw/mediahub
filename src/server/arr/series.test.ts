@@ -39,6 +39,8 @@ import {
   getSeriesPoster,
   listSeries,
   listSeriesQualityProfiles,
+  refreshSeries,
+  searchSeriesReleases,
   toSeriesRows,
 } from "./series";
 
@@ -577,5 +579,77 @@ describe("getSeriesPoster", () => {
     expect(error.message).toBe("Sonarr poster request failed: HTTP 404");
     expect(error.message).not.toContain("sonarr.test");
     expect(error.message).not.toContain(FAKE_KEY);
+  });
+});
+
+describe("searchSeriesReleases", () => {
+  function serveCommand(respond: () => Response) {
+    fetchMock.mockImplementation(async () => respond());
+  }
+
+  it("POSTs the SeriesSearch command with the key in a header and exactly name and seriesId", async () => {
+    serveCommand(() => Response.json({ id: 1, name: "SeriesSearch" }));
+
+    await searchSeriesReleases(42);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("POST");
+    expect(new URL(req.url).pathname).toBe("/api/v3/command");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toStrictEqual({ name: "SeriesSearch", seriesId: 42 });
+  });
+
+  it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
+    serveCommand(() => new Response(`boom ${FAKE_KEY} at http://sonarr.test:8989`, { status: 500 }));
+
+    const error = await rejectionOf(searchSeriesReleases(1));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Sonarr series search command request failed: HTTP 500");
+    expect(error.message).not.toContain(FAKE_KEY);
+    expect(error.message).not.toContain("sonarr.test");
+  });
+});
+
+describe("refreshSeries", () => {
+  function serveCommand(respond: () => Response) {
+    fetchMock.mockImplementation(async () => respond());
+  }
+
+  it("POSTs the RefreshSeries command with the key in a header and exactly name and seriesIds", async () => {
+    serveCommand(() => Response.json({ id: 1, name: "RefreshSeries" }));
+
+    await refreshSeries([3, 5]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("POST");
+    expect(new URL(req.url).pathname).toBe("/api/v3/command");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toStrictEqual({ name: "RefreshSeries", seriesIds: [3, 5] });
+  });
+
+  it("refuses an empty list before making any request, since Sonarr would refresh the whole library", async () => {
+    const error = await rejectionOf(refreshSeries([]));
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ArrRequestError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
+    serveCommand(() => new Response(`boom ${FAKE_KEY} at http://sonarr.test:8989`, { status: 500 }));
+
+    const error = await rejectionOf(refreshSeries([1]));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Sonarr series refresh command request failed: HTTP 500");
+    expect(error.message).not.toContain(FAKE_KEY);
+    expect(error.message).not.toContain("sonarr.test");
   });
 });

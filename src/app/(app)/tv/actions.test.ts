@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   lookupSeries: vi.fn(),
   addSeries: vi.fn(),
   listSeriesRootFolders: vi.fn(),
+  searchSeriesReleases: vi.fn(),
+  refreshSeries: vi.fn(),
 }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
@@ -28,6 +30,8 @@ vi.mock("@/server/arr/series", () => ({
   editSeries: mocks.editSeries,
   deleteSeries: mocks.deleteSeries,
   listSeriesQualityProfiles: mocks.listSeriesQualityProfiles,
+  searchSeriesReleases: mocks.searchSeriesReleases,
+  refreshSeries: mocks.refreshSeries,
 }));
 
 vi.mock("@/server/arr/series-add", () => {
@@ -48,8 +52,17 @@ vi.mock("@/server/arr/series-add", () => {
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
-import { addLibrarySeries, removeSeries, searchSeries, updateSeries } from "./actions";
+import {
+  addLibrarySeries,
+  refreshLibrarySeries,
+  removeSeries,
+  searchLibrarySeries,
+  searchSeries,
+  updateSeries,
+} from "./actions";
 import { MAX_EDIT_SERIES } from "@/components/tv/series-edit";
+import { MAX_REFRESH_SERIES } from "@/components/tv/series-refresh";
+import { MAX_SEARCH_SERIES } from "@/components/tv/series-search";
 
 const DENIED = "You don't have permission to edit series.";
 const DELETE_DENIED = "You don't have permission to delete series.";
@@ -59,6 +72,8 @@ beforeEach(() => {
   mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
   mocks.editSeries.mockResolvedValue(undefined);
   mocks.deleteSeries.mockResolvedValue(undefined);
+  mocks.searchSeriesReleases.mockResolvedValue(undefined);
+  mocks.refreshSeries.mockResolvedValue(undefined);
   mocks.listSeriesQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
@@ -540,5 +555,191 @@ describe("addLibrarySeries", () => {
       mocks.addSeries.mockRejectedValue(new Error("unexpected"));
       await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("unexpected");
     });
+  });
+});
+
+describe("searchLibrarySeries", () => {
+  const SEARCH_DENIED = "You don't have permission to search for series.";
+
+  it("allows both admin and requester", async () => {
+    await searchLibrarySeries({ seriesIds: [1] });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
+  });
+
+  it("rejects a signed-out caller and never calls Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await searchLibrarySeries({ seriesIds: [1] });
+    expect(result).toEqual({ ok: false, error: SEARCH_DENIED });
+    expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a non-authorization failure from the role check", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("db down"));
+    await expect(searchLibrarySeries({ seriesIds: [1] })).rejects.toThrow("db down");
+    expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no ids", { seriesIds: [] }],
+    ["too many ids", { seriesIds: Array.from({ length: MAX_SEARCH_SERIES + 1 }, (_, i) => i + 1) }],
+    ["a zero id", { seriesIds: [0] }],
+    ["a fractional id", { seriesIds: [1.5] }],
+    ["a string id", { seriesIds: ["1"] }],
+    ["an extra key", { seriesIds: [1], monitored: true }],
+    ["a missing list", {}],
+    ["null", null],
+  ])("rejects %s without calling Sonarr", async (_name, input) => {
+    const result = await searchLibrarySeries(input);
+    expect(result).toEqual({ ok: false, error: "Invalid search." });
+    expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+  });
+
+  it("accepts exactly MAX_SEARCH_SERIES ids", async () => {
+    const result = await searchLibrarySeries({ seriesIds: Array.from({ length: MAX_SEARCH_SERIES }, (_, i) => i + 1) });
+    expect(result).toEqual({ ok: true, searched: MAX_SEARCH_SERIES });
+  });
+
+  it("sends each id once, in order, and reports the unique count", async () => {
+    const result = await searchLibrarySeries({ seriesIds: [4, 5, 4] });
+    expect(mocks.searchSeriesReleases.mock.calls).toEqual([[4], [5]]);
+    expect(result).toEqual({ ok: true, searched: 2 });
+  });
+
+  it("does not re-render the page, since Sonarr only queues the search", async () => {
+    await searchLibrarySeries({ seriesIds: [1] });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the timeout message when the first search times out", async () => {
+    mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("timed out", "timeout"));
+    const result = await searchLibrarySeries({ seriesIds: [1, 2] });
+    expect(result).toEqual({
+      ok: false,
+      error: "Sonarr took too long to answer. The search may still have started, so check Sonarr before trying again.",
+    });
+    expect(mocks.searchSeriesReleases).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the try-again message when the first search fails without a timeout, and logs only the safe message", async () => {
+    mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr series search command request failed: HTTP 500"));
+    const result = await searchLibrarySeries({ seriesIds: [1, 2] });
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't start the search. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series search now: Sonarr series search command request failed: HTTP 500");
+    expect(mocks.searchSeriesReleases).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports how far it got when a later search fails, and stops before the rest", async () => {
+    mocks.searchSeriesReleases
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new ArrRequestError("Sonarr series search command request failed: network error"));
+    const result = await searchLibrarySeries({ seriesIds: [1, 2, 3, 4] });
+    expect(result).toEqual({
+      ok: false,
+      error: "Sonarr started searches for 2 of 4 series, then the next one failed. Those are now deselected; check Sonarr before searching the rest.",
+      startedIds: [1, 2],
+    });
+    expect(mocks.searchSeriesReleases.mock.calls).toEqual([[1], [2], [3]]);
+  });
+
+  it("says a later search may have started when it times out", async () => {
+    mocks.searchSeriesReleases
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new ArrRequestError("timed out", "timeout"));
+    const result = await searchLibrarySeries({ seriesIds: [7, 8, 9] });
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "Sonarr started searches for 1 of 3 series, then took too long on the next one, which may also have started. Those are now deselected; check Sonarr before searching the rest.",
+      startedIds: [7],
+    });
+    expect(mocks.searchSeriesReleases.mock.calls).toEqual([[7], [8]]);
+  });
+
+  it("rethrows errors that are not Sonarr request failures", async () => {
+    mocks.searchSeriesReleases.mockRejectedValue(new Error("config broken"));
+    await expect(searchLibrarySeries({ seriesIds: [1] })).rejects.toThrow("config broken");
+  });
+});
+
+describe("refreshLibrarySeries", () => {
+  const REFRESH_DENIED = "You don't have permission to refresh series.";
+
+  it("checks for the admin role only", async () => {
+    await refreshLibrarySeries({ seriesIds: [1] });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  });
+
+  it("rejects a requester and never calls Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+    const result = await refreshLibrarySeries({ seriesIds: [1] });
+    expect(result).toEqual({ ok: false, error: REFRESH_DENIED });
+    expect(mocks.refreshSeries).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    const result = await refreshLibrarySeries({ seriesIds: [1] });
+    expect(result).toEqual({ ok: false, error: REFRESH_DENIED });
+    expect(mocks.refreshSeries).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a non-authorization failure from the role check", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("db down"));
+    await expect(refreshLibrarySeries({ seriesIds: [1] })).rejects.toThrow("db down");
+    expect(mocks.refreshSeries).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no ids", { seriesIds: [] }],
+    ["too many ids", { seriesIds: Array.from({ length: MAX_REFRESH_SERIES + 1 }, (_, i) => i + 1) }],
+    ["a zero id", { seriesIds: [0] }],
+    ["a fractional id", { seriesIds: [1.5] }],
+    ["a string id", { seriesIds: ["1"] }],
+    ["an extra key", { seriesIds: [1], monitored: true }],
+    ["a missing list", {}],
+    ["null", null],
+  ])("rejects %s without calling Sonarr", async (_name, input) => {
+    const result = await refreshLibrarySeries(input);
+    expect(result).toEqual({ ok: false, error: "Invalid refresh." });
+    expect(mocks.refreshSeries).not.toHaveBeenCalled();
+  });
+
+  it("accepts exactly MAX_REFRESH_SERIES ids", async () => {
+    const seriesIds = Array.from({ length: MAX_REFRESH_SERIES }, (_, i) => i + 1);
+    const result = await refreshLibrarySeries({ seriesIds });
+    expect(result).toEqual({ ok: true, refreshed: MAX_REFRESH_SERIES });
+  });
+
+  it("passes the deduplicated list in one call and reports the unique count", async () => {
+    const result = await refreshLibrarySeries({ seriesIds: [4, 5, 4, 3] });
+    expect(mocks.refreshSeries.mock.calls).toEqual([[[4, 5, 3]]]);
+    expect(result).toEqual({ ok: true, refreshed: 3 });
+  });
+
+  it("does not re-render the page, since Sonarr only queues the refresh", async () => {
+    await refreshLibrarySeries({ seriesIds: [1] });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the timeout message after a timeout", async () => {
+    mocks.refreshSeries.mockRejectedValue(new ArrRequestError("timed out", "timeout"));
+    const result = await refreshLibrarySeries({ seriesIds: [1] });
+    expect(result).toEqual({
+      ok: false,
+      error: "Sonarr took too long to answer. The refresh may still have started, so check Sonarr before trying again.",
+    });
+  });
+
+  it("gives a friendly error and logs only the safe message when Sonarr fails", async () => {
+    mocks.refreshSeries.mockRejectedValue(new ArrRequestError("Sonarr series refresh command request failed: HTTP 500"));
+    const result = await refreshLibrarySeries({ seriesIds: [1] });
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't start the refresh. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series refresh: Sonarr series refresh command request failed: HTTP 500");
+  });
+
+  it("rethrows errors that are not Sonarr request failures", async () => {
+    mocks.refreshSeries.mockRejectedValue(new Error("config broken"));
+    await expect(refreshLibrarySeries({ seriesIds: [1] })).rejects.toThrow("config broken");
   });
 });
