@@ -32,9 +32,17 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 ## Workflow (Opus or Sonnet plans, Haiku codes)
 1. The planner writes a scoped task brief with acceptance criteria. Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
    - If a task needs Opus planning and this session isn't on Opus, tell Gary to run `/model opus` before planning starts. Don't plan in a subagent: planning needs this conversation.
-   - A session that isn't on Opus runs the step 3 reviews in an Opus agent (`model: "opus"`, `effort: "high"`), and checks that the agent's report shows each review actually ran.
+   - A session that isn't on Opus runs the step 3 reviews in an Opus agent (`model: "opus"`, `effort: "high"`; that is the agent's reasoning effort, and `/code-review` still runs at `medium`), and checks that the agent's report shows each review actually ran.
 2. A Haiku agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough.
-3. Opus runs `/code-review` on every change. It also runs `/security-review` on anything touching auth, roles, `src/server/**`, route handlers, env/secrets, headers, CI workflows or the Dockerfile. Reviews follow [REVIEW.md](REVIEW.md), which covers the round cap, diff-only re-review and severity tags.
+3. Opus runs `/code-review` at `medium` on every change. It also runs `/security-review` on any change that creates, edits or loosens a security boundary:
+   - login, sessions, user management or the Better Auth config;
+   - adding a server action or route handler, or changing what an existing one accepts, writes or returns;
+   - anything that changes what a role may do;
+   - sending upstream fields to the browser that weren't sent before;
+   - the Arr client (`src/server/arr/client.ts`, `request.ts`);
+   - env/secrets, security headers, `src/proxy.ts`, `next.config.ts`, DB migrations, new dependencies, CI workflows, the Dockerfile.
+
+   When unsure, run it. Other High-tier changes skip it, such as a page or merge logic that reuses existing server functions and sends no new upstream fields to the browser. For those, `/code-review` checks the leak, access and proxy failures in REVIEW.md. Reviews follow [REVIEW.md](REVIEW.md), which covers the round cap, diff-only re-review and severity tags.
    - Skip both reviews when a change touches only Markdown files, unless one of them sets rules for how changes are made or reviewed: `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, anything under `.github/` or `.claude/`. Those still get `/code-review`. CI still has to pass.
 4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main` using the PR template.
 5. Claude runs the rest of the git flow: wait for green CI, squash-merge, switch back to an updated `main`, delete the branch. This applies to both risk tiers. Never merge with failing CI or unresolved Important findings, never use `--no-verify`, never force-push.
@@ -42,9 +50,9 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 7. If a review finding comes up more than once, fix it at the source with a lint rule, a CLAUDE.md line or a REVIEW.md line, not just in the code.
 
 ## Risk tiers (set by what the change touches, not by who wrote it)
-- **High:** auth, roles, `src/server/**`, route handlers, env/secrets, headers, `.github/workflows/**`, the Dockerfile. Needs `/security-review` as well as `/code-review`, and a walkthrough for Gary after merge.
+- **High:** auth, roles, `src/server/**`, route handlers, env/secrets, headers, `.github/workflows/**`, the Dockerfile. Needs `/code-review`, a `/security-review` when step 3 calls for one, and a walkthrough for Gary after merge.
 - **Low:** everything else, e.g. UI, docs, copy, tests. Can merge on green CI plus clean reviews.
-- Gary has chosen post-merge walkthroughs over pre-merge diff reads, because MediaHub only runs on his LAN. He can read any merged diff and ask for a revert.
+- MediaHub only runs on Gary's LAN and is never exposed to the internet. So security reviews target boundary changes, not every High change, and Gary has chosen post-merge walkthroughs over pre-merge diff reads (he can read any merged diff and ask for a revert). The LAN threats still apply: other devices on the network, websites open in the browser sending requests to it (CSRF, DNS rebinding), and Arr API keys that give full control of Radarr and Sonarr.
 
 ## Commands
 `npm run dev` · `npm run build` · `npm run lint` · `npm run typecheck` · `npm test`
