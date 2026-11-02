@@ -1,15 +1,38 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { ArrRequestError, arrRequest, getList } from "./request";
-import { releaseCache } from "./release-cache";
-import type { components as RadarrComponents } from "./generated/radarr";
+import { releaseCache, type TakenRelease } from "./release-cache";
 
-type ReleaseResource = RadarrComponents["schemas"]["ReleaseResource"];
+/**
+ * The release fields this file reads. Radarr's and Sonarr's generated ReleaseResource types both satisfy it, so
+ * nothing here is tied to one app. The TV-only fields are optional, so a Radarr release simply doesn't have them.
+ */
+export type ReleaseLike = {
+  guid?: string | null;
+  title?: string | null;
+  indexerId?: number;
+  indexer?: string | null;
+  protocol?: "unknown" | "usenet" | "torrent";
+  quality?: { quality?: { name?: string | null } };
+  customFormats?: { name?: string | null }[] | null;
+  customFormatScore?: number;
+  size?: number;
+  ageHours?: number;
+  seeders?: number | null;
+  leechers?: number | null;
+  languages?: { name?: string | null }[] | null;
+  approved?: boolean;
+  rejections?: string[] | null;
+  downloadAllowed?: boolean;
+  fullSeason?: boolean;
+  mappedSeasonNumber?: number | null;
+  mappedEpisodeNumbers?: number[] | null;
+};
 
 /** One release, reduced to what the pick dialog shows. No guid or indexer URL ever reaches the browser. */
 export type ReleaseRow = {
   /**
-   * The opaque grab token, or null when Radarr doesn't allow a grab (or doesn't say). With no token there
+   * The opaque grab token, or null when the app doesn't allow a grab (or doesn't say). With no token there
    * is nothing the browser could send, so the server enforces it, not just the disabled button.
    */
   token: string | null;
@@ -27,34 +50,37 @@ export type ReleaseRow = {
   /** Torrents only. */
   leechers: number | null;
   languages: string[];
-  /** True when Radarr would grab the release on its own. */
+  /** True when the app would grab the release on its own. */
   approved: boolean;
-  /** Why Radarr wouldn't grab it. Capped at MAX_REJECTIONS. */
+  /** Why the app wouldn't grab it. Capped at MAX_REJECTIONS. */
   rejections: string[];
+  /** TV only: "Season pack", "S02E05" or "S02E05-E06". Null for movies and for releases Sonarr hasn't mapped. */
+  episodes: string | null;
 };
 
 /**
- * Most releases returned per protocol for one search. Radarr can return hundreds; the dialog only needs the
+ * Most releases returned per protocol for one search. The app can return hundreds; the dialog only needs the
  * best ones. The cap is per protocol, so filtering the dialog to torrents (or Usenet) still shows the best
- * torrents even when Radarr ranks hundreds of Usenet releases above them.
+ * torrents even when the app ranks hundreds of Usenet releases above them.
  */
 export const MAX_RELEASES_PER_PROTOCOL = 200;
 
-/** How many usable releases Radarr found: all of them, and per protocol. Unknown-protocol releases count only in `all`. */
+/** How many usable releases the app found: all of them, and per protocol. Unknown-protocol releases count only in `all`. */
 export type ReleaseTotals = { all: number; usenet: number; torrent: number };
 /** Longest title sent to the browser, in code points. Longer titles are cut and end with an ellipsis. */
 const MAX_TITLE = 300;
 /** Most rejection reasons shown per release. */
 const MAX_REJECTIONS = 10;
 
-/** Radarr waits on every indexer before it answers an interactive search. */
+/** The app waits on every indexer before it answers an interactive search. */
 export const RELEASE_SEARCH_TIMEOUT_MS = 90_000;
-/** Radarr fetches the file from the indexer and hands it to the download client before it answers. */
+/** The app fetches the file from the indexer and hands it to the download client before it answers. */
 export const RELEASE_GRAB_TIMEOUT_MS = 60_000;
 
 /**
- * Why a grab can't go ahead: "expired" when the token is unknown, already used or past its lifetime (Radarr
- * is not asked), or when Radarr answers 404 because it no longer has the release. Mapped to a message in the action.
+ * Why a grab can't go ahead: "expired" when the token is unknown, already used or past its lifetime (the app
+ * is not asked), or when the app answers 404. For Radarr a 404 means it no longer has the release. Sonarr also
+ * answers 404 when it can't match the release to episodes. Mapped to a message in the action.
  */
 export class ReleaseGrabError extends Error {
   constructor(readonly reason: "expired") {
@@ -63,7 +89,7 @@ export class ReleaseGrabError extends Error {
   }
 }
 
-/** The text as Radarr sent it, or null when it is missing or blank. */
+/** The text as the app sent it, or null when it is missing or blank. */
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
@@ -88,15 +114,49 @@ function protocolOf(value: unknown): ReleaseRow["protocol"] {
   return "unknown";
 }
 
+/** At least two digits: 5 → "05", 105 → "105". Same rule as episodeCode in src/components/library/release.ts. */
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** A whole number at least `min`, or null. */
+function wholeAtLeast(value: unknown, min: number): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= min ? value : null;
+}
+
 /**
- * Pure: maps Radarr's releases to dialog rows, in upstream order. Radarr returns them best-first by its
- * own ranking, and that order is kept. Skips a release without a guid, without a positive indexer id, or
- * without a title. `totals` counts every usable release, and `rows` holds the first MAX_RELEASES_PER_PROTOCOL
- * of each protocol (unknown is its own group), still in Radarr's order.
- * `makeToken` runs only for returned rows that Radarr allows to be grabbed.
+ * Pure: the "episodes" label for a TV release, or null. "Season pack" for a full-season release. Otherwise
+ * "S02E05", "S02E05-E06" for consecutive episodes or "S02E01, E03" otherwise, from Sonarr's mapped season and
+ * episode numbers, sorted and without duplicates. Null when the season
+ * isn't a whole number, when there are no episode numbers, or when any episode number isn't a positive whole
+ * number: a label is only shown when the whole mapping is usable.
+ */
+export function episodesLabel(release: Pick<ReleaseLike, "fullSeason" | "mappedSeasonNumber" | "mappedEpisodeNumbers">): string | null {
+  if (release.fullSeason === true) return "Season pack";
+  const season = wholeAtLeast(release.mappedSeasonNumber, 0);
+  const numbers = release.mappedEpisodeNumbers ?? [];
+  if (season === null || numbers.length === 0) return null;
+  const checked = numbers.map((n) => wholeAtLeast(n, 1));
+  if (checked.some((n) => n === null)) return null;
+  const episodes = [...new Set(checked as number[])].sort((a, b) => a - b);
+  const first = episodes[0];
+  const last = episodes[episodes.length - 1];
+  const code = `S${pad2(season)}E${pad2(first)}`;
+  if (first === last) return code;
+  // Sorted with no duplicates, so the list is consecutive exactly when it spans its own length.
+  if (last - first === episodes.length - 1) return `${code}-E${pad2(last)}`;
+  return [code, ...episodes.slice(1).map((n) => `E${pad2(n)}`)].join(", ");
+}
+
+/**
+ * Pure: maps the app's releases to dialog rows, in upstream order. The app returns them best-first by its own
+ * ranking, and that order is kept. Skips a release without a guid, without a positive indexer id, or without a
+ * title. `totals` counts every usable release, and `rows` holds the first MAX_RELEASES_PER_PROTOCOL of each
+ * protocol (unknown is its own group), still in the app's order.
+ * `makeToken` runs only for returned rows that the app allows to be grabbed.
  */
 export function toReleaseRows(
-  releases: ReleaseResource[],
+  releases: ReleaseLike[],
   makeToken: (key: { guid: string; indexerId: number; title: string }) => string,
 ): { rows: ReleaseRow[]; totals: ReleaseTotals } {
   const rows: ReleaseRow[] = [];
@@ -144,6 +204,7 @@ export function toReleaseRows(
       languages: names(release.languages),
       approved: release.approved === true,
       rejections,
+      episodes: episodesLabel(release),
     });
   }
 
@@ -161,16 +222,34 @@ export async function searchReleases(movieId: number): Promise<{ rows: ReleaseRo
     (signal) => client.GET("/api/v3/release", { params: { query: { movieId } }, signal }),
     { timeoutMs: RELEASE_SEARCH_TIMEOUT_MS },
   );
-  return toReleaseRows(releases, (key) => releaseCache.put(key));
+  return toReleaseRows(releases, (key) => releaseCache.put({ app: "radarr", ...key }));
 }
 
 /**
- * True when Radarr answered a grab with a refusal (a 4xx), so nothing was grabbed and a retry is safe. A 5xx,
+ * True when the app answered a grab with a refusal (a 4xx), so nothing was grabbed and a retry is safe. A 5xx,
  * timeout, network error or unreadable reply may come after the release reached the download client. The
- * grab action uses this too, so the token rule and the message the admin sees always agree.
+ * grab actions use this too, so the token rule and the message the admin sees always agree.
  */
 export function grabWasRefused(error: ArrRequestError): boolean {
   return error.kind === "http" && error.status !== undefined && error.status >= 400 && error.status < 500;
+}
+
+/**
+ * Applies the token rule to a grab that failed, then rethrows. Only a refusal (a 4xx) restores the token for a
+ * retry. A 404 means the app no longer has the release, so a retry would fail the same way: that throws "expired"
+ * and doesn't restore. Anything else may mean the release already reached the download client, so it isn't restored.
+ * Shared by the Radarr and Sonarr grabs.
+ */
+export function failGrab(error: unknown, taken: Pick<TakenRelease, "restore">): never {
+  if (error instanceof ArrRequestError && grabWasRefused(error)) {
+    // 404: the app no longer has this release, so a retry would fail the same way. Don't restore it.
+    if (error.status === 404) throw new ReleaseGrabError("expired");
+    // Any other refusal (409 means the indexer wouldn't hand the file over) grabbed nothing, so allow a retry.
+    taken.restore();
+  }
+  // Anything else may mean the release already reached the download client. Don't restore: a retry could
+  // grab it twice.
+  throw error;
 }
 
 /**
@@ -180,7 +259,7 @@ export function grabWasRefused(error: ArrRequestError): boolean {
 export async function grabRelease(token: string): Promise<{ title: string }> {
   // Build the client first, so a config error does not use up the token.
   const client = radarrClient();
-  const taken = releaseCache.take(token);
+  const taken = releaseCache.take(token, "radarr");
   if (!taken) throw new ReleaseGrabError("expired");
   const { release } = taken;
 
@@ -190,15 +269,7 @@ export async function grabRelease(token: string): Promise<{ title: string }> {
       timeoutMs: RELEASE_GRAB_TIMEOUT_MS,
     });
   } catch (error) {
-    if (error instanceof ArrRequestError && grabWasRefused(error)) {
-      // 404: Radarr no longer has this release, so a retry would fail the same way. Don't restore it.
-      if (error.status === 404) throw new ReleaseGrabError("expired");
-      // Any other refusal (409 means the indexer wouldn't hand the file over) grabbed nothing, so allow a retry.
-      taken.restore();
-    }
-    // Anything else may mean the release already reached the download client. Don't restore: a retry could
-    // grab it twice.
-    throw error;
+    failGrab(error, taken);
   }
 
   return { title: release.title };

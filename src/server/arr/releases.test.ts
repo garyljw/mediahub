@@ -40,13 +40,14 @@ vi.mock("./release-cache", async () => {
   };
 });
 
-import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES_PER_PROTOCOL, type ReleaseRow } from "./releases";
+import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, episodesLabel, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES_PER_PROTOCOL, type ReleaseLike, type ReleaseRow } from "./releases";
 
 const ALLOWED_KEYS = [
   "ageHours",
   "approved",
   "customFormatScore",
   "customFormats",
+  "episodes",
   "indexer",
   "languages",
   "leechers",
@@ -124,6 +125,7 @@ describe("toReleaseRows", () => {
       languages: ["English"],
       approved: true,
       rejections: [],
+      episodes: null,
     });
   });
 
@@ -219,6 +221,59 @@ describe("toReleaseRows", () => {
     // Radarr's order is kept: the kept Usenet releases come first, then the torrents.
     expect(result.rows[0].title).toBe("U0");
     expect(result.rows[MAX_RELEASES_PER_PROTOCOL].title).toBe("T0");
+  });
+});
+
+describe("episodesLabel", () => {
+  it("labels a full-season release as a season pack, whatever its mapping says", () => {
+    expect(episodesLabel({ fullSeason: true, mappedSeasonNumber: 2, mappedEpisodeNumbers: [1, 2, 3] })).toBe("Season pack");
+  });
+
+  it("labels one mapped episode with a zero-padded season and episode", () => {
+    expect(episodesLabel({ fullSeason: false, mappedSeasonNumber: 2, mappedEpisodeNumbers: [5] })).toBe("S02E05");
+    expect(episodesLabel({ mappedSeasonNumber: 0, mappedEpisodeNumbers: [1] })).toBe("S00E01");
+    expect(episodesLabel({ mappedSeasonNumber: 12, mappedEpisodeNumbers: [105] })).toBe("S12E105");
+  });
+
+  it("labels a range from the first to the last mapped episode", () => {
+    expect(episodesLabel({ fullSeason: false, mappedSeasonNumber: 2, mappedEpisodeNumbers: [5, 6] })).toBe("S02E05-E06");
+    expect(episodesLabel({ mappedSeasonNumber: 1, mappedEpisodeNumbers: [9, 10, 11] })).toBe("S01E09-E11");
+  });
+
+  it("sorts the mapped episodes and lists them when they aren't consecutive", () => {
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [6, 5] })).toBe("S02E05-E06");
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [1, 3] })).toBe("S02E01, E03");
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [3, 1, 3, 2] })).toBe("S02E01-E03");
+  });
+
+  it("gives a single label when the mapped list repeats one episode", () => {
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [5, 5] })).toBe("S02E05");
+  });
+
+  it("returns null when the release has no usable mapping", () => {
+    expect(episodesLabel({})).toBeNull();
+    expect(episodesLabel({ fullSeason: false, mappedSeasonNumber: null, mappedEpisodeNumbers: [5] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: null })).toBeNull();
+  });
+
+  it("returns null when the season or any episode number is not a valid whole number", () => {
+    expect(episodesLabel({ mappedSeasonNumber: -1, mappedEpisodeNumbers: [1] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 1.5, mappedEpisodeNumbers: [1] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [0] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [5, -6] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [5, 6.5] })).toBeNull();
+    expect(episodesLabel({ mappedSeasonNumber: 2, mappedEpisodeNumbers: [5, Number.NaN] })).toBeNull();
+  });
+
+  it("gives Radarr releases no episodes label, since they carry no TV fields", () => {
+    expect(mapRows([release()]).rows[0].episodes).toBeNull();
+  });
+
+  it("takes the label from the release fields through toReleaseRows", () => {
+    const tv: ReleaseLike = { guid: "g", indexerId: 1, title: "Show.S02", fullSeason: true, mappedSeasonNumber: 2 };
+    const [row] = toReleaseRows([tv], () => "t").rows;
+    expect(row.episodes).toBe("Season pack");
   });
 });
 
@@ -380,6 +435,24 @@ describe("grabRelease", () => {
     expect(error).toBeInstanceOf(ReleaseGrabError);
     expect((error as ReleaseGrabError).reason).toBe("expired");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Sonarr token through the Radarr grab, without calling Radarr or using the token up", async () => {
+    const sonarrToken = testCache.current!.put({
+      app: "sonarr",
+      guid: "https://indexer.test/details/9",
+      indexerId: 1,
+      title: "Show.S01E01",
+      context: { seriesId: 3, episodeId: 9 },
+    });
+    serve({ grab: () => json({}) });
+
+    const error = await rejectionOf(grabRelease(sonarrToken));
+
+    expect(error).toBeInstanceOf(ReleaseGrabError);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Still there for Sonarr to take.
+    expect(testCache.current!.take(sonarrToken, "sonarr")?.release.guid).toBe("https://indexer.test/details/9");
   });
 
   it("lets a token work only once", async () => {

@@ -5,7 +5,17 @@ import { createReleaseCache, type CachedRelease } from "./release-cache";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function release(n: number): CachedRelease {
-  return { guid: `https://indexer.test/details/${n}`, indexerId: 1, title: `Release ${n}` };
+  return { app: "radarr", guid: `https://indexer.test/details/${n}`, indexerId: 1, title: `Release ${n}` };
+}
+
+function sonarrRelease(n: number): CachedRelease {
+  return {
+    app: "sonarr",
+    guid: `https://indexer.test/details/${n}`,
+    indexerId: 1,
+    title: `Episode ${n}`,
+    context: { seriesId: 10, episodeId: n },
+  };
 }
 
 /** A cache with a clock the test moves by hand. */
@@ -30,8 +40,8 @@ describe("take", () => {
   it("returns the release once, then refuses the token until it expires", () => {
     const { cache, clock } = makeCache(1000);
     const token = cache.put(release(1));
-    expect(cache.take(token)?.release).toEqual(release(1));
-    expect(cache.take(token)).toBeUndefined();
+    expect(cache.take(token, "radarr")?.release).toEqual(release(1));
+    expect(cache.take(token, "radarr")).toBeUndefined();
     // The used entry stays (marked taken) until it expires, then the next put purges it.
     expect(cache.size()).toBe(1);
     clock.time = 1000;
@@ -41,18 +51,48 @@ describe("take", () => {
 
   it("returns undefined for a token that was never issued", () => {
     const { cache } = makeCache();
-    expect(cache.take("00000000-0000-4000-8000-000000000000")).toBeUndefined();
+    expect(cache.take("00000000-0000-4000-8000-000000000000", "radarr")).toBeUndefined();
   });
 
   it("returns undefined once the entry has expired, and removes it", () => {
     const { cache, clock } = makeCache(1000);
     const token = cache.put(release(1));
     clock.time = 999;
-    expect(cache.take(token)?.release).toEqual(release(1));
+    expect(cache.take(token, "radarr")?.release).toEqual(release(1));
 
     const second = cache.put(release(2));
     clock.time = 999 + 1000;
-    expect(cache.take(second)).toBeUndefined();
+    expect(cache.take(second, "radarr")).toBeUndefined();
+  });
+});
+
+describe("app isolation", () => {
+  it("refuses a Radarr token through Sonarr, without marking it taken", () => {
+    const { cache } = makeCache();
+    const token = cache.put(release(1));
+
+    expect(cache.take(token, "sonarr")).toBeUndefined();
+    expect(cache.take(token, "radarr")?.release).toEqual(release(1));
+  });
+
+  it("refuses a Sonarr token through Radarr, without marking it taken", () => {
+    const { cache } = makeCache();
+    const token = cache.put(sonarrRelease(5));
+
+    expect(cache.take(token, "radarr")).toBeUndefined();
+    expect(cache.take(token, "sonarr")?.release).toEqual(sonarrRelease(5));
+  });
+
+  it("returns the Sonarr context it was stored with", () => {
+    const { cache } = makeCache();
+    const token = cache.put(sonarrRelease(5));
+    expect(cache.take(token, "sonarr")?.release).toEqual({
+      app: "sonarr",
+      guid: "https://indexer.test/details/5",
+      indexerId: 1,
+      title: "Episode 5",
+      context: { seriesId: 10, episodeId: 5 },
+    });
   });
 });
 
@@ -60,39 +100,39 @@ describe("restore", () => {
   it("makes a taken release takeable again under the same token", () => {
     const { cache } = makeCache();
     const token = cache.put(release(1));
-    const taken = cache.take(token);
+    const taken = cache.take(token, "radarr");
     expect(taken).toBeDefined();
 
     taken?.restore();
-    expect(cache.take(token)?.release).toEqual(release(1));
+    expect(cache.take(token, "radarr")?.release).toEqual(release(1));
   });
 
-  it("keeps the original expiry, so a restored token never outlives Radarr's cache", () => {
+  it("keeps the original expiry, so a restored token never outlives the app's cache", () => {
     const { cache, clock } = makeCache(1000);
     const token = cache.put(release(1));
     clock.time = 900;
-    cache.take(token)?.restore();
+    cache.take(token, "radarr")?.restore();
     clock.time = 1000;
-    expect(cache.take(token)).toBeUndefined();
+    expect(cache.take(token, "radarr")).toBeUndefined();
   });
 
   it("keeps a restored release in its place, so eviction still drops the oldest first", () => {
     const { cache } = makeCache(1000, 2);
     const first = cache.put(release(1));
     const second = cache.put(release(2));
-    cache.take(first)?.restore();
+    cache.take(first, "radarr")?.restore();
     cache.put(release(3));
-    expect(cache.take(first)).toBeUndefined();
-    expect(cache.take(second)?.release).toEqual(release(2));
+    expect(cache.take(first, "radarr")).toBeUndefined();
+    expect(cache.take(second, "radarr")?.release).toEqual(release(2));
   });
 
   it("does not evict another entry when restoring into a full cache", () => {
     const { cache } = makeCache(1000, 2);
     const first = cache.put(release(1));
     const second = cache.put(release(2));
-    cache.take(second)?.restore();
+    cache.take(second, "radarr")?.restore();
     expect(cache.size()).toBe(2);
-    expect(cache.take(first)?.release).toEqual(release(1));
+    expect(cache.take(first, "radarr")?.release).toEqual(release(1));
   });
 });
 
@@ -105,10 +145,10 @@ describe("limits", () => {
     const fourth = cache.put(release(4));
 
     expect(cache.size()).toBe(3);
-    expect(cache.take(first)).toBeUndefined();
-    expect(cache.take(second)?.release).toEqual(release(2));
-    expect(cache.take(third)?.release).toEqual(release(3));
-    expect(cache.take(fourth)?.release).toEqual(release(4));
+    expect(cache.take(first, "radarr")).toBeUndefined();
+    expect(cache.take(second, "radarr")?.release).toEqual(release(2));
+    expect(cache.take(third, "radarr")?.release).toEqual(release(3));
+    expect(cache.take(fourth, "radarr")?.release).toEqual(release(4));
   });
 
   it("purges expired entries when a new one is put", () => {

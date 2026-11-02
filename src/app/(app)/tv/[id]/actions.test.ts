@@ -8,6 +8,14 @@ const mocks = vi.hoisted(() => ({
   searchSeason: vi.fn(),
   searchEpisode: vi.fn(),
   refresh: vi.fn(),
+  searchSeriesReleases: vi.fn(),
+  grabSeriesRelease: vi.fn(),
+}));
+
+// The series-releases module is mocked, so the real grab rule (grabWasRefused) and ReleaseGrabError come from releases.ts.
+vi.mock("@/server/arr/series-releases", () => ({
+  searchSeriesReleases: mocks.searchSeriesReleases,
+  grabSeriesRelease: mocks.grabSeriesRelease,
 }));
 
 // AuthzError must be a real class: the actions check `instanceof AuthzError`.
@@ -42,10 +50,19 @@ vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 
 import { AuthzError } from "@/server/authz";
 import { SeasonNotFoundError } from "@/server/arr/episodes";
-import { searchEpisodeNow, searchSeasonNow, setEpisodeMonitoring, setSeasonMonitoring } from "./actions";
+import {
+  findSeriesReleases,
+  grabSeriesRelease,
+  searchEpisodeNow,
+  searchSeasonNow,
+  setEpisodeMonitoring,
+  setSeasonMonitoring,
+} from "./actions";
+import { ReleaseGrabError } from "@/server/arr/releases";
 
 const MONITOR_DENIED = "You don't have permission to change monitoring.";
 const SEARCH_DENIED = "You don't have permission to search for episodes.";
+const PICK_DENIED = "You don't have permission to pick releases.";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,6 +71,8 @@ beforeEach(() => {
   mocks.setSeasonMonitored.mockResolvedValue(undefined);
   mocks.searchSeason.mockResolvedValue(undefined);
   mocks.searchEpisode.mockResolvedValue(undefined);
+  mocks.searchSeriesReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
+  mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02.1080p" });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -411,5 +430,189 @@ describe("searchEpisodeNow success and failure", () => {
   it("rethrows errors that are not Sonarr request failures", async () => {
     mocks.searchEpisode.mockRejectedValue(new Error("config broken"));
     await expect(searchEpisodeNow({ episodeId: 9 })).rejects.toThrow("config broken");
+  });
+});
+
+describe("findSeriesReleases and grabSeriesRelease", () => {
+  const release = { token: "00000000-0000-4000-8000-000000000002" };
+
+  describe("authorization", () => {
+    it.each([
+      ["findSeriesReleases", () => findSeriesReleases({ seriesId: 10, seasonNumber: 2 })],
+      ["grabSeriesRelease", () => grabSeriesRelease({ token: release.token })],
+    ])("checks for the admin role only in %s", async (_name, call) => {
+      await call();
+      expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+    });
+
+    it.each([
+      ["requester (403)", 403],
+      ["signed-out (401)", 401],
+    ] as const)("rejects a %s and never calls Sonarr", async (_label, status) => {
+      mocks.requireRole.mockRejectedValue(new AuthzError(status));
+
+      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({ ok: false, error: PICK_DENIED });
+      expect(await findSeriesReleases({ episodeId: 202 })).toEqual({ ok: false, error: PICK_DENIED });
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: PICK_DENIED });
+      expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+      expect(mocks.grabSeriesRelease).not.toHaveBeenCalled();
+    });
+
+    it("rethrows errors that are not authorization failures", async () => {
+      mocks.requireRole.mockRejectedValue(new Error("database down"));
+      await expect(findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).rejects.toThrow("database down");
+      await expect(grabSeriesRelease({ token: release.token })).rejects.toThrow("database down");
+      expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+      expect(mocks.grabSeriesRelease).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("findSeriesReleases input", () => {
+    it.each([
+      ["a series id alone", { seriesId: 10 }],
+      ["a season and an episode together", { seriesId: 10, seasonNumber: 2, episodeId: 202 }],
+      ["an extra key on a season search", { seriesId: 10, seasonNumber: 2, guid: "x" }],
+      ["an extra key on an episode search", { episodeId: 202, extra: 1 }],
+      ["a negative series id", { seriesId: -1, seasonNumber: 2 }],
+      ["a series id on an episode search", { seriesId: 10, episodeId: 202 }],
+      ["a negative season", { seriesId: 10, seasonNumber: -1 }],
+      ["a negative episode id", { episodeId: -202 }],
+      ["a string season", { seriesId: 10, seasonNumber: "2" }],
+      ["a fractional episode id", { episodeId: 2.5 }],
+      ["a missing series id", { seasonNumber: 2 }],
+      ["null", null],
+    ])("rejects %s without calling Sonarr", async (_name, input) => {
+      expect(await findSeriesReleases(input)).toEqual({ ok: false, error: "Invalid search." });
+      expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
+    });
+
+    it("searches for a season with its series and season number only", async () => {
+      await findSeriesReleases({ seriesId: 10, seasonNumber: 0 });
+      expect(mocks.searchSeriesReleases).toHaveBeenCalledWith({ seriesId: 10, seasonNumber: 0 });
+    });
+
+    it("searches for an episode with its series and episode id", async () => {
+      await findSeriesReleases({ episodeId: 202 });
+      expect(mocks.searchSeriesReleases).toHaveBeenCalledWith({ episodeId: 202 });
+    });
+
+    it("returns the rows and totals on success, and does not re-render the page", async () => {
+      const rows = [{ token: release.token, title: "Breaking.Bad.S02" }];
+      const totals = { all: 3, usenet: 2, torrent: 1 };
+      mocks.searchSeriesReleases.mockResolvedValue({ rows, totals });
+
+      const result = await findSeriesReleases({ seriesId: 10, seasonNumber: 2 });
+
+      expect(result).toEqual({ ok: true, releases: rows, totals });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("says it timed out, and logs only the safe message", async () => {
+      mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: timed out", "timeout"));
+      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({
+        ok: false,
+        error: "Sonarr took too long searching the indexers. Try again in a moment.",
+      });
+      expect(console.error).toHaveBeenCalledWith("Release search: Sonarr release search request failed: timed out");
+    });
+
+    it("says the season or episode is gone on a 404", async () => {
+      mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: HTTP 404", "http", 404));
+      expect(await findSeriesReleases({ episodeId: 202 })).toEqual({
+        ok: false,
+        error: "That season or episode is no longer in Sonarr. Close this and reload the page.",
+      });
+    });
+
+    it("gives the generic message for other Sonarr failures", async () => {
+      mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: HTTP 400", "http", 400));
+      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({
+        ok: false,
+        error: "Sonarr couldn't search the indexers. Try again.",
+      });
+    });
+
+    it("rethrows errors that are not Sonarr request failures", async () => {
+      mocks.searchSeriesReleases.mockRejectedValue(new Error("config broken"));
+      await expect(findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).rejects.toThrow("config broken");
+    });
+  });
+
+  describe("grabSeriesRelease input and results", () => {
+    it.each([
+      ["a missing token", {}],
+      ["a token that is not a UUID", { token: "not-a-uuid" }],
+      ["a number token", { token: 12 }],
+      ["an extra key", { token: release.token, guid: "https://indexer.test/details/1" }],
+      ["an extra episode id", { token: release.token, episodeId: 202 }],
+      ["null", null],
+    ])("rejects %s without calling Sonarr", async (_name, input) => {
+      expect(await grabSeriesRelease(input)).toEqual({ ok: false, error: "Invalid grab." });
+      expect(mocks.grabSeriesRelease).not.toHaveBeenCalled();
+    });
+
+    it("returns the title on success, and does not re-render the page", async () => {
+      mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02" });
+
+      const result = await grabSeriesRelease({ token: release.token });
+
+      expect(mocks.grabSeriesRelease).toHaveBeenCalledWith(release.token);
+      expect(result).toEqual({ ok: true, title: "Breaking.Bad.S02" });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("says the result can no longer be used on a token miss or an expired release", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ReleaseGrabError("expired"));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Sonarr can no longer use that result: it may have expired, or Sonarr couldn't match it to episodes. Search again or pick another one.",
+      });
+    });
+
+    it("warns about a possible grab after a timeout", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: timed out", "timeout"));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Sonarr took too long to answer. The release may still have been grabbed, so check the queue before trying again.",
+      });
+      expect(console.error).toHaveBeenCalledWith("Release grab: Sonarr release grab request failed: timed out");
+    });
+
+    it("says the indexer did not hand over the release on a 409", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 409", "http", 409));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "The indexer didn't hand over that release. Try again, or pick another one.",
+      });
+    });
+
+    it("gives the plain refusal message for other 4xx errors", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 400", "http", 400));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Sonarr didn't grab the release. Try again.",
+      });
+    });
+
+    it("warns about a possible grab after a 5xx, since Sonarr may have sent the release first", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 500", "http", 500));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+      });
+    });
+
+    it("warns about a possible grab after a network error", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: network error", "network"));
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({
+        ok: false,
+        error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+      });
+    });
+
+    it("rethrows errors that are not Sonarr request failures", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new Error("config broken"));
+      await expect(grabSeriesRelease({ token: release.token })).rejects.toThrow("config broken");
+    });
   });
 });

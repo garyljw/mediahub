@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  findMovieReleases,
+  grabMovieRelease,
   refreshLibraryMovies,
   removeMovies,
   searchLibraryMovies,
@@ -50,8 +52,8 @@ import { ActivityCell, ActivityHead } from "@/components/library/activity-cell";
 import { useActivity } from "@/components/library/use-activity";
 import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
 import { MAX_SEARCH_MOVIES, searchStartedMessage } from "./movie-search";
-import { MovieReleaseDialog } from "./movie-release-dialog";
-import { grabbedMessage } from "./movie-release";
+import { ReleaseDialog } from "@/components/library/release-dialog";
+import { grabbedMessage } from "@/components/library/release";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 
@@ -486,9 +488,11 @@ export function MoviesTable({
       )}
 
       {isAdmin && picking && (
-        <MovieReleaseDialog
-          movieId={picking.id}
-          title={picking.title}
+        <ReleaseDialog
+          key={picking.id}
+          subject={picking.title}
+          search={() => findMovieReleases({ movieId: picking.id })}
+          grab={(token) => grabMovieRelease({ token })}
           onClose={() => setPicking(null)}
           onGrabbed={(grabbedTitle) => {
             setPicking(null);

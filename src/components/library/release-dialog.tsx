@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { findMovieReleases, grabMovieRelease, type ReleaseSearchResult } from "@/app/(app)/movies/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,21 +16,27 @@ import {
   parseProtocolFilter,
   releaseCountLine,
   releaseDetails,
+  type GrabResult,
   type ProtocolFilter,
-} from "./movie-release";
+  type ReleaseSearchResult,
+} from "@/components/library/release";
 
 /**
- * Lists Radarr's interactive search results for one movie and sends the chosen one to the download client.
+ * Lists one app's interactive search results and sends the chosen one to its download client. Used for movies and
+ * for TV seasons and episodes. The caller passes the search and the grab as functions, so this stays app-neutral.
  * Mounted only while open. The search starts once on mount, and is repeated only by "Search again".
  */
-export function MovieReleaseDialog({
-  movieId,
-  title,
+export function ReleaseDialog({
+  subject,
+  search,
+  grab,
   onClose,
   onGrabbed,
 }: {
-  movieId: number;
-  title: string;
+  /** What the search is for, shown in the heading: a movie title, or "Breaking Bad · Season 2". */
+  subject: string;
+  search: () => Promise<ReleaseSearchResult>;
+  grab: (token: string) => Promise<GrabResult>;
   onClose: () => void;
   onGrabbed: (title: string) => void;
 }) {
@@ -51,13 +56,13 @@ export function MovieReleaseDialog({
     startedAttempt.current = attempt;
     startSearch(async () => {
       try {
-        setOutcome(await findMovieReleases({ movieId }));
+        setOutcome(await search());
       } catch {
         // The request never got an answer (connection lost, server restarted), so say so in the dialog.
         setOutcome({ ok: false, error: "Couldn't reach MediaHub. Check your connection and try again." });
       }
     });
-  }, [attempt, movieId]);
+  }, [attempt, search]);
 
   function searchAgain() {
     setOutcome(null);
@@ -65,11 +70,11 @@ export function MovieReleaseDialog({
     setAttempt((current) => current + 1);
   }
 
-  function grab(token: string) {
+  function grabRelease(token: string) {
     setGrabError(null);
     startGrab(async () => {
       try {
-        const result = await grabMovieRelease({ token });
+        const result = await grab(token);
         if (result.ok) onGrabbed(result.title);
         else setGrabError(result.error);
       } catch {
@@ -90,7 +95,7 @@ export function MovieReleaseDialog({
     >
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Pick a release for {title}</DialogTitle>
+          <DialogTitle>Pick a release for {subject}</DialogTitle>
           {/* Live, so a screen reader hears the new count when the protocol filter changes. */}
           <DialogDescription aria-live="polite">
             {outcome?.ok
@@ -149,7 +154,7 @@ export function MovieReleaseDialog({
                   const { token } = release;
                   const extras = [...release.customFormats, ...release.languages];
                   return (
-                    // Rows without a token (Radarr won't allow the grab) fall back to their position in the shown list.
+                    // Rows without a token (the app won't allow the grab) fall back to their position in the shown list.
                     // They hold no state, so a remount when the filter changes is harmless.
                     <li key={token ?? `row-${index}`} className="flex items-start gap-3 px-3 py-2">
                       <div className="min-w-0 flex-1 text-sm">
@@ -175,7 +180,7 @@ export function MovieReleaseDialog({
                         aria-label={`Grab ${release.title}`}
                         disabled={token === null || grabbing}
                         aria-busy={grabbing}
-                        onClick={() => token !== null && grab(token)}
+                        onClick={() => token !== null && grabRelease(token)}
                       >
                         Grab
                       </Button>
