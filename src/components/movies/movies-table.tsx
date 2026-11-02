@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Bookmark,
   BookmarkCheck,
-  Pencil,
   RefreshCw,
   Search,
   Trash2,
@@ -21,7 +20,6 @@ import {
   refreshLibraryMovies,
   removeMovies,
   searchLibraryMovies,
-  updateMovies,
 } from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -31,7 +29,6 @@ import type { QualityProfileOption } from "@/server/arr/profiles";
 import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
 import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
 import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
-import { LibraryEditDialog } from "@/components/library/edit-dialog";
 import { MOVIE } from "@/components/library/nouns";
 import {
   DEFAULT_FILTERS,
@@ -46,10 +43,9 @@ import {
   type StatusFilter,
 } from "./movie-filters";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
-import { updatedMessage } from "@/components/library/edit";
 import { deletedMessage } from "@/components/library/delete";
 import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/library/selection";
-import { MAX_EDIT_MOVIES, buildEditPayload } from "./movie-edit";
+import { MAX_BULK_MOVIES } from "./movie-bulk";
 import { ActivityCell, ActivityHead } from "@/components/library/activity-cell";
 import { useActivity } from "@/components/library/use-activity";
 import { MAX_REFRESH_MOVIES, refreshStartedMessage } from "./movie-refresh";
@@ -76,16 +72,14 @@ export function MoviesTable({
 }: {
   rows: MovieRow[];
   profiles: QualityProfileOption[];
-  /** Admins also get Pick a release, Refresh & scan, Edit and Delete. Everyone can select movies and search for them. */
+  /** Admins also get Pick a release, Refresh & scan and Delete. Everyone can select movies and search for them. */
   isAdmin: boolean;
 }) {
   const [filters, setFilters] = useState<MovieFilters>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
-  // The movies the dialog is editing: one row, or the whole selection (no title).
-  const [editing, setEditing] = useState<{ ids: number[]; title?: string; fromSelection: boolean } | null>(null);
-  // The movies the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
+  // The movies the delete dialog is removing, as a snapshot taken when it opened.
   const [deleting, setDeleting] = useState<{ movies: MovieRow[] } | null>(null);
   // The movie whose release picker is open. Admin only, and one movie at a time.
   const [picking, setPicking] = useState<{ id: number; title: string } | null>(null);
@@ -120,9 +114,9 @@ export function MoviesTable({
   const visible = pageSlice(sorted, current);
   // Only an id that matches a visible row counts. A row refreshed away while its menu is open would otherwise hide previews for good.
   const menuOpenOnVisibleRow = menuRowId !== null && visible.some((row) => row.id === menuRowId);
-  // Only selected movies that match the current search and filters count. Edit never touches a movie
+  // Only selected movies that match the current search and filters count. A bulk action never touches a movie
   // the admin can't see, and a refresh that removes a movie drops it too. Hidden picks come back if
-  // the filter is changed back. So toggles update `selected` (the full set); selectedIds is display/edit only.
+  // the filter is changed back. So toggles update `selected` (the full set); selectedIds is what the bulk actions use.
   const selectedIds = useMemo(() => pruneSelection(selected, filtered), [selected, filtered]);
   // The same filter-pruned selection as selectedIds, as rows. Delete shows these titles and sends their ids.
   const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row.id)), [filtered, selectedIds]);
@@ -148,18 +142,6 @@ export function MoviesTable({
   function updateSelection(next: Set<number>) {
     setSelected(next);
     setStatus(null);
-  }
-
-  function openEditor(ids: number[], fromSelection: boolean, title?: string) {
-    setStatus(null);
-    setEditing({ ids, title, fromSelection });
-  }
-
-  function handleSaved(movieCount: number) {
-    // A single-row edit leaves the bulk selection alone. Only a bulk edit uses it up.
-    if (editing?.fromSelection) setSelected(new Set());
-    setEditing(null);
-    setStatus(updatedMessage(movieCount, MOVIE));
   }
 
   function openPicker(row: MovieRow) {
@@ -289,9 +271,6 @@ export function MoviesTable({
                 aria-busy={refreshing}
               >
                 Refresh &amp; scan
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => openEditor([...selectedIds], true)}>
-                Edit…
               </Button>
               <Button size="sm" variant="destructive" onClick={() => openDeleter(selectedRows)}>
                 Delete…
@@ -426,10 +405,6 @@ export function MoviesTable({
                               <RefreshCw aria-hidden />
                               Refresh &amp; scan
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => defer(() => openEditor([row.id], false, row.title))}>
-                              <Pencil aria-hidden />
-                              Edit…
-                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem variant="destructive" onSelect={() => defer(() => openDeleter([row]))}>
                               <Trash2 aria-hidden />
@@ -465,20 +440,6 @@ export function MoviesTable({
         </Table>
       </div>
 
-      {isAdmin && editing && (
-        <LibraryEditDialog
-          ids={editing.ids}
-          title={editing.title}
-          noun={MOVIE}
-          max={MAX_EDIT_MOVIES}
-          profiles={profiles}
-          buildPayload={(profileId, monitor) => buildEditPayload(editing.ids, profileId, monitor)}
-          submit={updateMovies}
-          onClose={() => setEditing(null)}
-          onSaved={handleSaved}
-        />
-      )}
-
       {isAdmin && picking && (
         <ReleaseDialog
           key={picking.id}
@@ -493,10 +454,9 @@ export function MoviesTable({
         />
       )}
 
-      {/* Hidden while a dialog is open: clicking a row's Edit, Delete or Pick opens it with the mouse still on the row. */}
+      {/* Hidden while a dialog is open: clicking a row's Delete or Pick opens it with the mouse still on the row. */}
       {posterPreview.activeKey !== null &&
         !menuOpenOnVisibleRow &&
-        !editing &&
         !deleting &&
         !picking &&
         visible.some((row) => row.id === posterPreview.activeKey) &&
@@ -506,7 +466,7 @@ export function MoviesTable({
         <LibraryDeleteDialog
           items={deleting.movies}
           noun={MOVIE}
-          max={MAX_EDIT_MOVIES}
+          max={MAX_BULK_MOVIES}
           appName="Radarr"
           exclusionLabel="Prevent Radarr from re-adding (add to import exclusions)"
           submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>

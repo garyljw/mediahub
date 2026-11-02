@@ -68,7 +68,7 @@ export function Pagination({ current, pages, onPage }: { current: number; pages:
 }
 
 /**
- * The ⋯ menu for one admin row. Pick, Edit and Delete open dialogs, so their onSelect only remembers the
+ * The ⋯ menu for one admin row. Pick and Delete open dialogs, so their onSelect only remembers the
  * action (through `defer`). The action runs from onCloseAutoFocus. Radix calls that handler and then focuses
  * the ⋯ trigger in the same timeout callback. The state change from this handler renders after that focus, so
  * the dialog's FocusScope saves the trigger as the element to return focus to. The menu is non-modal because

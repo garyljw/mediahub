@@ -2,7 +2,7 @@
 
 /**
  * Most movies one search request may cover (src/app/(app)/movies/actions.ts uses this same value).
- * Each movie makes Radarr query every indexer, so this is far lower than the edit limit.
+ * Each movie makes Radarr query every indexer, so this is far lower than the bulk limit.
  */
 export const MAX_SEARCH_MOVIES = 100;
 

@@ -35,7 +35,7 @@ vi.mock("@/server/env", () => ({
 
 import {
   deleteMovies,
-  editMovies,
+  editMovie,
   getMoviePoster,
   listMovies,
   listQualityProfiles,
@@ -352,11 +352,11 @@ async function sentBody(): Promise<Record<string, unknown>> {
   return JSON.parse(await req.text()) as Record<string, unknown>;
 }
 
-describe("editMovies", () => {
-  it("sends a PUT to the movie editor with the key in a header and only the given fields", async () => {
+describe("editMovie", () => {
+  it("sends a PUT to the movie editor with the key in a header and the one id with the given fields", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editMovies({ movieIds: [1, 2], qualityProfileId: 3, monitored: false });
+    await editMovie({ movieId: 1, qualityProfileId: 3, monitored: false, minimumAvailability: "inCinemas" });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const req = requestAt(0);
@@ -365,40 +365,68 @@ describe("editMovies", () => {
     expect(new URL(req.url).search).toBe("");
     expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
     expect(req.url).not.toContain(FAKE_KEY);
-    expect(await sentBody()).toEqual({ movieIds: [1, 2], qualityProfileId: 3, monitored: false });
+    expect(await sentBody()).toStrictEqual({
+      movieIds: [1],
+      qualityProfileId: 3,
+      monitored: false,
+      minimumAvailability: "inCinemas",
+    });
+  });
+
+  it.each(["announced", "inCinemas", "released"] as const)("sends minimum availability %s as given", async (minimumAvailability) => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editMovie({ movieId: 5, minimumAvailability });
+
+    expect(await sentBody()).toStrictEqual({ movieIds: [5], minimumAvailability });
   });
 
   it("leaves out undefined fields instead of sending them", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editMovies({ movieIds: [7], monitored: true });
+    await editMovie({ movieId: 7, monitored: true });
 
     const body = await sentBody();
-    expect(body).toEqual({ movieIds: [7], monitored: true });
+    expect(body).toStrictEqual({ movieIds: [7], monitored: true });
     expect("qualityProfileId" in body).toBe(false);
+    expect("minimumAvailability" in body).toBe(false);
   });
 
   it("sends only movieIds when nothing else is set", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editMovies({ movieIds: [4] });
+    await editMovie({ movieId: 4 });
 
-    expect(await sentBody()).toEqual({ movieIds: [4] });
+    expect(await sentBody()).toStrictEqual({ movieIds: [4] });
   });
 
-  it("never sends other editor fields", async () => {
+  it("never sends other editor fields, even when the caller passes extras", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editMovies({ movieIds: [1], qualityProfileId: 2, monitored: true });
+    const sneaky = {
+      movieId: 1,
+      qualityProfileId: 2,
+      monitored: true,
+      minimumAvailability: "released",
+      movieIds: [1, 2, 3],
+      rootFolderPath: "/invented/movies/",
+      tags: [3],
+      applyTags: "add",
+      moveFiles: true,
+      deleteFiles: true,
+      addImportExclusion: true,
+    };
+    await editMovie(sneaky as Parameters<typeof editMovie>[0]);
 
-    const keys = Object.keys(await sentBody()).sort();
-    expect(keys).toEqual(["monitored", "movieIds", "qualityProfileId"]);
+    const body = await sentBody();
+    expect(Object.keys(body).sort()).toEqual(["minimumAvailability", "monitored", "movieIds", "qualityProfileId"]);
+    expect(body).toStrictEqual({ movieIds: [1], qualityProfileId: 2, monitored: true, minimumAvailability: "released" });
   });
 
   it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
     serveEditor(() => new Response(`boom ${FAKE_KEY} at http://radarr.test:7878`, { status: 500 }));
 
-    const error = await rejectionOf(editMovies({ movieIds: [1], monitored: true }));
+    const error = await rejectionOf(editMovie({ movieId: 1, monitored: true }));
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Radarr movie edit request failed: HTTP 500");
@@ -411,7 +439,7 @@ describe("editMovies", () => {
       throw new TypeError("fetch failed for http://radarr.test:7878/api/v3/movie/editor");
     });
 
-    const error = await rejectionOf(editMovies({ movieIds: [1], monitored: true }));
+    const error = await rejectionOf(editMovie({ movieId: 1, monitored: true }));
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Radarr movie edit request failed: network error");

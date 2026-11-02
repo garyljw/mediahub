@@ -29,6 +29,7 @@ vi.mock("@/server/env", () => ({
 }));
 
 import { getMovieDetail, toMovieDetail } from "./movie-detail";
+import { sortedProfileOptions } from "./profiles";
 
 // movies[0] is downloaded, movies[1] is missing, movies[2] is unreleased, movies[4] has an unknown profile.
 const downloaded = movies[0] as MovieResource;
@@ -52,6 +53,8 @@ describe("toMovieDetail", () => {
       runtime: 118,
       monitored: true,
       qualityProfile: "HD-1080p",
+      qualityProfileId: 1,
+      minimumAvailability: "released",
       fileQuality: "Bluray-1080p",
       sizeOnDisk: 12345678901,
       added: "2024-03-12T10:21:45Z",
@@ -80,6 +83,18 @@ describe("toMovieDetail", () => {
 
   it("labels an unknown quality profile the same way the table does", () => {
     expect(detail(unknownProfile)?.qualityProfile).toBe("Unknown profile (#99)");
+  });
+
+  it("carries the profile id and the minimum availability the settings form starts from", () => {
+    expect(detail({ ...missing, qualityProfileId: 2 })).toMatchObject({ qualityProfileId: 2 });
+    expect(detail({ ...downloaded, minimumAvailability: "announced" })?.minimumAvailability).toBe("announced");
+    expect(detail({ ...downloaded, minimumAvailability: "inCinemas" })?.minimumAvailability).toBe("inCinemas");
+  });
+
+  it("gives a null minimum availability for a status the form does not offer, or a missing one", () => {
+    expect(detail({ ...downloaded, minimumAvailability: "tba" })?.minimumAvailability).toBeNull();
+    expect(detail({ ...downloaded, minimumAvailability: "deleted" })?.minimumAvailability).toBeNull();
+    expect(detail({ ...downloaded, minimumAvailability: undefined })?.minimumAvailability).toBeNull();
   });
 
   it("shows no year for a year of 0 or a missing year", () => {
@@ -112,9 +127,11 @@ describe("toMovieDetail", () => {
         "fileQuality",
         "hasPoster",
         "id",
+        "minimumAvailability",
         "monitored",
         "overview",
         "qualityProfile",
+        "qualityProfileId",
         "runtime",
         "sizeOnDisk",
         "status",
@@ -174,12 +191,21 @@ describe("getMovieDetail", () => {
     expect((error as ArrRequestError).kind).toBe("invalid");
   });
 
+  it("returns the profile options sorted, from the same profile request", async () => {
+    serve(() => json(downloaded));
+
+    const result = await getMovieDetail(1);
+
+    expect(result?.profiles).toEqual(sortedProfileOptions(profiles));
+    expect(result?.profiles).toContainEqual({ id: 1, name: "HD-1080p" });
+  });
+
   it("returns the page's detail, requests only the movie and profiles, and sends the key in a header", async () => {
     serve(() => json(downloaded));
 
     const result = await getMovieDetail(1);
 
-    expect(result?.title).toBe("Starfall Protocol");
+    expect(result?.detail.title).toBe("Starfall Protocol");
     const requests = fetchMock.mock.calls.map((call) => call[0] as Request);
     expect(requests.map((req) => new URL(req.url).pathname).sort()).toEqual([
       "/api/v3/movie/1",

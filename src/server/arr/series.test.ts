@@ -381,10 +381,17 @@ async function sentBody(): Promise<Record<string, unknown>> {
 }
 
 describe("editSeries", () => {
-  it("sends a PUT to the series editor with the key in a header and only the given fields", async () => {
+  it("sends a PUT to the series editor with the key in a header and the one id with the given fields", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editSeries({ seriesIds: [1, 2], qualityProfileId: 3, monitored: false });
+    await editSeries({
+      seriesId: 1,
+      qualityProfileId: 3,
+      monitored: false,
+      seriesType: "anime",
+      seasonFolder: true,
+      monitorNewItems: "none",
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const req = requestAt(0);
@@ -393,23 +400,56 @@ describe("editSeries", () => {
     expect(new URL(req.url).search).toBe("");
     expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
     expect(req.url).not.toContain(FAKE_KEY);
-    expect(await sentBody()).toStrictEqual({ seriesIds: [1, 2], qualityProfileId: 3, monitored: false });
+    expect(await sentBody()).toStrictEqual({
+      seriesIds: [1],
+      qualityProfileId: 3,
+      monitored: false,
+      seriesType: "anime",
+      seasonFolder: true,
+      monitorNewItems: "none",
+    });
+  });
+
+  it.each(["standard", "daily", "anime"] as const)("sends series type %s as given", async (seriesType) => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editSeries({ seriesId: 5, seriesType });
+
+    expect(await sentBody()).toStrictEqual({ seriesIds: [5], seriesType });
+  });
+
+  it("sends a false season folder flag, which is a real value and not a missing one", async () => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editSeries({ seriesId: 5, seasonFolder: false });
+
+    expect(await sentBody()).toStrictEqual({ seriesIds: [5], seasonFolder: false });
+  });
+
+  it.each(["all", "none"] as const)("sends new-season monitoring %s as given", async (monitorNewItems) => {
+    serveEditor(() => new Response(null, { status: 200 }));
+
+    await editSeries({ seriesId: 5, monitorNewItems });
+
+    expect(await sentBody()).toStrictEqual({ seriesIds: [5], monitorNewItems });
   });
 
   it("leaves out undefined fields instead of sending them", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editSeries({ seriesIds: [7], monitored: true });
+    await editSeries({ seriesId: 7, monitored: true });
 
     const body = await sentBody();
     expect(body).toStrictEqual({ seriesIds: [7], monitored: true });
-    expect("qualityProfileId" in body).toBe(false);
+    for (const key of ["qualityProfileId", "seriesType", "seasonFolder", "monitorNewItems"]) {
+      expect(key in body).toBe(false);
+    }
   });
 
   it("sends only seriesIds when nothing else is set", async () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
-    await editSeries({ seriesIds: [4] });
+    await editSeries({ seriesId: 4 });
 
     expect(await sentBody()).toStrictEqual({ seriesIds: [4] });
   });
@@ -418,24 +458,40 @@ describe("editSeries", () => {
     serveEditor(() => new Response(null, { status: 200 }));
 
     const sneaky = {
-      seriesIds: [1],
+      seriesId: 1,
       qualityProfileId: 2,
       monitored: true,
+      seriesType: "anime",
+      seasonFolder: false,
+      monitorNewItems: "all",
+      seriesIds: [1, 2, 3],
       moveFiles: true,
       rootFolderPath: "/invented/tv/",
       tags: [3],
-      seriesType: "anime",
-      monitorNewItems: "all",
+      applyTags: "add",
+      deleteFiles: true,
+      addImportListExclusion: true,
     };
     await editSeries(sneaky as Parameters<typeof editSeries>[0]);
 
-    expect(Object.keys(await sentBody()).sort()).toEqual(["monitored", "qualityProfileId", "seriesIds"]);
+    const body = await sentBody();
+    expect(Object.keys(body).sort()).toEqual(
+      ["monitorNewItems", "monitored", "qualityProfileId", "seasonFolder", "seriesIds", "seriesType"].sort(),
+    );
+    expect(body).toStrictEqual({
+      seriesIds: [1],
+      qualityProfileId: 2,
+      monitored: true,
+      seriesType: "anime",
+      seasonFolder: false,
+      monitorNewItems: "all",
+    });
   });
 
   it("throws ArrRequestError on HTTP 500 without leaking the key, host or body", async () => {
     serveEditor(() => new Response(`boom ${FAKE_KEY} at http://sonarr.test:8989`, { status: 500 }));
 
-    const error = await rejectionOf(editSeries({ seriesIds: [1], monitored: true }));
+    const error = await rejectionOf(editSeries({ seriesId: 1, monitored: true }));
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Sonarr series edit request failed: HTTP 500");
@@ -448,7 +504,7 @@ describe("editSeries", () => {
       throw new TypeError("fetch failed for http://sonarr.test:8989/api/v3/series/editor");
     });
 
-    const error = await rejectionOf(editSeries({ seriesIds: [1], monitored: true }));
+    const error = await rejectionOf(editSeries({ seriesId: 1, monitored: true }));
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect(error.message).toBe("Sonarr series edit request failed: network error");

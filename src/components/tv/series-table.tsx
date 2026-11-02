@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Bookmark, BookmarkCheck, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Bookmark, BookmarkCheck, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -11,11 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import type { QualityProfileOption } from "@/server/arr/profiles";
 import type { SeriesRow } from "@/server/arr/series";
-import { refreshLibrarySeries, removeSeries, searchLibrarySeries, updateSeries } from "@/app/(app)/tv/actions";
+import { refreshLibrarySeries, removeSeries, searchLibrarySeries } from "@/app/(app)/tv/actions";
 import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
 import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
 import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
-import { LibraryEditDialog } from "@/components/library/edit-dialog";
 import { SERIES } from "@/components/library/nouns";
 import {
   DEFAULT_FILTERS,
@@ -33,10 +32,9 @@ import {
   type StatusFilter,
 } from "./series-filters";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
-import { updatedMessage } from "@/components/library/edit";
 import { deletedMessage } from "@/components/library/delete";
 import { pruneSelection, selectAllState, toggleAllFiltered, toggleId } from "@/components/library/selection";
-import { MAX_EDIT_SERIES, buildEditPayload } from "./series-edit";
+import { MAX_BULK_SERIES } from "./series-bulk";
 import { MAX_REFRESH_SERIES, refreshStartedMessage } from "./series-refresh";
 import { MAX_SEARCH_SERIES, searchStartedMessage } from "./series-search";
 import { STATUS_CLASS, STATUS_LABEL } from "./series-status";
@@ -88,16 +86,14 @@ export function SeriesTable({
 }: {
   rows: SeriesRow[];
   profiles: QualityProfileOption[];
-  /** Admins also get Refresh & scan, Edit and Delete. Everyone can select series and search for them. */
+  /** Admins also get Refresh & scan and Delete. Everyone can select series and search for them. */
   isAdmin: boolean;
 }) {
   const [filters, setFilters] = useState<SeriesFilters>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
-  // The series the dialog is editing: one row, or the whole selection (no title).
-  const [editing, setEditing] = useState<{ ids: number[]; title?: string; fromSelection: boolean } | null>(null);
-  // The series the delete dialog is removing, as a snapshot taken when it opened. Same rule as editing.
+  // The series the delete dialog is removing, as a snapshot taken when it opened.
   const [deleting, setDeleting] = useState<{ series: SeriesRow[] } | null>(null);
   // The row whose ⋯ menu is open. Its poster preview is hidden so the large image doesn't cover the menu.
   const [menuRowId, setMenuRowId] = useState<number | null>(null);
@@ -130,9 +126,9 @@ export function SeriesTable({
   const visible = pageSlice(sorted, current);
   // Only an id that matches a visible row counts. A row removed while its menu is open would otherwise hide previews for good.
   const menuOpenOnVisibleRow = menuRowId !== null && visible.some((row) => row.id === menuRowId);
-  // Only selected series that match the current search and filters count. Edit never touches a series the
-  // admin can't see, and a refresh that removes a series drops it too. Hidden picks come back if the filter
-  // is changed back. So toggles update `selected` (the full set); selectedIds is display/edit only.
+  // Only selected series that match the current search and filters count. A bulk action never touches a series
+  // the admin can't see, and a refresh that removes a series drops it too. Hidden picks come back if the filter
+  // is changed back. So toggles update `selected` (the full set); selectedIds is what the bulk actions use.
   const selectedIds = useMemo(() => pruneSelection(selected, filtered), [selected, filtered]);
   // The same filter-pruned selection as selectedIds, as rows. Delete shows these titles and sends their ids.
   const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row.id)), [filtered, selectedIds]);
@@ -158,18 +154,6 @@ export function SeriesTable({
   function updateSelection(next: Set<number>) {
     setSelected(next);
     setStatus(null);
-  }
-
-  function openEditor(ids: number[], fromSelection: boolean, title?: string) {
-    setStatus(null);
-    setEditing({ ids, title, fromSelection });
-  }
-
-  function handleSaved(seriesCount: number) {
-    // A single-row edit leaves the bulk selection alone. Only a bulk edit uses it up.
-    if (editing?.fromSelection) setSelected(new Set());
-    setEditing(null);
-    setStatus(updatedMessage(seriesCount, SERIES));
   }
 
   function openDeleter(series: SeriesRow[]) {
@@ -309,9 +293,6 @@ export function SeriesTable({
               >
                 Refresh &amp; scan
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => openEditor([...selectedIds], true)}>
-                Edit…
-              </Button>
               <Button size="sm" variant="destructive" onClick={() => openDeleter(selectedRows)}>
                 Delete…
               </Button>
@@ -446,10 +427,6 @@ export function SeriesTable({
                               <RefreshCw aria-hidden />
                               Refresh &amp; scan
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => defer(() => openEditor([row.id], false, row.title))}>
-                              <Pencil aria-hidden />
-                              Edit…
-                            </DropdownMenuItem>
                             <DropdownMenuItem variant="destructive" onSelect={() => defer(() => openDeleter([row]))}>
                               <Trash2 aria-hidden />
                               Delete…
@@ -484,24 +461,9 @@ export function SeriesTable({
         </Table>
       </div>
 
-      {isAdmin && editing && (
-        <LibraryEditDialog
-          ids={editing.ids}
-          title={editing.title}
-          noun={SERIES}
-          max={MAX_EDIT_SERIES}
-          profiles={profiles}
-          buildPayload={(profileId, monitor) => buildEditPayload(editing.ids, profileId, monitor)}
-          submit={updateSeries}
-          onClose={() => setEditing(null)}
-          onSaved={handleSaved}
-        />
-      )}
-
-      {/* Hidden while a dialog is open: clicking a row's Edit or Delete opens it with the mouse still on the row. */}
+      {/* Hidden while a dialog is open: clicking a row's Delete opens it with the mouse still on the row. */}
       {posterPreview.activeKey !== null &&
         !menuOpenOnVisibleRow &&
-        !editing &&
         !deleting &&
         visible.some((row) => row.id === posterPreview.activeKey) &&
         posterPreview.preview}
@@ -510,7 +472,7 @@ export function SeriesTable({
         <LibraryDeleteDialog
           items={deleting.series}
           noun={SERIES}
-          max={MAX_EDIT_SERIES}
+          max={MAX_BULK_SERIES}
           appName="Sonarr"
           exclusionLabel="Prevent this series from being re-added by import lists"
           submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>

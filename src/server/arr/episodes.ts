@@ -1,6 +1,7 @@
 import "server-only";
 import { sonarrClient } from "./client";
 import { ArrRequestError, arrRequest } from "./request";
+import { queueSeriesWrite } from "./series-writes";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -24,18 +25,6 @@ export async function setEpisodeMonitored(episodeId: number, monitored: boolean)
 }
 
 /**
- * The last season write queued for each series. MediaHub runs as one Node process, so chaining on this makes
- * season toggles for one series from different tabs or admins run one at a time, and each GET sees the previous
- * PUT. (One browser tab already sends its server actions one at a time; the server doesn't queue them.)
- *
- * Known gaps, accepted because each needs two writers on one series within seconds: a PUT that timed out may
- * still land after the next queued GET; and any other write to the series between our GET and PUT (Sonarr's own
- * UI, or a bulk edit from the TV table, which isn't queued here) can be overwritten. That is the same trade-off
- * Sonarr's own UI makes.
- */
-const seasonWrites = new Map<number, Promise<void>>();
-
-/**
  * Sets one season's monitored flag the way Sonarr's own UI does: read the series, change only that season, and
  * write the series back. Sonarr then sets that season's episodes to match. The series is sent exactly as Sonarr
  * returned it, apart from that one flag. moveFiles is never sent, so Sonarr doesn't move any files.
@@ -53,16 +42,8 @@ export async function setSeasonMonitored(
   monitored: boolean,
   onSend: () => void = () => {},
 ): Promise<void> {
-  const previous = seasonWrites.get(seriesId) ?? Promise.resolve();
-  // Wait for the previous write whether it worked or not; its caller already gets its own error.
-  const write = previous.catch(() => {}).then(() => writeSeasonMonitored(seriesId, seasonNumber, monitored, onSend));
-  seasonWrites.set(seriesId, write);
-  try {
-    await write;
-  } finally {
-    // Only the newest write clears the entry, so the map doesn't grow and a queued write is never dropped.
-    if (seasonWrites.get(seriesId) === write) seasonWrites.delete(seriesId);
-  }
+  // Queued with every other MediaHub write to this series (see series-writes.ts), so each GET sees the previous PUT.
+  await queueSeriesWrite(seriesId, () => writeSeasonMonitored(seriesId, seasonNumber, monitored, onSend));
 }
 
 async function writeSeasonMonitored(

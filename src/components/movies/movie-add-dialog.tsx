@@ -70,7 +70,7 @@ export function MovieAddDialog({
   const canAdd = rootFolders !== null && options.profileId !== null && options.rootFolderId !== null;
 
   function openDialog() {
-    // Each opening starts fresh, with the default options, like the edit dialog.
+    // Each opening starts fresh, with the default options.
     posterPreview.clear();
     setQuery("");
     setResults(null);

@@ -1,9 +1,10 @@
 import "server-only";
 import { sonarrClient } from "./client";
 import { ArrRequestError, arrRequest, getList } from "./request";
-import { usableProfiles } from "./profiles";
+import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import { fetchQualityProfiles, seriesStatus, type SeriesStatus } from "./series";
 import { episodeStatus, type EpisodeStatus } from "../merge/episode-status";
+import { isNewItemMonitor, isSeriesType, type NewItemMonitor, type SeriesType } from "@/components/tv/series-edit";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -54,6 +55,13 @@ export type SeriesDetail = {
   overview: string;
   monitored: boolean;
   qualityProfile: string;
+  /** The profile's id, which the settings form starts from. */
+  qualityProfileId: number;
+  /** Sonarr's series type when it is one the form offers, otherwise null. */
+  seriesType: SeriesType | null;
+  seasonFolder: boolean;
+  /** Sonarr's "monitor new seasons" value when it is one the form offers, otherwise null. */
+  monitorNewItems: NewItemMonitor | null;
   hasPoster: boolean;
   seasons: SeasonRow[];
 };
@@ -153,17 +161,24 @@ export function toSeriesDetail(
     monitored: series.monitored ?? false,
     // The same fallback label as toSeriesRows, so the table and the detail page agree.
     qualityProfile: profileNames.get(qualityProfileId) ?? `Unknown profile (#${qualityProfileId})`,
+    qualityProfileId,
+    seriesType: isSeriesType(series.seriesType) ? series.seriesType : null,
+    seasonFolder: series.seasonFolder === true,
+    monitorNewItems: isNewItemMonitor(series.monitorNewItems) ? series.monitorNewItems : null,
     hasPoster: series.images?.some((image) => image.coverType === "poster") ?? false,
     seasons,
   };
 }
 
+/** What the series page loads: the series, and the quality profiles the settings form offers (the page only uses them for admins). */
+export type SeriesDetailPage = { detail: SeriesDetail; profiles: QualityProfileOption[] };
+
 /**
- * One series with its seasons and episodes, for the detail page. Returns null when Sonarr answers 404 for the
- * series itself, so the page can show not-found. A 404 from the episode or profile request means something
- * else (e.g. a wrong URL base), so it propagates like any other failure.
+ * One series with its seasons and episodes, for the detail page, with the quality profiles from the same request.
+ * Returns null when Sonarr answers 404 for the series itself, so the page can show not-found. A 404 from the episode
+ * or profile request means something else (e.g. a wrong URL base), so it propagates like any other failure.
  */
-export async function getSeriesDetail(seriesId: number): Promise<SeriesDetail | null> {
+export async function getSeriesDetail(seriesId: number): Promise<SeriesDetailPage | null> {
   const client = sonarrClient();
   const seriesRequest = arrRequest("Sonarr series", (signal) =>
     client.GET("/api/v3/series/{id}", { params: { path: { id: seriesId } }, signal }),
@@ -183,5 +198,7 @@ export async function getSeriesDetail(seriesId: number): Promise<SeriesDetail | 
   ]);
   if (series === null) return null;
   if (!series) throw new ArrRequestError("Sonarr series response was empty", "invalid");
-  return toSeriesDetail(series, episodes, profiles, Date.now());
+  const detail = toSeriesDetail(series, episodes, profiles, Date.now());
+  if (detail === null) return null;
+  return { detail, profiles: sortedProfileOptions(profiles) };
 }

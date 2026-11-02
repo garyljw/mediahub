@@ -7,6 +7,7 @@ import { Poster } from "@/components/poster/poster";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
+import { SeriesEditForm } from "@/components/tv/series-edit-form";
 import { SeriesHeaderActions } from "@/components/tv/series-header-actions";
 import {
   EpisodeActivityCell,
@@ -24,7 +25,7 @@ import {
 } from "@/components/tv/series-detail-actions";
 import { requirePageUser } from "@/server/authz";
 import { ArrRequestError } from "@/server/arr/request";
-import { getSeriesDetail, type SeasonRow, type SeriesDetail } from "@/server/arr/series-detail";
+import { getSeriesDetail, type SeasonRow, type SeriesDetailPage } from "@/server/arr/series-detail";
 
 export const metadata = { title: "TV" };
 // Blocking route: the page waits for Sonarr before rendering, so no Suspense fallback is needed.
@@ -171,7 +172,8 @@ function SeasonDetails({
   );
 }
 
-function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolean }) {
+function SeriesView({ page, isAdmin }: { page: SeriesDetailPage; isAdmin: boolean }) {
+  const { detail, profiles } = page;
   // The newest season that isn't Specials starts open. Seasons arrive newest first.
   const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
   const meta = [detail.year === null ? null : String(detail.year), detail.network].filter(
@@ -202,6 +204,22 @@ function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolea
           <SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />
         </div>
       </div>
+      {isAdmin && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-muted-foreground">Settings</h2>
+          <SeriesEditForm
+            seriesId={detail.id}
+            current={{
+              qualityProfileId: detail.qualityProfileId,
+              monitored: detail.monitored,
+              seriesType: detail.seriesType,
+              seasonFolder: detail.seasonFolder,
+              monitorNewItems: detail.monitorNewItems,
+            }}
+            profiles={profiles}
+          />
+        </section>
+      )}
       <section aria-label="Seasons" className="space-y-2">
         {detail.seasons.length === 0 ? (
           <p className="text-sm text-muted-foreground">No seasons.</p>
@@ -231,9 +249,9 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
   const parsed = seriesId.safeParse((await params).id);
   if (!parsed.success) notFound();
 
-  let detail: SeriesDetail | null;
+  let page: SeriesDetailPage | null;
   try {
-    detail = await getSeriesDetail(parsed.data);
+    page = await getSeriesDetail(parsed.data);
   } catch (error) {
     // Anything that isn't a Sonarr request failure (a config error, a bug) goes to Next's error handling.
     if (!(error instanceof ArrRequestError)) throw error;
@@ -249,6 +267,6 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
     );
   }
 
-  if (detail === null) notFound();
-  return <SeriesView detail={detail} isAdmin={isAdmin} />;
+  if (page === null) notFound();
+  return <SeriesView page={page} isAdmin={isAdmin} />;
 }
