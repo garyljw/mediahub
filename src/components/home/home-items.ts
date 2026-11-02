@@ -18,9 +18,6 @@ export type HomeItem = {
 
 export type HomeKind = "all" | "movie" | "series";
 
-/** How many tiles show at first, and how many each "Show more" adds. */
-export const HOME_PAGE_SIZE = 60;
-
 export type HomeFilter = { kind: HomeKind; search: string };
 
 /** Keeps the items of one kind (or all kinds) that match the search. An empty search matches everything. */

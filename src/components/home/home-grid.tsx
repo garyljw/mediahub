@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PosterTile } from "@/components/poster/poster";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
@@ -13,7 +12,7 @@ import { formatCount } from "@/components/library/format";
 import { useActivity } from "@/components/library/use-activity";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
-import { filterHomeItems, HOME_PAGE_SIZE, type HomeItem, type HomeKind } from "./home-items";
+import { filterHomeItems, type HomeItem, type HomeKind } from "./home-items";
 
 const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
   { kind: "all", label: "All" },
@@ -37,7 +36,6 @@ export function HomeGrid({
 }) {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
-  const [visible, setVisible] = useState(HOME_PAGE_SIZE);
   const searchRef = useRef<HTMLInputElement>(null);
   const movieActivity = useActivity("/api/movies/activity");
   const seriesActivity = useActivity("/api/tv/activity");
@@ -47,21 +45,13 @@ export function HomeGrid({
     if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
   }, []);
 
-  // A new search or filter starts again from the first page.
-  const filtered = useMemo(() => filterHomeItems(items, { kind, search }), [items, kind, search]);
-  const shown = filtered.slice(0, visible);
+  // Every match shows at once: no paging. Posters load lazily as they scroll into view. The grid follows a
+  // deferred copy of the search, so typing stays responsive while a large grid re-renders.
+  const deferredSearch = useDeferredValue(search);
+  const filtered = useMemo(() => filterHomeItems(items, { kind, search: deferredSearch }), [items, kind, deferredSearch]);
+  const filtering = kind !== "all" || deferredSearch.trim() !== "";
   // An empty grid with a failed app in view is explained by the page's error, not by "No matches".
   const failedInView = unavailable.some((failed) => kind === "all" || kind === failed);
-
-  function changeSearch(value: string) {
-    setSearch(value);
-    setVisible(HOME_PAGE_SIZE);
-  }
-
-  function changeKind(next: HomeKind) {
-    setKind(next);
-    setVisible(HOME_PAGE_SIZE);
-  }
 
   return (
     <div className="space-y-4">
@@ -73,7 +63,7 @@ export function HomeGrid({
           ref={searchRef}
           type="search"
           value={search}
-          onChange={(event) => changeSearch(event.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="Search movies and TV"
           aria-label="Search your library"
           className="sm:max-w-sm"
@@ -84,7 +74,7 @@ export function HomeGrid({
               key={chip.kind}
               type="button"
               aria-pressed={kind === chip.kind}
-              onClick={() => changeKind(chip.kind)}
+              onClick={() => setKind(chip.kind)}
               className={cn(
                 CHIP_CLASS,
                 kind === chip.kind
@@ -105,12 +95,15 @@ export function HomeGrid({
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            Showing {formatCount(shown.length)} of {formatCount(filtered.length)}
+            {filtering
+              ? `${formatCount(filtered.length)} of ${formatCount(items.length)}`
+              : `${formatCount(items.length)} ${items.length === 1 ? "title" : "titles"}`}
           </p>
           {/* Fixed-width tiles fill each row, so wider screens get more columns rather than bigger posters. */}
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
-            {shown.map((item) => (
-              <li key={item.key}>
+            {filtered.map((item) => (
+              // content-visibility lets the browser skip layout and paint for tiles that are off screen.
+              <li key={item.key} className="[contain-intrinsic-size:auto_15rem] [content-visibility:auto]">
                 <HomeTile
                   item={item}
                   activity={(item.kind === "movie" ? movieActivity.byId : seriesActivity.byId).get(item.id)}
@@ -118,13 +111,6 @@ export function HomeGrid({
               </li>
             ))}
           </ul>
-          {visible < filtered.length && (
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={() => setVisible((count) => count + HOME_PAGE_SIZE)}>
-                Show more
-              </Button>
-            </div>
-          )}
         </>
       )}
     </div>
@@ -140,7 +126,8 @@ function ActivityFailed({ source }: { source: string }) {
   );
 }
 
-function HomeTile({ item, activity }: { item: HomeItem; activity: QueueActivity | undefined }) {
+// Memoised because every match renders at once: an activity poll then skips the tiles with no activity.
+const HomeTile = memo(function HomeTile({ item, activity }: { item: HomeItem; activity: QueueActivity | undefined }) {
   const Icon = activity ? ACTIVITY_ICON[activity.state] : null;
   const KindIcon = item.kind === "movie" ? Film : Tv;
   return (
@@ -184,4 +171,4 @@ function HomeTile({ item, activity }: { item: HomeItem; activity: QueueActivity 
       </div>
     </Link>
   );
-}
+});
