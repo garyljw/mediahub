@@ -1,6 +1,6 @@
 import "server-only";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_POSTER_BYTES, fetchPosterBytes, isJpeg, readCapped, servePosterResponse } from "./poster";
+import { MAX_BACKDROP_BYTES, MAX_POSTER_BYTES, fetchPosterBytes, isJpeg, readCapped, servePosterResponse } from "./poster";
 import { ArrRequestError } from "./request";
 
 function streamOf(...chunks: number[][]): ReadableStream<Uint8Array> {
@@ -94,6 +94,22 @@ describe("fetchPosterBytes", () => {
     body.set([0xff, 0xd8, 0xff]);
     const error = await fetchPosterBytes("Test poster", replyWith(new Response(body).body)).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).kind).toBe("invalid");
+  });
+
+  it("uses a caller's cap instead of the poster cap when one is given", async () => {
+    const body = new Uint8Array(MAX_POSTER_BYTES + 1);
+    body.set([0xff, 0xd8, 0xff]);
+    const bytes = await fetchPosterBytes("Test backdrop", replyWith(new Response(body).body), MAX_BACKDROP_BYTES);
+    expect(bytes.byteLength).toBe(MAX_POSTER_BYTES + 1);
+  });
+
+  it("still rejects a body over the caller's cap", async () => {
+    const body = new Uint8Array(MAX_BACKDROP_BYTES + 1);
+    body.set([0xff, 0xd8, 0xff]);
+    const error = await fetchPosterBytes("Test backdrop", replyWith(new Response(body).body), MAX_BACKDROP_BYTES).catch(
+      (e: unknown) => e,
+    );
     expect((error as ArrRequestError).kind).toBe("invalid");
   });
 

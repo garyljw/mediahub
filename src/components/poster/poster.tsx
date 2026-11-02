@@ -9,7 +9,7 @@ import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
  * Tracks whether a poster src failed to load, for both thumbnails and tiles. A failure belongs to the src that
  * failed: a new src gets a fresh attempt, so the same <img> can recover.
  */
-function usePosterFailure(src: string | null) {
+export function usePosterFailure(src: string | null) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const failed = src !== null && failedSrc === src;
   const imgRef = useRef<HTMLImageElement>(null);

@@ -3,11 +3,16 @@ import { radarrClient } from "./client";
 import { ArrRequestError, arrRequest } from "./request";
 import { fetchQualityProfiles, toMovieRows, type MovieStatus } from "./movies";
 import { sortedProfileOptions, type QualityProfileOption } from "./profiles";
+import { getMovieCredits, type MovieCredits } from "./movie-credits";
 import { isMinimumAvailability, type MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
+type RatingChild = RadarrComponents["schemas"]["RatingChild"];
+
+/** Most genres shown on the page. Radarr can send more; the header only has room for a few. */
+const MAX_GENRES = 5;
 
 /** One movie, reduced to what the movie page shows. No file paths, no root folder. */
 export type MovieDetail = {
@@ -31,7 +36,37 @@ export type MovieDetail = {
   sizeOnDisk: number;
   added: string | null;
   hasPoster: boolean;
+  /** True when Radarr has a backdrop (fanart) for the movie. The browser then fetches it from MediaHub's backdrop route. */
+  hasBackdrop: boolean;
+  genres: string[];
+  certification: string | null;
+  /** Each rating's value, or null when Radarr has none or has no votes behind it. */
+  ratings: { imdb: number | null; tmdb: number | null };
+  /** Radarr's dates as ISO strings, or null. The page formats them. */
+  inCinemas: string | null;
+  digitalRelease: string | null;
+  physicalRelease: string | null;
+  /** The original language's name, or null. */
+  language: string | null;
+  /** The IMDb id (e.g. "tt0000001") when it has the expected shape, otherwise null. */
+  imdbId: string | null;
+  /** The TMDB movie id when it is a positive integer, otherwise null. */
+  tmdbId: number | null;
 };
+
+const IMDB_ID = /^tt\d{1,10}$/;
+
+/** A Radarr rating's value, only when it has votes behind it and the value is positive. */
+function ratingValue(child: RatingChild | undefined): number | null {
+  if (!child || typeof child.votes !== "number" || !(child.votes > 0)) return null;
+  if (typeof child.value !== "number" || !(child.value > 0)) return null;
+  return child.value;
+}
+
+/** Non-empty text, or null. Used for Radarr's optional strings. */
+function textOrNull(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
 
 /**
  * Pure: maps one movie and the quality profiles to the movie page's shape. Returns null when the movie has no
@@ -58,11 +93,27 @@ export function toMovieDetail(movie: MovieResource, profiles: QualityProfileReso
     sizeOnDisk: row.sizeOnDisk,
     added: row.added,
     hasPoster: row.hasPoster,
+    hasBackdrop: movie.images?.some((image) => image.coverType === "fanart") ?? false,
+    genres: (movie.genres ?? [])
+      .filter((genre): genre is string => typeof genre === "string" && genre.trim() !== "")
+      .slice(0, MAX_GENRES),
+    certification: textOrNull(movie.certification),
+    ratings: { imdb: ratingValue(movie.ratings?.imdb), tmdb: ratingValue(movie.ratings?.tmdb) },
+    inCinemas: textOrNull(movie.inCinemas),
+    digitalRelease: textOrNull(movie.digitalRelease),
+    physicalRelease: textOrNull(movie.physicalRelease),
+    language: textOrNull(movie.originalLanguage?.name),
+    imdbId: typeof movie.imdbId === "string" && IMDB_ID.test(movie.imdbId) ? movie.imdbId : null,
+    tmdbId: typeof movie.tmdbId === "number" && Number.isInteger(movie.tmdbId) && movie.tmdbId > 0 ? movie.tmdbId : null,
   };
 }
 
-/** What the movie page loads: the movie, and the quality profiles the settings form offers (the page only uses them for admins). */
-export type MovieDetailPage = { detail: MovieDetail; profiles: QualityProfileOption[] };
+/**
+ * What the movie page loads: the movie, the quality profiles the settings form offers (the page only uses them for
+ * admins), and the cast and directors. `credits` is null when Radarr's credits request failed, so the rest of the
+ * page still shows.
+ */
+export type MovieDetailPage = { detail: MovieDetail; profiles: QualityProfileOption[]; credits: MovieCredits | null };
 
 /**
  * One movie for the movie page, with the quality profiles from the same request. Returns null when Radarr answers
@@ -77,10 +128,19 @@ export async function getMovieDetail(movieId: number): Promise<MovieDetailPage |
     if (error instanceof ArrRequestError && error.status === 404) return null;
     throw error;
   });
-  const [movie, profiles] = await Promise.all([movieRequest, fetchQualityProfiles()]);
+  // A credits failure leaves the cast as null. Anything else (a config error, a bug) still propagates.
+  const creditsRequest = getMovieCredits(movieId).catch((error: unknown) => {
+    if (!(error instanceof ArrRequestError)) throw error;
+    return error;
+  });
+  const [movie, profiles, creditsResult] = await Promise.all([movieRequest, fetchQualityProfiles(), creditsRequest]);
   if (movie === null) return null;
   if (!movie) throw new ArrRequestError("Radarr movie response was empty", "invalid");
   const detail = toMovieDetail(movie, profiles);
   if (detail === null) return null;
-  return { detail, profiles: sortedProfileOptions(profiles) };
+  // Logged only once the movie is known to exist, so a stale link doesn't log a credits failure too.
+  // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+  if (creditsResult instanceof ArrRequestError) console.error(`Movie page: ${creditsResult.message}`);
+  const credits = creditsResult instanceof ArrRequestError ? null : creditsResult;
+  return { detail, profiles: sortedProfileOptions(profiles), credits };
 }
