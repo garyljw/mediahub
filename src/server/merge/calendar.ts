@@ -5,6 +5,7 @@ import { episodeCode } from "@/components/library/release";
 import { TITLE_COLLATOR } from "@/components/library/list";
 import { episodeStatus } from "./episode-status";
 import { isCalendarDate, utcDateOf } from "./calendar-dates";
+import { hasPoster } from "./images";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type EpisodeResource = SonarrComponents["schemas"]["EpisodeResource"];
@@ -55,10 +56,6 @@ function releaseDateOf(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const day = value.slice(0, 10);
   return isCalendarDate(day) ? day : null;
-}
-
-function hasPoster(images: { coverType?: string }[] | null | undefined): boolean {
-  return images?.some((image) => image.coverType === "poster") ?? false;
 }
 
 /** An entry plus the key it sorts by within a day (Radarr's or Sonarr's sortTitle). The key never leaves the server. */
