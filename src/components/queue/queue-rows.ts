@@ -51,6 +51,11 @@ export type QueueRow = {
   messages: string[];
   /** Download details. Null unless the caller asked for details (admins only). */
   details: QueueRowDetails | null;
+  /**
+   * True when an admin can force an import for this row: the download is completed with a warning (for a Sonarr
+   * download, any of its items). Always false for requesters.
+   */
+  canForceImport: boolean;
 };
 
 /** Plain code-point comparison, not localeCompare, so the order is the same on the server and in the browser. */

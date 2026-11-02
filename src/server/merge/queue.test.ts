@@ -246,3 +246,47 @@ describe("toQueueRows queue ids for requesters", () => {
     expect(rows(true).find((row) => row.key === "sonarr-101")?.queueIds).toEqual([101, 102, 103]);
   });
 });
+
+describe("toQueueRows canForceImport", () => {
+  // The fixtures have no completed item, so these are built from fixture items with the status changed.
+  const stuckMovie = { ...movieItems[0], id: 91, status: "completed", trackedDownloadStatus: "warning" } as MovieQueueItem;
+  const packItem = (id: number, status: string, trackedDownloadStatus: string) =>
+    ({ ...episodeItems[0], id, downloadId: "DL-GROUP", status, trackedDownloadStatus }) as EpisodeQueueItem;
+
+  it("is true for an admin when a Radarr item is completed with a warning", () => {
+    expect(toQueueRows([stuckMovie], [], NOW, { includeDetails: true })[0].canForceImport).toBe(true);
+  });
+
+  it("is false for a requester even when the item is completed with a warning", () => {
+    expect(toQueueRows([stuckMovie], [], NOW, { includeDetails: false })[0].canForceImport).toBe(false);
+  });
+
+  it("is false when the item is only a warning, or completed without one", () => {
+    const warningOnly = { ...stuckMovie, id: 92, status: "warning" } as MovieQueueItem;
+    const completedOk = { ...stuckMovie, id: 93, trackedDownloadStatus: "ok" } as MovieQueueItem;
+    expect(toQueueRows([warningOnly, completedOk], [], NOW, { includeDetails: true }).map((row) => row.canForceImport)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("is true for a Sonarr download when any of its items is completed with a warning", () => {
+    const rowsOut = toQueueRows([], [packItem(501, "downloading", "ok"), packItem(502, "completed", "warning")], NOW, {
+      includeDetails: true,
+    });
+    expect(rowsOut).toHaveLength(1);
+    expect(rowsOut[0].canForceImport).toBe(true);
+  });
+
+  it("is false for an item without a download id, since the action can't scan it", () => {
+    const noDownloadId = { ...stuckMovie, id: 94, downloadId: null } as MovieQueueItem;
+    expect(toQueueRows([noDownloadId], [], NOW, { includeDetails: true })[0].canForceImport).toBe(false);
+  });
+
+  it("is false for a Sonarr download when no item is completed with a warning", () => {
+    const rowsOut = toQueueRows([], [packItem(501, "downloading", "ok"), packItem(502, "warning", "warning")], NOW, {
+      includeDetails: true,
+    });
+    expect(rowsOut[0].canForceImport).toBe(false);
+  });
+});

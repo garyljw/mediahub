@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderInput, Trash2 } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -21,6 +21,7 @@ import {
   type QueueRow,
   type QueueRowDetails,
 } from "./queue-rows";
+import { QueueImportDialog } from "./queue-import-dialog";
 import { QueueRemoveDialog } from "./queue-remove-dialog";
 import { useQueueAutoRefresh } from "./use-auto-refresh";
 
@@ -95,6 +96,8 @@ export function QueueView({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   // The row the Remove dialog is open for. Kept as a snapshot, so the dialog doesn't change if the row leaves the queue.
   const [removing, setRemoving] = useState<QueueRow | null>(null);
+  // The row the Force import dialog is open for. A snapshot, like the Remove dialog's.
+  const [importing, setImporting] = useState<QueueRow | null>(null);
   // The row whose ⋯ menu is open. Its poster preview is hidden meanwhile, as on the Movies table.
   const [menuRowKey, setMenuRowKey] = useState<string | null>(null);
   const posterPreview = usePosterPreview<string>();
@@ -103,6 +106,7 @@ export function QueueView({
   const previewVisible =
     menuRowKey === null &&
     removing === null &&
+    importing === null &&
     posterPreview.activeKey !== null &&
     visible.rows.some((row) => row.key === posterPreview.activeKey);
   const columnCount = (showDetails ? 7 : 5) + (canRemove ? 1 : 0);
@@ -226,10 +230,18 @@ export function QueueView({
                           onClosed={() => setMenuRowKey((previous) => (previous === row.key ? null : previous))}
                         >
                           {(defer) => (
-                            <DropdownMenuItem variant="destructive" onSelect={() => defer(() => setRemoving(row))}>
-                              <Trash2 aria-hidden />
-                              Remove…
-                            </DropdownMenuItem>
+                            <>
+                              {row.canForceImport && (
+                                <DropdownMenuItem onSelect={() => defer(() => setImporting(row))}>
+                                  <FolderInput aria-hidden />
+                                  Force import…
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem variant="destructive" onSelect={() => defer(() => setRemoving(row))}>
+                                <Trash2 aria-hidden />
+                                Remove…
+                              </DropdownMenuItem>
+                            </>
                           )}
                         </RowMenu>
                       </TableCell>
@@ -256,6 +268,8 @@ export function QueueView({
       )}
 
       {removing !== null && <QueueRemoveDialog row={removing} onClose={() => setRemoving(null)} />}
+
+      {importing !== null && <QueueImportDialog row={importing} onClose={() => setImporting(null)} />}
 
       {previewVisible && posterPreview.preview}
     </div>

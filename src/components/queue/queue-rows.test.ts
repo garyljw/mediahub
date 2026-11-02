@@ -24,6 +24,7 @@ function row(overrides: Partial<QueueRow> & Pick<QueueRow, "key">): QueueRow {
     etaSeconds: null,
     messages: [],
     details: null,
+    canForceImport: false,
     ...overrides,
   };
 }
