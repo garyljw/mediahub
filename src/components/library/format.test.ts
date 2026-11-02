@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatCount, formatEta, formatSize } from "./format";
+import { formatAdded, formatCount, formatDay, formatEta, formatRange, formatSize } from "./format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {
@@ -80,5 +80,31 @@ describe("formatEta", () => {
     [2 * 86400 + 3 * 3600 + 40, "2d 3h"],
   ])("formats %j as %j", (seconds, expected) => {
     expect(formatEta(seconds)).toBe(expected);
+  });
+});
+
+describe("formatDay", () => {
+  it("gives the weekday, day and month, without a year", () => {
+    expect(formatDay("2026-11-02")).toBe("Mon 2 Nov");
+    expect(formatDay("2026-11-08")).toBe("Sun 8 Nov");
+    expect(formatDay("2027-01-01")).toBe("Fri 1 Jan");
+  });
+
+  it("shows an em dash for an unparseable date", () => {
+    expect(formatDay("not a date")).toBe("—");
+  });
+});
+
+describe("formatRange", () => {
+  it("gives one year at the end when both dates share a year", () => {
+    expect(formatRange("2026-10-26", "2026-11-29")).toBe("26 Oct – 29 Nov 2026");
+  });
+
+  it("gives each side its own year when the range crosses New Year", () => {
+    expect(formatRange("2026-12-28", "2027-01-31")).toBe("28 Dec 2026 – 31 Jan 2027");
+  });
+
+  it("shows an em dash for an unparseable date", () => {
+    expect(formatRange("2026-10-26", "soon")).toBe("—");
   });
 });

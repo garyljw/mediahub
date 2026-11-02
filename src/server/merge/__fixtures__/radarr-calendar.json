@@ -1,0 +1,123 @@
+[
+  {
+    "id": 101,
+    "title": "Starfall",
+    "year": 2026,
+    "path": "/movies/Starfall (2026)",
+    "overview": "A made-up film for tests.",
+    "monitored": true,
+    "hasFile": false,
+    "isAvailable": true,
+    "inCinemas": "2026-11-06T00:00:00Z",
+    "digitalRelease": "2026-12-01T00:00:00Z",
+    "physicalRelease": "2027-01-12T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "https://image.test/starfall.jpg"
+      }
+    ]
+  },
+  {
+    "id": 102,
+    "title": "Quiet Harbour",
+    "year": 2026,
+    "path": "/movies/Quiet Harbour (2026)",
+    "overview": "Unmonitored, so hidden by default.",
+    "monitored": false,
+    "hasFile": false,
+    "isAvailable": true,
+    "inCinemas": null,
+    "digitalRelease": "2026-11-10T00:00:00Z",
+    "physicalRelease": null,
+    "images": []
+  },
+  {
+    "id": 103,
+    "title": "Ember Road",
+    "year": 2026,
+    "path": "/movies/Ember Road (2026)",
+    "overview": "Already on disk.",
+    "monitored": true,
+    "hasFile": true,
+    "isAvailable": true,
+    "inCinemas": null,
+    "digitalRelease": null,
+    "physicalRelease": "2026-11-12T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "https://image.test/ember.jpg"
+      }
+    ]
+  },
+  {
+    "id": 104,
+    "title": "Lantern Coast",
+    "year": 2026,
+    "path": "/movies/Lantern Coast (2026)",
+    "overview": "Not released yet.",
+    "monitored": true,
+    "hasFile": false,
+    "isAvailable": false,
+    "inCinemas": "2026-11-20T00:00:00Z",
+    "digitalRelease": null,
+    "physicalRelease": null,
+    "images": []
+  },
+  {
+    "id": 105,
+    "title": "Old News",
+    "year": 2026,
+    "path": "/movies/Old News (2026)",
+    "overview": "Released before the window.",
+    "monitored": true,
+    "hasFile": false,
+    "isAvailable": true,
+    "inCinemas": "2026-06-01T00:00:00Z",
+    "digitalRelease": null,
+    "physicalRelease": null,
+    "images": []
+  },
+  {
+    "id": 108,
+    "title": "Bad Date",
+    "year": 2026,
+    "path": "/movies/Bad Date (2026)",
+    "overview": "One date is not a date.",
+    "monitored": true,
+    "hasFile": false,
+    "isAvailable": true,
+    "inCinemas": "soon",
+    "digitalRelease": "2026-11-30T00:00:00Z",
+    "physicalRelease": null,
+    "images": []
+  },
+  {
+    "id": "106",
+    "title": "String Id",
+    "inCinemas": "2026-11-05T00:00:00Z"
+  },
+  {
+    "id": 107,
+    "title": "",
+    "inCinemas": "2026-11-05T00:00:00Z"
+  },
+  {
+    "id": 109,
+    "title": "The Archive",
+    "sortTitle": "archive",
+    "year": 2026,
+    "monitored": true,
+    "hasFile": false,
+    "isAvailable": false,
+    "inCinemas": "2026-11-06T00:00:00Z",
+    "physicalRelease": "2027-03-01T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/109/poster.jpg"
+      }
+    ]
+  }
+]
