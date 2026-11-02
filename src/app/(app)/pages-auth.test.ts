@@ -81,6 +81,7 @@ const PAGE_ROLES: Record<string, string[]> = {
   "movies/page.tsx": BOTH,
   "tv/page.tsx": BOTH,
   "tv/[id]/page.tsx": BOTH,
+  "movies/[id]/page.tsx": BOTH,
   "calendar/page.tsx": BOTH,
   "queue/page.tsx": BOTH,
   "history/page.tsx": BOTH,

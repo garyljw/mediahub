@@ -1,0 +1,103 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { RefreshCw, Search, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
+import { SERIES } from "@/components/library/nouns";
+import { useStatusLine } from "@/components/library/use-status-line";
+import { refreshLibrarySeries, searchLibrarySeries } from "@/app/(app)/tv/actions";
+import { deleteSeriesItem } from "@/app/(app)/tv/[id]/actions";
+import { MAX_EDIT_SERIES } from "./series-edit";
+import { refreshStartedMessage } from "./series-refresh";
+import { searchStartedMessage } from "./series-search";
+
+const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try again.";
+
+/**
+ * The action bar on a series' page, for the whole series. Search is for everyone. Refresh and delete are admin
+ * only, and the page only renders them for admins. Search and refresh reuse the TV table's actions. Delete uses the
+ * page's own action, which sends the browser back to the list.
+ */
+export function SeriesHeaderActions({
+  seriesId,
+  title,
+  year,
+  isAdmin,
+}: {
+  seriesId: number;
+  title: string;
+  year: number | null;
+  isAdmin: boolean;
+}) {
+  const [status, setStatus] = useStatusLine();
+  const [searching, startSearch] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
+  const [deleting, setDeleting] = useState(false);
+
+  function search() {
+    setStatus(null);
+    startSearch(async () => {
+      try {
+        const result = await searchLibrarySeries({ seriesIds: [seriesId] });
+        setStatus(result.ok ? searchStartedMessage(result.searched) : result.error);
+      } catch {
+        setStatus(UNREACHABLE);
+      }
+    });
+  }
+
+  function refreshAndScan() {
+    setStatus(null);
+    startRefresh(async () => {
+      try {
+        const result = await refreshLibrarySeries({ seriesIds: [seriesId] });
+        setStatus(result.ok ? refreshStartedMessage(result.refreshed) : result.error);
+      } catch {
+        setStatus(UNREACHABLE);
+      }
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={search} disabled={searching} aria-busy={searching}>
+          <Search aria-hidden />
+          Search
+        </Button>
+        {isAdmin && (
+          <>
+            <Button size="sm" variant="secondary" onClick={refreshAndScan} disabled={refreshing} aria-busy={refreshing}>
+              <RefreshCw aria-hidden />
+              Refresh &amp; scan
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => setDeleting(true)}>
+              <Trash2 aria-hidden />
+              Delete…
+            </Button>
+          </>
+        )}
+      </div>
+
+      <p aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+        {status}
+      </p>
+
+      {isAdmin && deleting && (
+        <LibraryDeleteDialog
+          items={[{ id: seriesId, title, year }]}
+          noun={SERIES}
+          max={MAX_EDIT_SERIES}
+          appName="Sonarr"
+          exclusionLabel="Prevent this series from being re-added by import lists"
+          submit={({ deleteFiles, addExclusion }) =>
+            deleteSeriesItem({ seriesId, deleteFiles, addImportListExclusion: addExclusion })
+          }
+          onClose={() => setDeleting(false)}
+          onDeleted={() => setDeleting(false)}
+        />
+      )}
+    </div>
+  );
+}

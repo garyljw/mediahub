@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatCount, formatDay, formatEta, formatGridDay, formatRange, formatSize } from "./format";
+import { formatAdded, formatCount, formatDay, formatEta, formatGridDay, formatRange, formatRuntime, formatSize } from "./format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {
@@ -122,5 +122,26 @@ describe("formatGridDay", () => {
 
   it("shows an em dash for an unparseable date", () => {
     expect(formatGridDay("not a date", false)).toBe("—");
+  });
+});
+
+describe("formatRuntime", () => {
+  it("shows null for no runtime", () => {
+    expect(formatRuntime(null)).toBeNull();
+    expect(formatRuntime(0)).toBeNull();
+    expect(formatRuntime(-5)).toBeNull();
+  });
+
+  it("shows minutes under an hour", () => {
+    expect(formatRuntime(45)).toBe("45m");
+  });
+
+  it("shows hours and minutes", () => {
+    expect(formatRuntime(125)).toBe("2h 5m");
+    expect(formatRuntime(118)).toBe("1h 58m");
+  });
+
+  it("drops the minutes when they are zero", () => {
+    expect(formatRuntime(120)).toBe("2h");
   });
 });

@@ -10,6 +10,21 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   searchSeriesReleases: vi.fn(),
   grabSeriesRelease: vi.fn(),
+  deleteSeries: vi.fn(),
+  redirect: vi.fn(),
+}));
+
+vi.mock("@/server/arr/series", () => ({
+  deleteSeries: mocks.deleteSeries,
+}));
+
+// redirect throws in Next, so the mock does too. A test can then tell a redirect from a returned result.
+vi.mock("next/navigation", () => ({
+  RedirectType: { push: "push", replace: "replace" },
+  redirect: (path: string, type?: string) => {
+    mocks.redirect(path, type);
+    throw new Error(`NEXT_REDIRECT ${path}`);
+  },
 }));
 
 // The series-releases module is mocked, so the real grab rule (grabWasRefused) and ReleaseGrabError come from releases.ts.
@@ -51,6 +66,7 @@ vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 import { AuthzError } from "@/server/authz";
 import { SeasonNotFoundError } from "@/server/arr/episodes";
 import {
+  deleteSeriesItem,
   findSeriesReleases,
   grabSeriesRelease,
   searchEpisodeNow,
@@ -73,6 +89,7 @@ beforeEach(() => {
   mocks.searchEpisode.mockResolvedValue(undefined);
   mocks.searchSeriesReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
   mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02.1080p" });
+  mocks.deleteSeries.mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -614,5 +631,75 @@ describe("findSeriesReleases and grabSeriesRelease", () => {
       mocks.grabSeriesRelease.mockRejectedValue(new Error("config broken"));
       await expect(grabSeriesRelease({ token: release.token })).rejects.toThrow("config broken");
     });
+  });
+});
+
+describe("deleteSeriesItem", () => {
+  const DELETE_DENIED = "You don't have permission to delete series.";
+  const DELETE_INVALID = "Invalid delete.";
+  const validDelete = { seriesId: 4, deleteFiles: false, addImportListExclusion: false };
+
+  it("checks for the admin role only", async () => {
+    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("NEXT_REDIRECT /tv");
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  });
+
+  it("rejects a requester and never calls Sonarr or redirects", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+
+    expect(await deleteSeriesItem(validDelete)).toEqual({ ok: false, error: DELETE_DENIED });
+    expect(mocks.deleteSeries).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("database down");
+    expect(mocks.deleteSeries).not.toHaveBeenCalled();
+  });
+
+  it("refuses an extra key, a non-positive id, or a missing boolean", async () => {
+    expect(await deleteSeriesItem({ ...validDelete, moveFiles: true })).toEqual({ ok: false, error: DELETE_INVALID });
+    expect(await deleteSeriesItem({ ...validDelete, seriesId: 0 })).toEqual({ ok: false, error: DELETE_INVALID });
+    expect(await deleteSeriesItem({ seriesId: 4, addImportListExclusion: false })).toEqual({
+      ok: false,
+      error: DELETE_INVALID,
+    });
+    expect(mocks.deleteSeries).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("sends exactly one series id with both booleans, and redirects to the TV list", async () => {
+    await expect(
+      deleteSeriesItem({ seriesId: 4, deleteFiles: true, addImportListExclusion: true }),
+    ).rejects.toThrow("NEXT_REDIRECT /tv");
+
+    expect(mocks.deleteSeries).toHaveBeenCalledWith({ seriesIds: [4], deleteFiles: true, addImportListExclusion: true });
+    expect(mocks.redirect).toHaveBeenCalledWith("/tv", "replace");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("says Sonarr may still be deleting after a timeout", async () => {
+    mocks.deleteSeries.mockRejectedValue(new ArrRequestError("Sonarr series delete request failed: timed out", "timeout"));
+
+    const result = await deleteSeriesItem(validDelete);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("may still be deleting");
+    expect(result.error).toContain("refreshed");
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("says Sonarr didn't confirm for any other failure", async () => {
+    mocks.deleteSeries.mockRejectedValue(new ArrRequestError("Sonarr series delete request failed: HTTP 504", "http", 504));
+
+    const result = await deleteSeriesItem(validDelete);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("didn't confirm");
+    expect(result.error).toContain("refreshed");
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 });

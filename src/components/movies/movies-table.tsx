@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Bookmark,
@@ -24,7 +25,8 @@ import {
 } from "@/app/(app)/movies/actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { MovieRow, MovieStatus } from "@/server/arr/movies";
+import type { MovieRow } from "@/server/arr/movies";
+import { STATUS_CLASS, STATUS_LABEL } from "./movie-status";
 import type { QualityProfileOption } from "@/server/arr/profiles";
 import { clampPage, nextSort, pageCount, pageSlice, profileOptions, type MonitoredFilter } from "@/components/library/list";
 import { CELL, HEAD, Pagination, RowMenu, SELECT_CLASS, SortHeader } from "@/components/library/table-parts";
@@ -56,18 +58,6 @@ import { ReleaseDialog } from "@/components/library/release-dialog";
 import { grabbedMessage } from "@/components/library/release";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
-
-const STATUS_LABEL: Record<MovieStatus, string> = {
-  downloaded: "Downloaded",
-  missing: "Missing",
-  unreleased: "Unreleased",
-};
-
-const STATUS_CLASS: Record<MovieStatus, string> = {
-  downloaded: "border-transparent bg-emerald-600/15 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  missing: "border-transparent bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  unreleased: "border-transparent bg-muted text-muted-foreground",
-};
 
 /** A row's thumbnail and preview come from MediaHub's own poster route, and only when Radarr has a poster. */
 function moviePosterSrc(row: MovieRow): string | null {
@@ -380,7 +370,9 @@ export function MoviesTable({
                   <div className="flex min-w-0 items-center gap-2">
                     <Poster src={moviePosterSrc(row)} />
                     <div className="min-w-0 flex-1 truncate" title={row.title}>
-                      <span className="font-medium">{row.title}</span>
+                      <Link href={`/movies/${row.id}`} className="font-medium hover:underline">
+                        {row.title}
+                      </Link>
                     </div>
                   </div>
                 </TableCell>

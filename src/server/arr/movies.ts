@@ -67,7 +67,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
   return rows;
 }
 
-async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
+export async function fetchQualityProfiles(): Promise<QualityProfileResource[]> {
   const client = radarrClient();
   return getList("Radarr quality profile", (signal) => client.GET("/api/v3/qualityprofile", { signal }));
 }
