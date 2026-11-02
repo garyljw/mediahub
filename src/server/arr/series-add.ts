@@ -88,12 +88,16 @@ function posterPathFromUrl(raw: string): string | null {
  */
 export function tvdbPosterPath(series: SeriesResource): string | null {
   const posterImage = series.images?.find((image) => image.coverType === "poster")?.remoteUrl;
-  for (const candidate of [series.remotePoster, posterImage]) {
-    if (typeof candidate !== "string" || candidate === "") continue;
-    const path = posterPathFromUrl(candidate);
-    if (path !== null) return path;
-  }
-  return null;
+  return tvdbImagePath(series.remotePoster) ?? tvdbImagePath(posterImage);
+}
+
+/**
+ * The TVDB poster path of one image URL, or null. Non-strings and empty strings give null, and anything else goes
+ * through the same checks as tvdbPosterPath. Used for the series poster and for each season's poster.
+ */
+export function tvdbImagePath(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string" || raw === "") return null;
+  return posterPathFromUrl(raw);
 }
 
 /** Sonarr's year when it is a real year, otherwise null. */

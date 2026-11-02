@@ -3,16 +3,13 @@ import { radarrClient } from "./client";
 import { ArrRequestError, arrRequest } from "./request";
 import { fetchQualityProfiles, toMovieRows, type MovieStatus } from "./movies";
 import { sortedProfileOptions, type QualityProfileOption } from "./profiles";
+import { genreList, imdbIdOrNull, positiveIdOrNull, ratingValue, textOrNull } from "./detail-fields";
 import { getMovieCredits, type MovieCredits } from "./movie-credits";
 import { isMinimumAvailability, type MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
-type RatingChild = RadarrComponents["schemas"]["RatingChild"];
-
-/** Most genres shown on the page. Radarr can send more; the header only has room for a few. */
-const MAX_GENRES = 5;
 
 /** One movie, reduced to what the movie page shows. No file paths, no root folder. */
 export type MovieDetail = {
@@ -54,20 +51,6 @@ export type MovieDetail = {
   tmdbId: number | null;
 };
 
-const IMDB_ID = /^tt\d{1,10}$/;
-
-/** A Radarr rating's value, only when it has votes behind it and the value is positive. */
-function ratingValue(child: RatingChild | undefined): number | null {
-  if (!child || typeof child.votes !== "number" || !(child.votes > 0)) return null;
-  if (typeof child.value !== "number" || !(child.value > 0)) return null;
-  return child.value;
-}
-
-/** Non-empty text, or null. Used for Radarr's optional strings. */
-function textOrNull(value: string | null | undefined): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value : null;
-}
-
 /**
  * Pure: maps one movie and the quality profiles to the movie page's shape. Returns null when the movie has no
  * numeric id or no title. The status, profile label and file fields come from toMovieRows, so the table and the
@@ -94,17 +77,15 @@ export function toMovieDetail(movie: MovieResource, profiles: QualityProfileReso
     added: row.added,
     hasPoster: row.hasPoster,
     hasBackdrop: movie.images?.some((image) => image.coverType === "fanart") ?? false,
-    genres: (movie.genres ?? [])
-      .filter((genre): genre is string => typeof genre === "string" && genre.trim() !== "")
-      .slice(0, MAX_GENRES),
+    genres: genreList(movie.genres),
     certification: textOrNull(movie.certification),
     ratings: { imdb: ratingValue(movie.ratings?.imdb), tmdb: ratingValue(movie.ratings?.tmdb) },
     inCinemas: textOrNull(movie.inCinemas),
     digitalRelease: textOrNull(movie.digitalRelease),
     physicalRelease: textOrNull(movie.physicalRelease),
     language: textOrNull(movie.originalLanguage?.name),
-    imdbId: typeof movie.imdbId === "string" && IMDB_ID.test(movie.imdbId) ? movie.imdbId : null,
-    tmdbId: typeof movie.tmdbId === "number" && Number.isInteger(movie.tmdbId) && movie.tmdbId > 0 ? movie.tmdbId : null,
+    imdbId: imdbIdOrNull(movie.imdbId),
+    tmdbId: positiveIdOrNull(movie.tmdbId),
   };
 }
 

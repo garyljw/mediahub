@@ -1,7 +1,7 @@
 import "server-only";
 import { sonarrClient } from "./client";
 import { queueSeriesWrite } from "./series-writes";
-import { fetchPosterBytes } from "./poster";
+import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { NewItemMonitor, SeriesType } from "@/components/tv/series-edit";
@@ -202,5 +202,23 @@ export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<Arra
       parseAs: "stream",
       signal,
     }),
+  );
+}
+
+/** The one Sonarr backdrop file MediaHub ever fetches. A module constant, so callers never choose the filename. */
+const BACKDROP_FILENAME = "fanart.jpg";
+
+/** Fetches Sonarr's backdrop (fanart) for one series as JPEG bytes. Only the fixed fanart file is requested. */
+export async function getSeriesBackdrop(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
+  const client = sonarrClient();
+  return fetchPosterBytes(
+    "Sonarr backdrop",
+    (signal) =>
+      client.GET("/api/v3/mediacover/{seriesId}/{filename}", {
+        params: { path: { seriesId, filename: BACKDROP_FILENAME } },
+        parseAs: "stream",
+        signal,
+      }),
+    MAX_BACKDROP_BYTES,
   );
 }

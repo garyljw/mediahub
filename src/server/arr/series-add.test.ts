@@ -16,6 +16,7 @@ import {
   getTvdbPoster,
   seriesAddBody,
   toSeriesLookupResults,
+  tvdbImagePath,
   tvdbPosterPath,
   type SeriesAdd,
 } from "./series-add";
@@ -79,6 +80,27 @@ describe("toSeriesLookupResults", () => {
     const capped = toSeriesLookupResults(many);
     expect(capped).toHaveLength(20);
     expect(capped[19].tvdbId).toBe(20);
+  });
+});
+
+describe("tvdbImagePath", () => {
+  it("gives the same path as tvdbPosterPath for a TVDB poster URL", () => {
+    expect(tvdbImagePath("https://artworks.thetvdb.com/banners/v4/season/81189-1/posters/abc.jpg")).toBe(
+      "banners/v4/season/81189-1/posters/abc.jpg",
+    );
+  });
+
+  it("returns null for a missing, empty or non-string value", () => {
+    expect(tvdbImagePath(undefined)).toBeNull();
+    expect(tvdbImagePath(null)).toBeNull();
+    expect(tvdbImagePath("")).toBeNull();
+    expect(tvdbImagePath(42 as unknown as string)).toBeNull();
+  });
+
+  it("returns null for a URL on another host or a path that does not match", () => {
+    expect(tvdbImagePath("https://example.invalid/banners/posters/abc.jpg")).toBeNull();
+    expect(tvdbImagePath("https://artworks.thetvdb.com/banners/posters/abc.png")).toBeNull();
+    expect(tvdbImagePath("not a url")).toBeNull();
   });
 });
 

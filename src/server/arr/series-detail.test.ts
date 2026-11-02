@@ -7,6 +7,7 @@ import profileFixture from "./__fixtures__/sonarr-qualityprofiles.json";
 import { ArrRequestError } from "./request";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
+type SeasonResource = SonarrComponents["schemas"]["SeasonResource"];
 type EpisodeResource = SonarrComponents["schemas"]["EpisodeResource"];
 type QualityProfileResource = SonarrComponents["schemas"]["QualityProfileResource"];
 
@@ -110,9 +111,128 @@ describe("toSeriesDetail", () => {
         "seasonFolder",
         "monitorNewItems",
         "hasPoster",
+        "hasBackdrop",
+        "genres",
+        "certification",
+        "runtime",
+        "rating",
+        "firstAired",
+        "lastAired",
+        "nextAiring",
+        "added",
+        "language",
+        "episodeFileCount",
+        "episodeCount",
+        "sizeOnDisk",
+        "imdbId",
+        "tvdbId",
+        "tmdbId",
         "seasons",
       ].sort(),
     );
+  });
+
+  it("maps the new header fields from the series", () => {
+    expect(detail()).toMatchObject({
+      hasBackdrop: true,
+      genres: ["Drama"],
+      certification: "TV-14",
+      runtime: 45,
+      rating: 8.4,
+      firstAired: "2020-01-10T00:00:00Z",
+      lastAired: "2024-06-01T00:00:00Z",
+      nextAiring: "2027-02-01T00:00:00Z",
+      added: "2024-03-01T10:00:00Z",
+      language: "English",
+      episodeFileCount: 2,
+      episodeCount: 7,
+      sizeOnDisk: 1073741824,
+      imdbId: "tt0000101",
+      tvdbId: 100010,
+      tmdbId: 200010,
+    });
+  });
+
+  it("reports a backdrop only when a fanart cover exists", () => {
+    expect(detail({ images: [{ coverType: "poster" }] })?.hasBackdrop).toBe(false);
+    expect(detail({ images: undefined })?.hasBackdrop).toBe(false);
+  });
+
+  it("keeps up to five non-empty genres, in order", () => {
+    const genres = ["Drama", "", "  ", "Thriller", "Mystery", "Crime", "Western", "Horror"];
+    expect(detail({ genres })?.genres).toEqual(["Drama", "Thriller", "Mystery", "Crime", "Western"]);
+    expect(detail({ genres: undefined })?.genres).toEqual([]);
+  });
+
+  it("shows the certification, the air dates and the language only when Sonarr sends them", () => {
+    expect(detail({ certification: "", firstAired: "", lastAired: null, nextAiring: undefined, originalLanguage: { id: 1, name: "" } })).toMatchObject({
+      certification: null,
+      firstAired: null,
+      lastAired: null,
+      nextAiring: null,
+      language: null,
+    });
+    expect(detail({ certification: undefined, originalLanguage: undefined })).toMatchObject({
+      certification: null,
+      language: null,
+    });
+  });
+
+  it("shows no runtime for 0 or a missing runtime, and the minutes otherwise", () => {
+    expect(detail({ runtime: 0 })?.runtime).toBeNull();
+    expect(detail({ runtime: undefined })?.runtime).toBeNull();
+    expect(detail({ runtime: 30 })?.runtime).toBe(30);
+  });
+
+  it("gives a rating only when it has votes and a positive value", () => {
+    expect(detail({ ratings: { votes: 0, value: 8.4 } })?.rating).toBeNull();
+    expect(detail({ ratings: { votes: 12, value: 0 } })?.rating).toBeNull();
+    expect(detail({ ratings: { votes: 12 } })?.rating).toBeNull();
+    expect(detail({ ratings: undefined })?.rating).toBeNull();
+    expect(detail({ ratings: { votes: 3, value: 6.5 } })?.rating).toBe(6.5);
+  });
+
+  it("keeps the IMDb id only when it has the tt-and-digits shape", () => {
+    expect(detail({ imdbId: "tt1234567" })).toMatchObject({ imdbId: "tt1234567" });
+    expect(detail({ imdbId: "https://example.invalid/tt1" })).toMatchObject({ imdbId: null });
+    expect(detail({ imdbId: "tt12345678901" })).toMatchObject({ imdbId: null });
+    expect(detail({ imdbId: null })).toMatchObject({ imdbId: null });
+  });
+
+  it("keeps the TVDB and TMDB ids only when they are positive integers", () => {
+    expect(detail({ tvdbId: 0 })?.tvdbId).toBeNull();
+    expect(detail({ tvdbId: -3 })?.tvdbId).toBeNull();
+    expect(detail({ tvdbId: 1.5 })?.tvdbId).toBeNull();
+    expect(detail({ tvdbId: undefined })?.tvdbId).toBeNull();
+    expect(detail({ tmdbId: 0 })?.tmdbId).toBeNull();
+    expect(detail({ tmdbId: -3 })?.tmdbId).toBeNull();
+    expect(detail({ tmdbId: 1.5 })?.tmdbId).toBeNull();
+    expect(detail({ tmdbId: undefined })?.tmdbId).toBeNull();
+  });
+
+  it("gives a season poster path only for a TVDB poster, and null otherwise", () => {
+    const withSeason1Images = (images: SeasonResource["images"]) =>
+      detail({ seasons: series.seasons?.map((s) => (s.seasonNumber === 1 ? { ...s, images } : s)) });
+    const season = (result: ReturnType<typeof detail>, n: number) => result?.seasons.find((s) => s.seasonNumber === n);
+
+    // The fixture's season 1 poster is on artworks.thetvdb.com, so it becomes a path.
+    expect(season(detail(), 1)?.posterPath).toBe("banners/v4/season/100010-1/posters/invented-s1.jpg");
+    // Season 2's poster is on another host, and season 0 has no images at all.
+    expect(season(detail(), 2)?.posterPath).toBeNull();
+    expect(season(detail(), 0)?.posterPath).toBeNull();
+    // A season only present because of an episode has no images.
+    expect(season(detail(), 3)?.posterPath).toBeNull();
+    expect(season(withSeason1Images(undefined), 1)?.posterPath).toBeNull();
+    expect(season(withSeason1Images([{ coverType: "poster", remoteUrl: "https://example.invalid/x.jpg" }]), 1)?.posterPath).toBeNull();
+    expect(season(withSeason1Images([{ coverType: "banner", remoteUrl: "https://artworks.thetvdb.com/banners/x.jpg" }]), 1)?.posterPath).toBeNull();
+  });
+
+  it("uses zero counts and size when Sonarr omits the series statistics", () => {
+    expect(detail({ statistics: undefined })).toMatchObject({
+      episodeFileCount: 0,
+      episodeCount: 0,
+      sizeOnDisk: 0,
+    });
   });
 
   it("returns null for a series with no numeric id or no title", () => {
@@ -251,6 +371,7 @@ describe("toSeriesDetail", () => {
         episodeCount: 0,
         totalEpisodeCount: 0,
         sizeOnDisk: 0,
+        posterPath: null,
         episodes: [],
       },
     ]);

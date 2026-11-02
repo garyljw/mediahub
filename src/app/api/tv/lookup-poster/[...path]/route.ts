@@ -9,7 +9,8 @@ import { ArrRequestError } from "@/server/arr/request";
 // before any fetch. The path is the only input, and the upstream host is fixed in getTvdbPoster.
 const posterPath = z.string().regex(TVDB_POSTER_PATH);
 
-// Serves one TVDB poster per validated path, for the Add series search results. It is not a pass-through proxy.
+// Serves one TVDB poster per validated path, for the Add series search results and the season cards
+// on the series page. It is not a pass-through proxy.
 export async function GET(_request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   await connection();
   try {

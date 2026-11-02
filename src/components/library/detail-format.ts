@@ -1,4 +1,4 @@
-// Text for the movie page header, built from already-mapped values. Pure, so it can be tested without a DOM.
+// Text for the movie and series page headers, built from already-mapped values. Pure, so it can be tested without a DOM.
 // No Intl here: the server and the browser must print the same text (see components/library/format.ts).
 import { formatRuntime } from "@/components/library/format";
 
@@ -8,6 +8,11 @@ export function ratingsLine(ratings: { imdb: number | null; tmdb: number | null 
   if (ratings.imdb !== null) parts.push(`IMDb ${ratings.imdb.toFixed(1)}`);
   if (ratings.tmdb !== null) parts.push(`TMDB ${Math.round(ratings.tmdb * 10)}%`);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** "Rating 8.4" for a series' rating, or null when there is none. */
+export function seriesRatingLine(rating: number | null): string | null {
+  return rating === null ? null : `Rating ${rating.toFixed(1)}`;
 }
 
 /** "PG-13 · 2h 5m · Drama, Thriller". Each part is left out when it is missing. Null when none are there. */
