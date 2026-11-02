@@ -6,12 +6,21 @@ const viewport = { width: 1000, height: 800 };
 const thumb = { top: 300, left: 20, right: 44, height: 36 };
 
 describe("previewPosition", () => {
-  it("sits to the right of the thumbnail, centred on it", () => {
+  it("sits to the left of the thumbnail by default, centred on it", () => {
+    const wide = { top: 300, left: 400, right: 700, height: 36 };
+    expect(previewPosition(wide, viewport)).toStrictEqual({ top: 300 + 18 - 120, left: 400 - 8 - PREVIEW_WIDTH });
+  });
+
+  it("flips to the right of the thumbnail by default when there is no room on the left", () => {
     expect(previewPosition(thumb, viewport)).toStrictEqual({ top: 300 + 18 - 120, left: 52 });
   });
 
+  it("sits to the right of the thumbnail when asked for right", () => {
+    expect(previewPosition(thumb, viewport, "right")).toStrictEqual({ top: 300 + 18 - 120, left: 52 });
+  });
+
   it("clamps to the top margin when the thumbnail is near the top", () => {
-    expect(previewPosition({ ...thumb, top: 10 }, viewport)).toStrictEqual({ top: 8, left: 52 });
+    expect(previewPosition({ ...thumb, top: 10 }, viewport, "right")).toStrictEqual({ top: 8, left: 52 });
   });
 
   it("clamps to the bottom margin when the thumbnail is near the bottom", () => {
@@ -19,9 +28,9 @@ describe("previewPosition", () => {
     expect(previewPosition({ ...thumb, top: 780 }, viewport).top).toBe(top);
   });
 
-  it("flips to the left of the thumbnail near the right edge", () => {
+  it("flips to the left of the thumbnail near the right edge when asked for right", () => {
     const nearRight = { top: 300, left: 900, right: 924, height: 36 };
-    expect(previewPosition(nearRight, viewport)).toStrictEqual({ top: 198, left: 900 - 8 - PREVIEW_WIDTH });
+    expect(previewPosition(nearRight, viewport, "right")).toStrictEqual({ top: 198, left: 900 - 8 - PREVIEW_WIDTH });
   });
 
   it("pins to the top margin when the viewport is shorter than the preview", () => {

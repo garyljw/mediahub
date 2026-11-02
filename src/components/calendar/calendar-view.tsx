@@ -159,7 +159,7 @@ export function CalendarView({
                       {...posterPreview.rowHandlers(entry.key, entry.posterSrc)}
                     >
                       <Poster src={entry.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor={entry.href !== null ? "" : undefined}>
+                      <div className="min-w-0 flex-1" data-poster-anchor>
                         <div className="truncate font-medium" title={entry.title}>
                           {entry.href !== null ? (
                             <Link href={entry.href} className="hover:underline">

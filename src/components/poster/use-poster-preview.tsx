@@ -8,8 +8,10 @@ type ActivePreview<K> = { key: K; src: string; top: number; left: number };
 
 /**
  * Hover preview for a list of poster rows. Rows call rowHandlers(key, src) on their pointer events. The
- * preview shows the row's thumbnail at full size, so the browser serves it from cache. Mouse only, and
- * rows without a live thumbnail get none.
+ * preview shows the row's thumbnail at full size, so the browser serves it from cache. It always opens to
+ * the left of the thumbnail so it never covers the title, and falls back to the right only when the left
+ * has no room. Rows mark their title cell with data-poster-anchor, which sets that fallback edge. Mouse
+ * only, and rows without a live thumbnail get none.
  *
  * `key` identifies the row. `activeKey` says which row's preview is showing, so a list can hide a preview
  * whose row is no longer visible. `preview` is the node to render (null when nothing shows). Render it
@@ -43,9 +45,10 @@ export function usePosterPreview<K extends string | number>() {
           setActive(null);
           return;
         }
-        // A row can mark its title cell with data-poster-anchor when the title is a link. The preview then
-        // opens left of the thumbnail, so it never covers the link, and falls back to the right of the whole
-        // cell when the left has no room. Vertically it stays centred on the thumbnail.
+        // The preview always opens left of the thumbnail, so it never covers the title. When there is no room
+        // on the left it falls back to the right, and the right edge used for that fallback is the row's title
+        // cell (marked data-poster-anchor) when the row has one, otherwise the thumbnail itself. Vertically it
+        // stays centred on the thumbnail.
         const thumbRect = thumb.getBoundingClientRect();
         const anchor = event.currentTarget.querySelector<HTMLElement>("[data-poster-anchor]");
         const rect = anchor
@@ -54,7 +57,7 @@ export function usePosterPreview<K extends string | number>() {
         const position = previewPosition(rect, {
           width: window.innerWidth,
           height: window.innerHeight,
-        }, anchor ? "left" : "right");
+        }, "left");
         setActive({ key, src, ...position });
       },
       onPointerLeave() {
