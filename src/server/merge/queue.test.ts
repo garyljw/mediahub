@@ -4,7 +4,7 @@ import type { components as RadarrComponents } from "../arr/generated/radarr";
 import type { components as SonarrComponents } from "../arr/generated/sonarr";
 import radarrFixture from "./__fixtures__/radarr-queue.json";
 import sonarrFixture from "./__fixtures__/sonarr-queue.json";
-import { toQueueRows, type QueueRow } from "./queue";
+import { firstQueuedId, toQueueRows, type QueueRow } from "./queue";
 
 type MovieQueueItem = RadarrComponents["schemas"]["QueueResource"];
 type EpisodeQueueItem = SonarrComponents["schemas"]["QueueResource"];
@@ -203,5 +203,46 @@ describe("toQueueRows series source", () => {
     const [row] = toQueueRows([], pack, NOW, { includeDetails: false });
     expect(row.title).toBe("Real Series");
     expect(row.posterSrc).toBe("/api/tv/7/poster");
+  });
+});
+
+describe("firstQueuedId", () => {
+  it("returns the first of the given ids (in the order given) that is still in the queue", () => {
+    // 101 has left the queue, so the next id of the pack is the one to use.
+    const left = episodeItems.filter((item) => item.id !== 101);
+    expect(firstQueuedId(left, [101, 102, 103])).toBe(102);
+    expect(firstQueuedId(episodeItems, [103, 101])).toBe(103);
+  });
+
+  it("returns null when none of the ids is in the queue", () => {
+    expect(firstQueuedId(episodeItems, [999, 1000])).toBeNull();
+    expect(firstQueuedId([], [101])).toBeNull();
+  });
+
+  it("only matches the items it is given, so an id from the other app's queue never matches", () => {
+    expect(firstQueuedId(movieItems, [101])).toBeNull();
+    expect(firstQueuedId(episodeItems, [1])).toBeNull();
+  });
+
+  it("never matches an id that is not a positive integer", () => {
+    expect(firstQueuedId(movieItems, [0, -7])).toBeNull();
+  });
+});
+
+describe("toQueueRows queue ids", () => {
+  it("gives a Radarr row its own id, and a season pack every id of its download, sorted", () => {
+    expect(find("radarr-1").queueIds).toEqual([1]);
+    expect(find("sonarr-101").queueIds).toEqual([101, 102, 103]);
+    expect(find("sonarr-401").queueIds).toEqual([401, 402]);
+  });
+});
+
+describe("toQueueRows queue ids for requesters", () => {
+  it("leaves out the queue ids for requesters, so only admins get item ids", () => {
+    const requesterRows = rows(false);
+    expect(requesterRows.length).toBeGreaterThan(0);
+    for (const row of requesterRows) expect(row.queueIds).toEqual([]);
+    // The queue ids are still the same for admins on the same data.
+    expect(rows(true).find((row) => row.key === "sonarr-101")?.queueIds).toEqual([101, 102, 103]);
   });
 });

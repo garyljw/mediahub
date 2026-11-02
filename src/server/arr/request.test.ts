@@ -1,6 +1,14 @@
 import "server-only";
 import { describe, expect, it, vi } from "vitest";
-import { ARR_TIMEOUT_MS, ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList, settledOrNull } from "./request";
+import {
+  ARR_TIMEOUT_MS,
+  ArrRequestError,
+  DELETE_TIMEOUT_MS,
+  arrRequest,
+  getList,
+  settledOrNull,
+  writeFailureMessage,
+} from "./request";
 
 describe("arrRequest", () => {
   it("returns the data when the response is OK", async () => {
@@ -74,5 +82,36 @@ describe("settledOrNull", () => {
   it("rethrows anything that is not an ArrRequestError", () => {
     const reason = new Error("config broke");
     expect(() => settledOrNull({ status: "rejected", reason }, "Queue page")).toThrow(reason);
+  });
+});
+
+describe("writeFailureMessage", () => {
+  const OUTCOME = { done: "removed", check: "check the queue" };
+
+  it("says the app didn't accept a 4xx, so the user can try again", () => {
+    const error = new ArrRequestError("x", "http", 404);
+    expect(writeFailureMessage(error, "Radarr", OUTCOME)).toBe("Radarr didn't accept it. Try again.");
+    expect(writeFailureMessage(error, "Sonarr", OUTCOME)).toBe("Sonarr didn't accept it. Try again.");
+  });
+
+  it("says the app didn't confirm a timeout, and that the change may have been made", () => {
+    const error = new ArrRequestError("x", "timeout");
+    expect(writeFailureMessage(error, "Sonarr", OUTCOME)).toBe(
+      "Sonarr didn't confirm it. It may still have been removed, so check the queue.",
+    );
+  });
+
+  it("says the app didn't confirm a 5xx", () => {
+    const error = new ArrRequestError("x", "http", 500);
+    expect(writeFailureMessage(error, "Radarr", { done: "marked failed", check: "reload the page to check" })).toBe(
+      "Radarr didn't confirm it. It may still have been marked failed, so reload the page to check.",
+    );
+  });
+
+  it("treats an error with no status (a network failure or broken reply) as not confirmed", () => {
+    const error = new ArrRequestError("x", "network");
+    expect(writeFailureMessage(error, "Radarr", OUTCOME)).toBe(
+      "Radarr didn't confirm it. It may still have been removed, so check the queue.",
+    );
   });
 });

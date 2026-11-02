@@ -85,3 +85,19 @@ export function settledOrNull<T>(result: PromiseSettledResult<T | null>, label: 
   console.error(`${label}: ${result.reason.message}`);
   return null;
 }
+
+/**
+ * The text a write action shows after its Radarr or Sonarr request failed. A 4xx means the app refused the change, so the
+ * user can try again. Anything else (a timeout, a 5xx, a broken reply) may have been done anyway, so the text says so and
+ * tells the user what to check. `outcome.done` completes "It may still have been ..." and `outcome.check` completes "so ...".
+ */
+export function writeFailureMessage(
+  error: ArrRequestError,
+  appName: "Radarr" | "Sonarr",
+  outcome: { done: string; check: string },
+): string {
+  if (error.status !== undefined && error.status >= 400 && error.status < 500) {
+    return `${appName} didn't accept it. Try again.`;
+  }
+  return `${appName} didn't confirm it. It may still have been ${outcome.done}, so ${outcome.check}.`;
+}

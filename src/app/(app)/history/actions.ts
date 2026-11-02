@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
 import { markEpisodeHistoryFailed, markMovieHistoryFailed } from "@/server/arr/history";
-import { ArrRequestError } from "@/server/arr/request";
+import { ArrRequestError, writeFailureMessage } from "@/server/arr/request";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -38,14 +38,8 @@ export async function markHistoryFailed(input: unknown): Promise<ActionResult> {
     if (!(error instanceof ArrRequestError)) throw error;
     // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
     console.error(`History mark failed: ${error.message}`);
-    if (error.status !== undefined && error.status >= 400 && error.status < 500) {
-      return { ok: false, error: `${appName} didn't accept it. Try again.` };
-    }
     // A timeout or a broken reply can come after Radarr or Sonarr marked the item, so the user must check first.
-    return {
-      ok: false,
-      error: `${appName} didn't confirm it. It may still have been marked failed, so reload the page to check.`,
-    };
+    return { ok: false, error: writeFailureMessage(error, appName, { done: "marked failed", check: "reload the page to check" }) };
   }
 
   // The page reads the history on every request, so refresh() shows the new event.

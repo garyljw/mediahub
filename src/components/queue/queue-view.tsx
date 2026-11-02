@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { showsEtaFor, showsProgressFor, stateLabel } from "@/components/library/activity";
-import { CELL, HEAD } from "@/components/library/table-parts";
+import { CELL, HEAD, RowMenu } from "@/components/library/table-parts";
 import { formatEta, formatSize } from "@/components/library/format";
 import {
   keepLastKnown,
@@ -20,6 +21,7 @@ import {
   type QueueRow,
   type QueueRowDetails,
 } from "./queue-rows";
+import { QueueRemoveDialog } from "./queue-remove-dialog";
 import { useQueueAutoRefresh } from "./use-auto-refresh";
 
 /** The labelled download facts an admin can expand a row to see. Rows with no value for a field leave it out. */
@@ -62,18 +64,21 @@ function DetailList({ row, details }: { row: QueueRow; details: QueueRowDetails 
  * The Queue page's table. Entries arrive already built by the server, so no time is formatted in the browser. It
  * refreshes the server data every few seconds while the tab is visible. A side whose request failed keeps its last
  * known rows, with an alert saying so. Admins see the release columns and can expand a row for its download facts and
- * messages. Requesters see the status columns only.
+ * messages, and can remove a row. Requesters see the status columns only.
  */
 export function QueueView({
   rows,
   failed,
   showDetails,
+  canRemove,
 }: {
   /** The fresh rows from the server, for both apps. Rows of an app that failed this time are ignored. */
   rows: QueueRow[];
   failed: QueueFailures;
   /** True for an admin: the Quality and Size columns, and the expandable rows. */
   showDetails: boolean;
+  /** True for an admin: each row gets a Remove button. The server checks the role again on remove. */
+  canRemove: boolean;
 }) {
   useQueueAutoRefresh();
 
@@ -88,12 +93,19 @@ export function QueueView({
   const visible = visibleQueue(known, failed);
 
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // The row the Remove dialog is open for. Kept as a snapshot, so the dialog doesn't change if the row leaves the queue.
+  const [removing, setRemoving] = useState<QueueRow | null>(null);
+  // The row whose ⋯ menu is open. Its poster preview is hidden meanwhile, as on the Movies table.
+  const [menuRowKey, setMenuRowKey] = useState<string | null>(null);
   const posterPreview = usePosterPreview<string>();
 
   // The preview belongs to a row. Hide it when that row is gone (for example after a refresh).
   const previewVisible =
-    posterPreview.activeKey !== null && visible.rows.some((row) => row.key === posterPreview.activeKey);
-  const columnCount = showDetails ? 7 : 5;
+    menuRowKey === null &&
+    removing === null &&
+    posterPreview.activeKey !== null &&
+    visible.rows.some((row) => row.key === posterPreview.activeKey);
+  const columnCount = (showDetails ? 7 : 5) + (canRemove ? 1 : 0);
 
   function toggleExpanded(key: string) {
     setExpanded((previous) => {
@@ -127,6 +139,11 @@ export function QueueView({
               <TableHead className={HEAD}>Time left</TableHead>
               {showDetails && <TableHead className={HEAD}>Quality</TableHead>}
               {showDetails && <TableHead className={HEAD}>Size</TableHead>}
+              {canRemove && (
+                <TableHead className={HEAD}>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -201,6 +218,22 @@ export function QueueView({
                         {formatSize(row.details?.sizeBytes ?? 0)}
                       </TableCell>
                     )}
+                    {canRemove && (
+                      <TableCell className={`${CELL} text-right`}>
+                        <RowMenu
+                          title={row.title}
+                          onOpen={() => setMenuRowKey(row.key)}
+                          onClosed={() => setMenuRowKey((previous) => (previous === row.key ? null : previous))}
+                        >
+                          {(defer) => (
+                            <DropdownMenuItem variant="destructive" onSelect={() => defer(() => setRemoving(row))}>
+                              <Trash2 aria-hidden />
+                              Remove…
+                            </DropdownMenuItem>
+                          )}
+                        </RowMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                   {showDetails && isOpen && row.details !== null && (
                     <TableRow id={detailsId}>
@@ -221,6 +254,8 @@ export function QueueView({
           Showing {visible.rows.length} {visible.rows.length === 1 ? "item" : "items"}
         </p>
       )}
+
+      {removing !== null && <QueueRemoveDialog row={removing} onClose={() => setRemoving(null)} />}
 
       {previewVisible && posterPreview.preview}
     </div>
