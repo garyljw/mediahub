@@ -127,6 +127,12 @@ function toEpisodeRow(episode: EpisodeResource, id: number, episodeNumber: numbe
   };
 }
 
+/** The TVDB path of a season's poster: its remoteUrl, then its url, each checked by tvdbImagePath. Null when neither passes. */
+function seasonPosterPath(season: SeasonResource | undefined): string | null {
+  const poster = season?.images?.find((image) => image.coverType === "poster");
+  return tvdbImagePath(poster?.remoteUrl) ?? tvdbImagePath(poster?.url);
+}
+
 /** Season 0 is Specials and sorts last. Otherwise the highest season number comes first. */
 function compareSeasons(a: number, b: number): number {
   if (a === 0 && b !== 0) return 1;
@@ -186,7 +192,7 @@ export function toSeriesDetail(
       episodeCount: stats?.episodeCount ?? 0,
       totalEpisodeCount: stats?.totalEpisodeCount ?? 0,
       sizeOnDisk: stats?.sizeOnDisk ?? 0,
-      posterPath: tvdbImagePath(season?.images?.find((image) => image.coverType === "poster")?.remoteUrl),
+      posterPath: seasonPosterPath(season),
       episodes: seasonEpisodes,
     };
   });

@@ -225,6 +225,18 @@ describe("toSeriesDetail", () => {
     expect(season(withSeason1Images(undefined), 1)?.posterPath).toBeNull();
     expect(season(withSeason1Images([{ coverType: "poster", remoteUrl: "https://example.invalid/x.jpg" }]), 1)?.posterPath).toBeNull();
     expect(season(withSeason1Images([{ coverType: "banner", remoteUrl: "https://artworks.thetvdb.com/banners/x.jpg" }]), 1)?.posterPath).toBeNull();
+    // remoteUrl missing or off-host: url is tried next.
+    expect(season(withSeason1Images([{ coverType: "poster", url: "https://artworks.thetvdb.com/banners/seasons/s1.jpg" }]), 1)?.posterPath).toBe(
+      "banners/seasons/s1.jpg",
+    );
+    expect(
+      season(
+        withSeason1Images([
+          { coverType: "poster", remoteUrl: "https://example.invalid/x.jpg", url: "https://artworks.thetvdb.com/banners/seasons/s1.jpg" },
+        ]),
+        1,
+      )?.posterPath,
+    ).toBe("banners/seasons/s1.jpg");
   });
 
   it("uses zero counts and size when Sonarr omits the series statistics", () => {

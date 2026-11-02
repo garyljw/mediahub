@@ -10,6 +10,7 @@ import { metaLine, seriesRatingLine } from "@/components/library/detail-format";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
+import { SeasonPoster } from "@/components/tv/season-poster";
 import { SeriesEditForm } from "@/components/tv/series-edit-form";
 import { SeriesHeaderActions } from "@/components/tv/series-header-actions";
 import {
@@ -72,12 +73,11 @@ function SeasonDetails({
   return (
     <details open={open} className="rounded-xl border bg-card">
       <summary className="flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-          <div className="w-16 shrink-0 rounded-md shadow-lg sm:w-20">
-            <PosterTile src={season.posterPath === null ? null : `/api/tv/lookup-poster/${season.posterPath}`} />
-          </div>
+        <SeasonPoster src={season.posterPath === null ? null : `/api/tv/lookup-poster/${season.posterPath}`}>
           <div className="min-w-0 flex-1 space-y-2">
-            <span className="block font-semibold">{season.label}</span>
+            <span data-poster-anchor className="block font-semibold">
+              {season.label}
+            </span>
             <div
               role="progressbar"
               aria-label={`${season.label} episodes on disk`}
@@ -97,7 +97,7 @@ function SeasonDetails({
               <SeasonActivitySummary episodeIds={season.episodes.map((episode) => episode.id)} label={season.label} />
             </div>
           </div>
-        </div>
+        </SeasonPoster>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="inline-flex items-center">
             {isAdmin ? (
