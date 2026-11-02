@@ -376,7 +376,7 @@ export function MoviesTable({
                     className="size-4 accent-primary"
                   />
                 </TableCell>
-                <TableCell className={CELL}>
+                <TableCell className={CELL} data-poster-anchor>
                   <div className="flex min-w-0 items-center gap-2">
                     <Poster src={moviePosterSrc(row)} />
                     <div className="min-w-0 flex-1 truncate" title={row.title}>

@@ -3,6 +3,7 @@ import { sonarrClient } from "./client";
 import { ArrRequestError, arrRequest, getList } from "./request";
 import { usableProfiles } from "./profiles";
 import { fetchQualityProfiles, seriesStatus, type SeriesStatus } from "./series";
+import { episodeStatus, type EpisodeStatus } from "../merge/episode-status";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -10,7 +11,7 @@ type SeasonResource = SonarrComponents["schemas"]["SeasonResource"];
 type EpisodeResource = SonarrComponents["schemas"]["EpisodeResource"];
 type QualityProfileResource = SonarrComponents["schemas"]["QualityProfileResource"];
 
-export type EpisodeStatus = "downloaded" | "missing" | "unaired" | "unmonitored";
+export type { EpisodeStatus };
 
 /** One episode, reduced to what the detail page shows. No file paths. */
 export type EpisodeRow = {
@@ -60,26 +61,11 @@ export type SeriesDetail = {
 /** Sonarr's airDate is the local calendar date it aired, "YYYY-MM-DD". Anything else shows as no date. */
 const AIR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/**
- * Maps one episode. Status follows the rules in this order: file, then monitored, then air date. `wanted` is
- * true only when the series, the season and the episode are all monitored, which is when Sonarr searches for it.
- */
+/** Maps one episode. See episodeStatus (src/server/merge/episode-status.ts) for the status rules. */
 function toEpisodeRow(episode: EpisodeResource, id: number, episodeNumber: number, wanted: boolean, now: number): EpisodeRow {
   const hasFile = episode.hasFile === true;
   const file = hasFile ? episode.episodeFile : undefined;
-  const airDateUtc = episode.airDateUtc || null;
-
-  let status: EpisodeStatus;
-  if (hasFile) {
-    status = "downloaded";
-  } else if (!wanted) {
-    status = "unmonitored";
-  } else if (airDateUtc === null || !(Date.parse(airDateUtc) <= now)) {
-    // Also covers an air date that doesn't parse, so it is not reported as missing.
-    status = "unaired";
-  } else {
-    status = "missing";
-  }
+  const status = episodeStatus(episode, wanted, now);
 
   return {
     id,

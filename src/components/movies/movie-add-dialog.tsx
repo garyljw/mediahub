@@ -266,7 +266,7 @@ export function MovieAddDialog({
                     {...posterPreview.rowHandlers(result.tmdbId, lookupPosterSrc(result))}
                   >
                     <Poster src={lookupPosterSrc(result)} />
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1" data-poster-anchor>
                       <p className="font-medium">{resultLabel(result)}</p>
                       {result.overview && (
                         <p className="line-clamp-2 text-sm text-muted-foreground">{result.overview}</p>

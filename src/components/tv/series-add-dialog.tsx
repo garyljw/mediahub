@@ -307,7 +307,7 @@ export function SeriesAddDialog({
                     {...posterPreview.rowHandlers(result.tvdbId, lookupPosterSrc(result))}
                   >
                     <Poster src={lookupPosterSrc(result)} />
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1" data-poster-anchor>
                       <p className="font-medium">
                         {resultLabel(result)}
                         {result.network !== null && (

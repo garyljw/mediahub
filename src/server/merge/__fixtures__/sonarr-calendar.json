@@ -1,0 +1,281 @@
+[
+  {
+    "id": 701,
+    "seriesId": 7,
+    "seasonNumber": 2,
+    "episodeNumber": 5,
+    "title": "Tidewater",
+    "airDate": "2026-11-04",
+    "airDateUtc": "2026-11-04T02:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 702,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 1,
+    "title": "Pilot",
+    "airDate": "2026-11-03",
+    "airDateUtc": "2026-11-03T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 703,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 2,
+    "title": "Second",
+    "airDate": "2026-11-10",
+    "airDateUtc": "2026-11-10T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 704,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 3,
+    "title": "Third",
+    "airDate": "2026-11-03",
+    "airDateUtc": "2026-11-03T01:00:00Z",
+    "monitored": true,
+    "hasFile": true,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 705,
+    "seriesId": 7,
+    "seasonNumber": 0,
+    "episodeNumber": 1,
+    "title": "",
+    "airDate": "2026-11-07",
+    "airDateUtc": "2026-11-07T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 706,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 9,
+    "title": "Outside The Window",
+    "airDate": "2026-10-30",
+    "airDateUtc": "2026-10-30T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 707,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 10,
+    "title": "No Air Date",
+    "airDate": "",
+    "airDateUtc": null,
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 708,
+    "seriesId": 9,
+    "seasonNumber": 1,
+    "episodeNumber": 1,
+    "title": "Untitled Series",
+    "airDate": "2026-11-05",
+    "airDateUtc": "2026-11-05T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 9,
+      "title": "",
+      "path": "/tv/Nameless",
+      "monitored": true,
+      "seasons": [],
+      "images": []
+    }
+  },
+  {
+    "id": 709,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 4,
+    "title": "Fourth",
+    "airDate": "2026-11-08",
+    "airDateUtc": "2026-11-08T01:00:00Z",
+    "monitored": false,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 710,
+    "seriesId": 7,
+    "seasonNumber": 1,
+    "episodeNumber": 5,
+    "title": "Fifth",
+    "airDate": "2026-11-08",
+    "airDateUtc": null,
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 711,
+    "seriesId": 7,
+    "seasonNumber": 3,
+    "episodeNumber": 1,
+    "title": "Unlisted",
+    "airDate": "2026-11-02",
+    "airDateUtc": "2026-11-02T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 7,
+      "title": "Harbour Lights",
+      "path": "/tv/Harbour Lights",
+      "overview": "A made-up show for tests.",
+      "monitored": true,
+      "seasons": [
+        { "seasonNumber": 0, "monitored": true },
+        { "seasonNumber": 1, "monitored": true },
+        { "seasonNumber": 2, "monitored": false }
+      ],
+      "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }]
+    }
+  },
+  {
+    "id": 801,
+    "seriesId": 8,
+    "seasonNumber": 1,
+    "episodeNumber": 1,
+    "title": "Glass",
+    "airDate": "2026-11-09",
+    "airDateUtc": "2026-11-09T01:00:00Z",
+    "monitored": true,
+    "hasFile": false,
+    "series": {
+      "id": 8,
+      "title": "Sea Glass",
+      "path": "/tv/Sea Glass",
+      "overview": "Series is unmonitored.",
+      "monitored": false,
+      "seasons": [{ "seasonNumber": 1, "monitored": true }],
+      "images": []
+    }
+  }
+]

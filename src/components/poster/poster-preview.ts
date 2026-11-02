@@ -7,13 +7,13 @@ export type Rect = { top: number; left: number; right: number; height: number };
 
 /**
  * Where the fixed-position preview goes: beside the thumbnail, vertically centred on it, kept inside the viewport.
- * By default it opens on the right and flips left when there is no room. With side "left" it opens on the left
- * and flips right when there is no room.
+ * By default it opens on the left and flips right when there is no room. With side "right" it opens on the right
+ * and flips left when there is no room.
  */
 export function previewPosition(
   thumb: Rect,
   viewport: { width: number; height: number },
-  side: "right" | "left" = "right",
+  side: "right" | "left" = "left",
 ): { top: number; left: number } {
   const rightOf = thumb.right + GAP;
   const leftOf = thumb.left - GAP - PREVIEW_WIDTH;

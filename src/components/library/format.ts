@@ -49,3 +49,41 @@ export function formatEta(seconds: number | null): string | null {
   if (hours < 24) return `${hours}h ${minutes % 60}m`;
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "Mon 3 Nov" for a "YYYY-MM-DD" calendar date. The year is left out. An em dash when unparseable. */
+export function formatDay(ymd: string): string {
+  const time = Date.parse(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(time)) return "—";
+  const date = new Date(time);
+  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+}
+
+/**
+ * "27 Oct – 30 Nov 2026" for two "YYYY-MM-DD" dates in the same year. Each side gets its own year when they
+ * differ, e.g. "27 Dec 2026 – 30 Jan 2027".
+ */
+export function formatRange(from: string, to: string): string {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(end)) return "—";
+  const a = new Date(start);
+  const b = new Date(end);
+  const startText = `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]}`;
+  const endText = `${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]} ${b.getUTCFullYear()}`;
+  if (a.getUTCFullYear() === b.getUTCFullYear()) return `${startText} – ${endText}`;
+  return `${startText} ${a.getUTCFullYear()} – ${endText}`;
+}
+
+/**
+ * "28" for a day of the month, or "1 Dec" when `withMonth` is true (the 1st of a month, and the first cell of the
+ * Calendar grid). An em dash when unparseable.
+ */
+export function formatGridDay(ymd: string, withMonth: boolean): string {
+  const time = Date.parse(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(time)) return "—";
+  const date = new Date(time);
+  const day = String(date.getUTCDate());
+  return withMonth ? `${day} ${MONTHS[date.getUTCMonth()]}` : day;
+}
