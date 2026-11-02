@@ -1,0 +1,130 @@
+[
+  {
+    "id": 1,
+    "movieId": 101,
+    "sourceTitle": "Starfall.2026.1080p.WEB-DL.x264-GRP",
+    "quality": { "quality": { "id": 3, "name": "WEBDL-1080p" }, "revision": { "version": 1, "real": 0, "isRepack": false } },
+    "date": "2026-11-02T14:05:00Z",
+    "eventType": "grabbed",
+    "data": {
+      "indexer": "Indexer One",
+      "downloadClientName": "SABnzbd",
+      "releaseGroup": "GRP",
+      "size": "1610612736",
+      "downloadUrl": "http://indexer.test/getnzb?t=get&apikey=SECRET",
+      "nzbInfoUrl": "http://indexer.test/details/1?apikey=SECRET"
+    },
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+  },
+  {
+    "id": 2,
+    "movieId": 102,
+    "sourceTitle": "Quiet.Harbour.2026.1080p.BluRay",
+    "quality": { "quality": { "id": 7, "name": "Bluray-1080p" } },
+    "date": "2026-11-02T13:00:00Z",
+    "eventType": "downloadFolderImported",
+    "data": { "downloadClientName": "qBittorrent" },
+    "movie": { "id": 102, "title": "Quiet Harbour", "year": 2026, "images": [] }
+  },
+  {
+    "id": 3,
+    "movieId": 103,
+    "sourceTitle": "Ember.Road.2026.720p.WEB",
+    "quality": { "quality": { "id": 5, "name": "WEBDL-720p" } },
+    "date": "2026-11-02T12:00:00Z",
+    "eventType": "downloadFailed",
+    "data": { "downloadClientName": "qBittorrent", "message": "Download failed: unpacking error" },
+    "movie": { "id": 103, "title": "Ember Road", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/ember.jpg" }] }
+  },
+  {
+    "id": 4,
+    "movieId": 104,
+    "sourceTitle": "Lantern.Coast.2026.1080p",
+    "quality": { "quality": { "id": 7, "name": "Bluray-1080p" } },
+    "date": "2026-11-01T09:00:00Z",
+    "eventType": "movieFileDeleted",
+    "data": { "reason": "MissingFromDisk" },
+    "movie": { "id": 104, "title": "Lantern Coast", "year": 2026, "images": [] }
+  },
+  {
+    "id": 5,
+    "movieId": 101,
+    "sourceTitle": "Starfall.2026.1080p.WEB-DL.x264-GRP",
+    "quality": { "quality": { "id": 3, "name": "WEBDL-1080p" } },
+    "date": "2026-11-01T08:00:00Z",
+    "eventType": "movieFileRenamed",
+    "data": {},
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+  },
+  {
+    "id": 6,
+    "movieId": 102,
+    "sourceTitle": "Quiet.Harbour.2026.1080p.BluRay",
+    "quality": { "quality": { "id": 7, "name": "Bluray-1080p" } },
+    "date": "2026-11-01T07:00:00Z",
+    "eventType": "downloadIgnored",
+    "data": { "message": "Release ignored by the user" },
+    "movie": { "id": 102, "title": "Quiet Harbour", "year": 2026, "images": [] }
+  },
+  {
+    "id": 7,
+    "movieId": 999,
+    "sourceTitle": "Missing.Movie.2025.1080p",
+    "quality": { "quality": { "id": 7, "name": "Bluray-1080p" } },
+    "date": "2026-10-30T10:00:00Z",
+    "eventType": "grabbed",
+    "data": {
+      "indexer": "Indexer Two",
+      "downloadUrl": "http://indexer.test/getnzb?t=get&apikey=SECRET",
+      "nzbInfoUrl": "http://indexer.test/details/7?apikey=SECRET"
+    }
+  },
+  {
+    "id": 8,
+    "movieId": 103,
+    "sourceTitle": "Ember.Road.2026.720p.WEB",
+    "quality": { "quality": { "id": 5, "name": "WEBDL-720p" } },
+    "date": "2026-10-30T09:00:00Z",
+    "eventType": "unknown",
+    "data": null,
+    "movie": { "id": 103, "title": "Ember Road", "year": 2026, "images": [] }
+  },
+  {
+    "id": 9,
+    "movieId": 101,
+    "sourceTitle": "Starfall.2026.1080p.WEB-DL.x264-GRP",
+    "quality": { "quality": { "id": 3, "name": "WEBDL-1080p" } },
+    "date": "2026-10-29T10:00:00Z",
+    "eventType": "movieFolderImported",
+    "data": {},
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+  },
+  {
+    "id": 11,
+    "movieId": 104,
+    "sourceTitle": "Lantern.Coast.2026.1080p.WEB",
+    "quality": { "quality": { "id": 3, "name": "WEBDL-1080p" } },
+    "date": "2026-11-02T13:00:00Z",
+    "eventType": "grabbed",
+    "data": { "indexer": "Indexer One", "downloadUrl": "http://indexer.test/getnzb?t=get&apikey=SECRET" },
+    "movie": { "id": 104, "title": "Lantern Coast", "year": 2026, "images": [] }
+  },
+  {
+    "id": "12",
+    "movieId": 104,
+    "sourceTitle": "Bad.Id.2026",
+    "date": "2026-11-02T11:00:00Z",
+    "eventType": "grabbed",
+    "data": {},
+    "movie": { "id": 104, "title": "Lantern Coast", "year": 2026, "images": [] }
+  },
+  {
+    "id": 13,
+    "movieId": 104,
+    "sourceTitle": "Bad.Date.2026",
+    "date": "yesterday",
+    "eventType": "grabbed",
+    "data": {},
+    "movie": { "id": 104, "title": "Lantern Coast", "year": 2026, "images": [] }
+  }
+]
