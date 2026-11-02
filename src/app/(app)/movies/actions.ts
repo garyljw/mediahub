@@ -19,7 +19,8 @@ import {
   type LookupResult,
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
-import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases, type ReleaseRow, type ReleaseTotals } from "@/server/arr/releases";
+import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases } from "@/server/arr/releases";
+import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
 import { MAX_EDIT_MOVIES } from "@/components/movies/movie-edit";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
@@ -310,7 +311,7 @@ export async function refreshLibraryMovies(input: unknown): Promise<RefreshResul
   return { ok: true, refreshed: movieIds.length };
 }
 
-export type ReleaseSearchResult = { ok: true; releases: ReleaseRow[]; totals: ReleaseTotals } | { ok: false; error: string };
+export type { GrabResult, ReleaseSearchResult };
 
 // strictObject rejects unknown keys. Only the movie id crosses from the browser.
 const ReleaseSearchInput = z.strictObject({
@@ -349,8 +350,6 @@ export async function findMovieReleases(input: unknown): Promise<ReleaseSearchRe
     return { ok: false, error: "Radarr couldn't search the indexers. Try again." };
   }
 }
-
-export type GrabResult = { ok: true; title: string } | { ok: false; error: string };
 
 // strictObject rejects unknown keys. The browser sends only the token from a search result.
 const ReleaseGrabInput = z.strictObject({

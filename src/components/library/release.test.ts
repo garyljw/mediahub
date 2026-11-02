@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReleaseRow } from "@/server/arr/releases";
 import {
+  episodeCode,
   filterReleases,
   formatAge,
   formatPeers,
@@ -8,7 +9,8 @@ import {
   parseProtocolFilter,
   releaseCountLine,
   releaseDetails,
-} from "./movie-release";
+  twoDigits,
+} from "./release";
 
 describe("formatAge", () => {
   it("shows a dash for missing, negative or non-finite ages", () => {
@@ -53,6 +55,21 @@ describe("formatPeers", () => {
   });
 });
 
+describe("twoDigits and episodeCode", () => {
+  it("zero-pads to two digits and leaves longer numbers alone", () => {
+    expect(twoDigits(0)).toBe("00");
+    expect(twoDigits(5)).toBe("05");
+    expect(twoDigits(12)).toBe("12");
+    expect(twoDigits(105)).toBe("105");
+  });
+
+  it("builds the season and episode code", () => {
+    expect(episodeCode(2, 5)).toBe("S02E05");
+    expect(episodeCode(0, 1)).toBe("S00E01");
+    expect(episodeCode(12, 105)).toBe("S12E105");
+  });
+});
+
 describe("grabbedMessage", () => {
   it("names the release that was sent", () => {
     expect(grabbedMessage("Starfall.2019.1080p")).toBe('Sent "Starfall.2019.1080p" to the download client.');
@@ -94,10 +111,24 @@ describe("releaseDetails", () => {
     languages: [],
     approved: true,
     rejections: [],
+    episodes: null,
   };
 
   it("lists quality, size, age, protocol, indexer and score in that order", () => {
     expect(releaseDetails(base)).toEqual(["Bluray-2160p", "13.0 GB", "30h old", "Usenet", "NZBgeek", "Score 120"]);
+  });
+
+  it("starts with the episodes for a TV release", () => {
+    expect(releaseDetails({ ...base, episodes: "S02E05-E06" })).toEqual([
+      "S02E05-E06",
+      "Bluray-2160p",
+      "13.0 GB",
+      "30h old",
+      "Usenet",
+      "NZBgeek",
+      "Score 120",
+    ]);
+    expect(releaseDetails({ ...base, episodes: "Season pack" })[0]).toBe("Season pack");
   });
 
   it("adds peers for torrents only", () => {
@@ -137,6 +168,7 @@ describe("filterReleases", () => {
       languages: [],
       approved: true,
       rejections: [],
+      episodes: null,
     };
   }
   const releases = [row("a", "torrent"), row("b", "usenet"), row("c", "unknown"), row("d", "torrent")];

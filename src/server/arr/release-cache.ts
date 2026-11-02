@@ -1,10 +1,21 @@
 import "server-only";
 
-/** What the server remembers about one release it showed the admin. The browser only ever holds the token. */
-export type CachedRelease = { guid: string; indexerId: number; title: string };
+/** Which app's interactive search a release came from. A token only works through the app that issued it. */
+export type ReleaseApp = "radarr" | "sonarr";
 
-/** A release taken out of the cache. `restore` puts it back with its original expiry, for a grab Radarr refused. */
-export type TakenRelease = { release: CachedRelease; restore: () => void };
+/**
+ * What a Sonarr search was for: one season of a series, or one episode. The grab sends this id along. Sonarr only
+ * reads it when its cached release has no series or episodes mapped; a release missing from its cache is a 404 anyway.
+ */
+export type SonarrContext = { seriesId: number } | { episodeId: number };
+
+/** What the server remembers about one release it showed the admin. The browser only ever holds the token. */
+export type CachedRelease =
+  | { app: "radarr"; guid: string; indexerId: number; title: string }
+  | { app: "sonarr"; guid: string; indexerId: number; title: string; context: SonarrContext };
+
+/** A release taken out of the cache. `restore` puts it back with its original expiry, for a grab the app refused. */
+export type TakenRelease<T extends CachedRelease = CachedRelease> = { release: T; restore: () => void };
 
 /** `taken` marks a release a grab is using or has used. It stays in place, so the Map order stays oldest-first. */
 type StoredRelease = { entry: CachedRelease; expiresAt: number; taken: boolean };
@@ -51,18 +62,24 @@ export function createReleaseCache({
     },
     /**
      * Returns the release and marks it taken, so a token works only once. Undefined when missing, taken or
-     * expired. `restore` clears the mark, so the release keeps its place and its original expiry and a token
-     * never outlives Radarr's own cache of the release. A taken release is dropped when it expires.
+     * expired, or when it was issued for the other app. A token for the other app is left alone (not marked),
+     * so the app that issued it can still take it. `restore` clears the mark, so the release keeps its place
+     * and its original expiry and a token never outlives the app's own cache of the release. A taken release
+     * is dropped when it expires.
      */
-    take(token: string): TakenRelease | undefined {
+    take<A extends ReleaseApp>(token: string, app: A): TakenRelease<Extract<CachedRelease, { app: A }>> | undefined {
       const stored = entries.get(token);
       if (!stored || stored.taken) return undefined;
+      if (stored.entry.app !== app) return undefined;
       if (stored.expiresAt <= now()) {
         entries.delete(token);
         return undefined;
       }
       stored.taken = true;
-      return { release: stored.entry, restore: () => void (stored.taken = false) };
+      return {
+        release: stored.entry as Extract<CachedRelease, { app: A }>,
+        restore: () => void (stored.taken = false),
+      };
     },
     size(): number {
       return entries.size;
@@ -72,7 +89,7 @@ export function createReleaseCache({
 
 export type ReleaseCache = ReturnType<typeof createReleaseCache>;
 
-/** Radarr caches interactive search results for 30 minutes, so tokens expire just before Radarr forgets the release. */
+/** Radarr and Sonarr cache interactive search results for 30 minutes, so tokens expire just before the app forgets the release. */
 export const RELEASE_TTL_MS = 25 * 60_000;
 
 /**

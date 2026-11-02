@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState, useTransition, type MouseEvent } from "react";
-import { Search } from "lucide-react";
+import { ListChecks, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
+import { ReleaseDialog } from "@/components/library/release-dialog";
+import { episodeCode, grabbedMessage, type ReleaseSearchResult } from "@/components/library/release";
 import type { ActionResult } from "@/app/(app)/tv/[id]/actions";
 import {
+  findSeriesReleases,
+  grabSeriesRelease,
   searchEpisodeNow,
   searchSeasonNow,
   setEpisodeMonitoring,
@@ -230,6 +234,107 @@ export function EpisodeSearchButton({
       name={`${seasonLabel} episode ${episodeNumber}`}
       inSummary={false}
       run={() => searchEpisodeNow({ episodeId })}
+    />
+  );
+}
+
+/**
+ * Admin "Pick a release" for one season or one episode. Opens the shared release dialog for that search. A grab
+ * shows its result beside the button, like a search does. `inSummary` stops the click from opening or closing the season.
+ */
+function ReleasePickButton({
+  name,
+  subject,
+  inSummary,
+  search,
+}: {
+  /** What the button acts on, e.g. "Season 2" or "Season 2 episode 3", used in the accessible name. */
+  name: string;
+  /** The dialog heading's subject, e.g. "Breaking Bad · Season 2". */
+  subject: string;
+  inSummary: boolean;
+  search: () => Promise<ReleaseSearchResult>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useNote();
+
+  function openPicker(event: MouseEvent) {
+    if (inSummary) keepSeasonOpen(event);
+    setOpen(true);
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Pick a release for ${name}`}
+        onClick={openPicker}
+      >
+        <ListChecks aria-hidden />
+      </Button>
+      <NoteText note={note} />
+      {open && (
+        <ReleaseDialog
+          subject={subject}
+          search={search}
+          grab={(token) => grabSeriesRelease({ token })}
+          onClose={() => setOpen(false)}
+          onGrabbed={(title) => {
+            setOpen(false);
+            setNote({ ok: true, text: grabbedMessage(title) });
+          }}
+        />
+      )}
+    </span>
+  );
+}
+
+/** Admin pick for one season's release, from Sonarr's season search. Only admins get it: the page doesn't render it otherwise. */
+export function SeasonReleaseButton({
+  seriesId,
+  seriesTitle,
+  seasonNumber,
+  label,
+}: {
+  seriesId: number;
+  seriesTitle: string;
+  seasonNumber: number;
+  /** "Season 2" or "Specials", used in the accessible name and the dialog heading. */
+  label: string;
+}) {
+  return (
+    <ReleasePickButton
+      name={label}
+      subject={`${seriesTitle} · ${label}`}
+      inSummary
+      search={() => findSeriesReleases({ seriesId, seasonNumber })}
+    />
+  );
+}
+
+/** Admin pick for one episode's release, from Sonarr's episode search. Only admins get it: the page doesn't render it otherwise. */
+export function EpisodeReleaseButton({
+  seriesTitle,
+  seasonNumber,
+  episodeId,
+  episodeNumber,
+  seasonLabel,
+}: {
+  seriesTitle: string;
+  seasonNumber: number;
+  episodeId: number;
+  episodeNumber: number;
+  /** "Season 2" or "Specials", so the accessible name is unique across open seasons. */
+  seasonLabel: string;
+}) {
+  return (
+    <ReleasePickButton
+      name={`${seasonLabel} episode ${episodeNumber}`}
+      subject={`${seriesTitle} · ${episodeCode(seasonNumber, episodeNumber)}`}
+      inSummary={false}
+      search={() => findSeriesReleases({ episodeId })}
     />
   );
 }

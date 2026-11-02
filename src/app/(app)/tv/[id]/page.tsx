@@ -15,8 +15,10 @@ import {
 } from "@/components/tv/series-activity";
 import {
   EpisodeMonitorToggle,
+  EpisodeReleaseButton,
   EpisodeSearchButton,
   SeasonMonitorToggle,
+  SeasonReleaseButton,
   SeasonSearchButton,
 } from "@/components/tv/series-detail-actions";
 import { requirePageUser } from "@/server/authz";
@@ -41,14 +43,16 @@ const HEAD = "h-8 border-b py-1.5 px-2";
 
 function SeasonDetails({
   seriesId,
+  seriesTitle,
   season,
   open,
   isAdmin,
 }: {
   seriesId: number;
+  seriesTitle: string;
   season: SeasonRow;
   open: boolean;
-  /** Admins get the monitor buttons. Everyone gets the search button. */
+  /** Admins get the monitor and pick buttons. Everyone gets the search button. */
   isAdmin: boolean;
 }) {
   return (
@@ -78,6 +82,14 @@ function SeasonDetails({
           seasonNumber={season.seasonNumber}
           label={season.label}
         />
+        {isAdmin && (
+          <SeasonReleaseButton
+            seriesId={seriesId}
+            seriesTitle={seriesTitle}
+            seasonNumber={season.seasonNumber}
+            label={season.label}
+          />
+        )}
       </summary>
       {season.episodes.length === 0 ? (
         <p className="border-t px-3 py-2 text-sm text-muted-foreground">No episodes.</p>
@@ -138,6 +150,15 @@ function SeasonDetails({
                       episodeNumber={episode.episodeNumber}
                       seasonLabel={season.label}
                     />
+                    {isAdmin && (
+                      <EpisodeReleaseButton
+                        seriesTitle={seriesTitle}
+                        seasonNumber={season.seasonNumber}
+                        episodeId={episode.id}
+                        episodeNumber={episode.episodeNumber}
+                        seasonLabel={season.label}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -188,6 +209,7 @@ function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolea
               <SeasonDetails
                 key={season.seasonNumber}
                 seriesId={detail.id}
+                seriesTitle={detail.title}
                 season={season}
                 open={season.seasonNumber === openSeason}
                 isAdmin={isAdmin}

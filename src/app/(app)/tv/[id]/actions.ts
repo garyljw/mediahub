@@ -11,6 +11,11 @@ import {
   setSeasonMonitored,
 } from "@/server/arr/episodes";
 import { ArrRequestError } from "@/server/arr/request";
+import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
+import { grabSeriesRelease as sendSeriesRelease, searchSeriesReleases } from "@/server/arr/series-releases";
+import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
+
+export type { GrabResult, ReleaseSearchResult };
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -176,4 +181,105 @@ export async function searchEpisodeNow(input: unknown): Promise<ActionResult> {
   }
 
   return { ok: true };
+}
+
+// Sonarr searches for one season or one episode, never for a series alone. This union is strict, so a series id by
+// itself, a season with an episode id, and any extra key are all refused before Sonarr is asked. An episode search
+// takes no series id: Sonarr finds the series from the episode.
+const SeriesReleaseSearchInput = z.union([
+  z.strictObject({
+    seriesId: z.number().int().positive(),
+    seasonNumber: z.number().int().min(0),
+  }),
+  z.strictObject({
+    episodeId: z.number().int().positive(),
+  }),
+]);
+
+/**
+ * Asks Sonarr for interactive release search results for one season or one episode (admin only). Same shape as the
+ * other actions: the role check runs first inside try, and the catch always returns or throws. Nothing on the page
+ * changes, so there is no refresh(). The rows carry only what the dialog shows, plus the server's token.
+ */
+export async function findSeriesReleases(input: unknown): Promise<ReleaseSearchResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to pick releases." };
+    throw error;
+  }
+
+  const parsed = SeriesReleaseSearchInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid search." };
+
+  try {
+    const { rows, totals } = await searchSeriesReleases(parsed.data);
+    return { ok: true, releases: rows, totals };
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Release search: ${error.message}`);
+    if (error.kind === "timeout") {
+      return { ok: false, error: "Sonarr took too long searching the indexers. Try again in a moment." };
+    }
+    if (error.kind === "http" && error.status === 404) {
+      return { ok: false, error: "That season or episode is no longer in Sonarr. Close this and reload the page." };
+    }
+    return { ok: false, error: "Sonarr couldn't search the indexers. Try again." };
+  }
+}
+
+// strictObject rejects unknown keys. The browser sends only the token from a search result.
+const SeriesReleaseGrabInput = z.strictObject({
+  token: z.uuid(),
+});
+
+/**
+ * Sends a release from an earlier search to Sonarr's download client (admin only). Same shape as the other actions:
+ * the role check runs first inside try, and the catch always returns or throws. The release is taken from the
+ * server's cache, so the browser can only grab what Sonarr returned. Nothing on the page changes, so there is no
+ * refresh().
+ */
+export async function grabSeriesRelease(input: unknown): Promise<GrabResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to pick releases." };
+    throw error;
+  }
+
+  const parsed = SeriesReleaseGrabInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid grab." };
+
+  try {
+    const grabbed = await sendSeriesRelease(parsed.data.token);
+    return { ok: true, title: grabbed.title };
+  } catch (error) {
+    // Sonarr answers 404 both when it no longer has the release and when it can't match it to episodes.
+    if (error instanceof ReleaseGrabError) {
+      return {
+        ok: false,
+        error: "Sonarr can no longer use that result: it may have expired, or Sonarr couldn't match it to episodes. Search again or pick another one.",
+      };
+    }
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Release grab: ${error.message}`);
+    // A timeout or a dropped connection can mean Sonarr already sent the release, so don't invite a blind retry.
+    if (error.kind === "timeout") {
+      return {
+        ok: false,
+        error: "Sonarr took too long to answer. The release may still have been grabbed, so check the queue before trying again.",
+      };
+    }
+    // Only a refusal means nothing was grabbed. A 5xx can come after the release reached the download client.
+    if (grabWasRefused(error)) {
+      if (error.status === 409) return { ok: false, error: "The indexer didn't hand over that release. Try again, or pick another one." };
+      return { ok: false, error: "Sonarr didn't grab the release. Try again." };
+    }
+    return {
+      ok: false,
+      error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
+    };
+  }
 }

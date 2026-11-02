@@ -1,5 +1,5 @@
-// Pure "pick a release" display logic. Must not import from src/server at runtime.
-import type { ReleaseRow } from "@/server/arr/releases";
+// Pure "pick a release" display logic, shared by the Movies and TV pick dialogs. Must not import from src/server at runtime.
+import type { ReleaseRow, ReleaseTotals } from "@/server/arr/releases";
 import { formatCount, formatSize } from "@/components/library/format";
 
 const PROTOCOL_LABEL: Record<ReleaseRow["protocol"], string | null> = {
@@ -8,7 +8,13 @@ const PROTOCOL_LABEL: Record<ReleaseRow["protocol"], string | null> = {
   unknown: null,
 };
 
-/** Which releases the pick dialog shows. "all" includes releases whose protocol Radarr didn't report. */
+/** The search action's result: the rows and totals, or an error for the dialog to show. */
+export type ReleaseSearchResult = { ok: true; releases: ReleaseRow[]; totals: ReleaseTotals } | { ok: false; error: string };
+
+/** The grab action's result: the release's title when it was sent, or an error for the dialog to show. */
+export type GrabResult = { ok: true; title: string } | { ok: false; error: string };
+
+/** Which releases the pick dialog shows. "all" includes releases whose protocol the app didn't report. */
 export type ProtocolFilter = "all" | "usenet" | "torrent";
 
 /** The filter dropdown's options, in order. */
@@ -23,10 +29,20 @@ export function parseProtocolFilter(value: string): ProtocolFilter {
   return PROTOCOL_FILTERS.find((option) => option.value === value)?.value ?? "all";
 }
 
-/** Pure: the releases that match the protocol filter, in the order given (Radarr's best-first order). */
+/** Pure: the releases that match the protocol filter, in the order given (the app's best-first order). */
 export function filterReleases(releases: ReleaseRow[], protocol: ProtocolFilter): ReleaseRow[] {
   if (protocol === "all") return releases;
   return releases.filter((release) => release.protocol === protocol);
+}
+
+/** Two digits, zero-padded: 5 becomes "05". Hand-written, not Intl, for the same reason as the other helpers here. */
+export function twoDigits(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** "S02E05": a season and episode number, each zero-padded to two digits. */
+export function episodeCode(season: number, episode: number): string {
+  return `S${twoDigits(season)}E${twoDigits(episode)}`;
 }
 
 /** "3h", "2d", "<1h" or an em dash. Hours under 48 show as hours, then whole days. */
@@ -45,7 +61,7 @@ export function formatPeers(seeders: number | null, leechers: number | null): st
   return `${seeds}/${leeches}`;
 }
 
-/** The status line after the download client accepts a grab. Radarr has only queued it, so "sent" is the right word. */
+/** The status line after the download client accepts a grab. The app has only queued it, so "sent" is the right word. */
 export function grabbedMessage(title: string): string {
   return `Sent "${title}" to the download client.`;
 }
@@ -64,11 +80,13 @@ export function releaseCountLine(shown: number, total: number, protocol: Protoco
 /**
  * The one-line summary under a release title in the pick dialog, e.g.
  * ["Bluray-2160p", "13.0 GB", "30h old", "Usenet", "NZBgeek", "Score 120"]. Torrents add "12/3 peers".
- * Each part names itself ("old", "peers", "Score"), because the list has no column headers. Missing values
- * are left out rather than shown as dashes, so the line stays short. The score is always shown, 0 included.
+ * A TV release starts with its episodes, e.g. "Season pack" or "S02E05-E06". Each part names itself ("old",
+ * "peers", "Score"), because the list has no column headers. Missing values are left out rather than shown as
+ * dashes, so the line stays short. The score is always shown, 0 included.
  */
 export function releaseDetails(release: ReleaseRow): string[] {
   const parts: string[] = [];
+  if (release.episodes !== null) parts.push(release.episodes);
   if (release.quality !== null) parts.push(release.quality);
   if (release.size > 0) parts.push(formatSize(release.size));
   if (release.ageHours !== null) parts.push(`${formatAge(release.ageHours)} old`);
