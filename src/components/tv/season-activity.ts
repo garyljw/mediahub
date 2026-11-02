@@ -1,5 +1,6 @@
 // Pure summary of a season's queue activity for its header line. Must not import from src/server at runtime.
 import type { ActivitySeverity, ActivityState, QueueActivity } from "@/server/arr/activity";
+import { SEVERITY_RANK } from "@/components/library/severity";
 
 export type SeasonActivitySummary = {
   /** Episodes in this season that are in the queue. */
@@ -9,8 +10,6 @@ export type SeasonActivitySummary = {
   /** The state of the worst episode. The first episode in season order wins a tie. */
   state: ActivityState;
 };
-
-const SEVERITY_RANK: Record<ActivitySeverity, number> = { ok: 0, warning: 1, error: 2 };
 
 /**
  * Counts the season's episodes that are in the queue, and takes the colour and icon from the worst one.

@@ -1,6 +1,6 @@
 import "server-only";
 import { describe, expect, it, vi } from "vitest";
-import { ARR_TIMEOUT_MS, ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
+import { ARR_TIMEOUT_MS, ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList, settledOrNull } from "./request";
 
 describe("arrRequest", () => {
   it("returns the data when the response is OK", async () => {
@@ -54,5 +54,25 @@ describe("getList", () => {
 describe("DELETE_TIMEOUT_MS", () => {
   it("is longer than the normal read timeout, because deleting files can be slow", () => {
     expect(DELETE_TIMEOUT_MS).toBeGreaterThan(ARR_TIMEOUT_MS);
+  });
+});
+
+describe("settledOrNull", () => {
+  it("returns the value of a fulfilled request", () => {
+    expect(settledOrNull({ status: "fulfilled", value: [1] }, "Queue page")).toEqual([1]);
+  });
+
+  it("logs an ArrRequestError as label: message and gives null", () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const reason = new ArrRequestError("Radarr queue request failed: HTTP 500", "http", 500);
+
+    expect(settledOrNull({ status: "rejected", reason }, "Queue page")).toBeNull();
+    expect(log).toHaveBeenCalledWith("Queue page: Radarr queue request failed: HTTP 500");
+    log.mockRestore();
+  });
+
+  it("rethrows anything that is not an ArrRequestError", () => {
+    const reason = new Error("config broke");
+    expect(() => settledOrNull({ status: "rejected", reason }, "Queue page")).toThrow(reason);
   });
 });
