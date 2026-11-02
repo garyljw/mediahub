@@ -5,6 +5,7 @@ import { downloadKeyOf, etaOf, messagesOf, pickWorst, progressOf, type QueueItem
 import { episodeCode } from "@/components/library/release";
 import { compareQueueRows, type QueueRow, type QueueRowDetails } from "@/components/queue/queue-rows";
 import { hasPoster } from "./images";
+import { canManualImport } from "./manual-import";
 
 export type { QueueRow, QueueRowDetails };
 
@@ -150,7 +151,7 @@ export function firstQueuedId(items: readonly { id?: number | null }[], ids: rea
  * repeat of an id already seen. A Sonarr row's state, severity, progress and ETA come from its worst item (see
  * pickWorst). Its key uses the smallest item id in the group, so the key doesn't depend on the order the app lists
  * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters),
- * messages and details are left out. Sorted by compareQueueRows.
+ * messages, details and canForceImport are left out. Sorted by compareQueueRows.
  */
 export function toQueueRows(
   movieItems: MovieQueueItem[],
@@ -180,6 +181,7 @@ export function toQueueRows(
       href: movieId !== null ? `/movies/${movieId}` : null,
       posterSrc: movieId !== null && hasPoster(movie?.images) ? `/api/movies/${movieId}/poster` : null,
       ...factsOf(item, state, severity, now, includeDetails),
+      canForceImport: includeDetails && canManualImport(item),
     });
   }
 
@@ -199,6 +201,7 @@ export function toQueueRows(
       href: seriesId !== null ? `/tv/${seriesId}` : null,
       posterSrc: seriesId !== null && hasPoster(seriesSource.series?.images) ? `/api/tv/${seriesId}/poster` : null,
       ...factsOf(winner, state, severity, now, includeDetails),
+      canForceImport: includeDetails && group.items.some(canManualImport),
     });
   }
 
