@@ -25,7 +25,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 - Merge logic goes in `src/server/merge/` as pure functions with Vitest tests that use JSON fixtures in `src/server/merge/__fixtures__/`.
 - Prefer server components. Add `"use client"` only for interactivity.
 - Text that a client component renders must come out identical on the server and in the browser. Don't format it with `Intl`, `toLocaleString` or `toLocaleDateString`: Node and the browser ship different ICU data (Node printed "Sept" where Safari printed "Sep"), which causes hydration errors. Use the helpers in `src/components/library/format.ts`, with dates in UTC. Local times are the exception: format them on the server with `formatLocalDateTime` from `src/server/merge/local-time.ts` in `env().DISPLAY_TIMEZONE`, and pass the finished string to the client.
-- Show posters with `Poster` and `usePosterPreview` from `src/components/poster/`. Every list with poster thumbnails gets the hover preview.
+- Show posters with `Poster` and `usePosterPreview` from `src/components/poster/`. Every list with poster thumbnails gets the hover preview. The Home poster grid is the exception: its tiles are already full-size posters (`PosterTile`).
 - Keep runtime memory small: no extra services, and no heavy dependencies without a reason.
 - Before finishing a task, run `npm run lint && npm run typecheck && npm test`. All three must pass.
 
