@@ -10,8 +10,11 @@ export type CalendarView = (typeof CALENDAR_VIEWS)[number];
 
 export const RELEASE_TYPES: readonly ReleaseType[] = ["cinema", "digital", "physical"];
 
-/** One day of the range, with its label computed on the server. */
-export type CalendarDay = { date: string; label: string; isToday: boolean };
+/** One day of the range, with its labels computed on the server. `gridLabel` is the short corner text of a grid cell. */
+export type CalendarDay = { date: string; label: string; gridLabel: string; isToday: boolean };
+
+/** How many entries a grid cell shows before its "+N more" button. */
+export const GRID_MAX_CHIPS = 3;
 
 export type TypeFilter = "all" | "movies" | "tv";
 
@@ -48,4 +51,12 @@ export function entriesByDate(entries: CalendarEntry[]): Map<string, CalendarEnt
     else groups.set(entry.date, [entry]);
   }
   return groups;
+}
+
+/** The first `max` entries of a day for a grid cell, and how many are left over. Order is kept. */
+export function splitDayChips(
+  entries: CalendarEntry[],
+  max: number = GRID_MAX_CHIPS,
+): { shown: CalendarEntry[]; hiddenCount: number } {
+  return { shown: entries.slice(0, max), hiddenCount: Math.max(0, entries.length - max) };
 }

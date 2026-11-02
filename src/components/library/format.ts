@@ -75,3 +75,15 @@ export function formatRange(from: string, to: string): string {
   if (a.getUTCFullYear() === b.getUTCFullYear()) return `${startText} – ${endText}`;
   return `${startText} ${a.getUTCFullYear()} – ${endText}`;
 }
+
+/**
+ * "28" for a day of the month, or "1 Dec" when `withMonth` is true (the 1st of a month, and the first cell of the
+ * Calendar grid). An em dash when unparseable.
+ */
+export function formatGridDay(ymd: string, withMonth: boolean): string {
+  const time = Date.parse(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(time)) return "—";
+  const date = new Date(time);
+  const day = String(date.getUTCDate());
+  return withMonth ? `${day} ${MONTHS[date.getUTCMonth()]}` : day;
+}

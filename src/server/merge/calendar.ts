@@ -27,6 +27,8 @@ export type CalendarEntry = {
   title: string;
   /** Movie: "In cinemas" | "Digital release" | "Physical release". Episode: "S02E05 · Title". */
   detail: string;
+  /** The short form for a grid chip. Movie: "Cinema" | "Digital" | "Physical". Episode: "S02E05". */
+  shortDetail: string;
   /** Null for episodes. */
   releaseType: ReleaseType | null;
   status: CalendarStatus;
@@ -34,6 +36,12 @@ export type CalendarEntry = {
   posterSrc: string | null;
   /** Episodes link to their series page. Movies have no page, so null. */
   href: string | null;
+};
+
+const RELEASE_SHORT_LABELS: Record<ReleaseType, string> = {
+  cinema: "Cinema",
+  digital: "Digital",
+  physical: "Physical",
 };
 
 const RELEASE_LABELS: Record<ReleaseType, string> = {
@@ -90,6 +98,7 @@ function movieEntries(movie: MovieResource, from: string, to: string, today: str
         kind: "movie",
         title: movie.title,
         detail: RELEASE_LABELS[releaseType],
+        shortDetail: RELEASE_SHORT_LABELS[releaseType],
         releaseType,
         status: movieStatus(movie, date, today),
         posterSrc,
@@ -131,6 +140,7 @@ function episodeEntry(
   const season = series.seasons?.find((candidate) => candidate.seasonNumber === episode.seasonNumber);
   const wanted = series.monitored === true && episode.monitored === true && season?.monitored === true;
   const status = episodeStatus(episode, wanted, now);
+  const code = episodeCode(episode.seasonNumber, episode.episodeNumber);
 
   return {
     entry: {
@@ -138,7 +148,8 @@ function episodeEntry(
       date,
       kind: "episode",
       title: series.title,
-      detail: `${episodeCode(episode.seasonNumber, episode.episodeNumber)} · ${episode.title || "TBA"}`,
+      detail: `${code} · ${episode.title || "TBA"}`,
+      shortDetail: code,
       releaseType: null,
       // The series page calls a not-yet-aired episode "unaired". The calendar uses "upcoming" for both kinds.
       status: status === "unaired" ? "upcoming" : status,

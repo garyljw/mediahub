@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEntry } from "@/server/merge/calendar";
-import { DEFAULT_FILTERS, entriesByDate, filterEntries, type CalendarFilters } from "./calendar-filters";
+import { DEFAULT_FILTERS, GRID_MAX_CHIPS, entriesByDate, filterEntries, splitDayChips, type CalendarFilters } from "./calendar-filters";
 
 function movie(key: string, releaseType: "cinema" | "digital" | "physical", status: CalendarEntry["status"], date = "2026-11-06"): CalendarEntry {
   return {
@@ -9,6 +9,7 @@ function movie(key: string, releaseType: "cinema" | "digital" | "physical", stat
     kind: "movie",
     title: key,
     detail: "release",
+    shortDetail: "Cinema",
     releaseType,
     status,
     posterSrc: null,
@@ -23,6 +24,7 @@ function episode(key: string, status: CalendarEntry["status"], date = "2026-11-0
     kind: "episode",
     title: key,
     detail: "S01E01 · Pilot",
+    shortDetail: "S01E01",
     releaseType: null,
     status,
     posterSrc: null,
@@ -95,5 +97,28 @@ describe("entriesByDate", () => {
 
   it("returns an empty map for no entries", () => {
     expect(entriesByDate([]).size).toBe(0);
+  });
+});
+
+describe("splitDayChips", () => {
+  const three = [movie("a", "cinema", "missing"), episode("b", "missing"), episode("c", "upcoming")];
+
+  it("shows at most GRID_MAX_CHIPS entries and counts the rest", () => {
+    expect(GRID_MAX_CHIPS).toBe(3);
+    const many = [...three, episode("d", "missing"), episode("e", "missing")];
+    const { shown, hiddenCount } = splitDayChips(many);
+    expect(shown.map((entry) => entry.key)).toEqual(["a", "b", "c"]);
+    expect(hiddenCount).toBe(2);
+  });
+
+  it("hides nothing when the day fits", () => {
+    expect(splitDayChips(three)).toEqual({ shown: three, hiddenCount: 0 });
+    expect(splitDayChips([])).toEqual({ shown: [], hiddenCount: 0 });
+  });
+
+  it("takes the limit as an argument", () => {
+    const { shown, hiddenCount } = splitDayChips(three, 1);
+    expect(shown.map((entry) => entry.key)).toEqual(["a"]);
+    expect(hiddenCount).toBe(2);
   });
 });

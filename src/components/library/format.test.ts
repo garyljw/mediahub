@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAdded, formatCount, formatDay, formatEta, formatRange, formatSize } from "./format";
+import { formatAdded, formatCount, formatDay, formatEta, formatGridDay, formatRange, formatSize } from "./format";
 
 describe("formatSize", () => {
   it("shows an em dash for zero, negative or invalid sizes", () => {
@@ -106,5 +106,21 @@ describe("formatRange", () => {
 
   it("shows an em dash for an unparseable date", () => {
     expect(formatRange("2026-10-26", "soon")).toBe("—");
+  });
+});
+
+describe("formatGridDay", () => {
+  it("gives only the day of the month for an ordinary day", () => {
+    expect(formatGridDay("2026-11-28", false)).toBe("28");
+    expect(formatGridDay("2026-11-03", false)).toBe("3");
+  });
+
+  it("adds the short month when asked", () => {
+    expect(formatGridDay("2026-12-01", true)).toBe("1 Dec");
+    expect(formatGridDay("2026-10-27", true)).toBe("27 Oct");
+  });
+
+  it("shows an em dash for an unparseable date", () => {
+    expect(formatGridDay("not a date", false)).toBe("—");
   });
 });

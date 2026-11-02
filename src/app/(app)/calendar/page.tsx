@@ -14,7 +14,7 @@ import {
   type CalendarView as View,
 } from "@/components/calendar/calendar-filters";
 import { Button } from "@/components/ui/button";
-import { formatDay, formatRange } from "@/components/library/format";
+import { formatDay, formatGridDay, formatRange } from "@/components/library/format";
 
 export const metadata = { title: "Calendar" };
 // Blocking route: the page waits for Radarr and Sonarr before rendering, so no Suspense fallback is needed.
@@ -62,9 +62,11 @@ async function loadCalendar(fromParam: unknown): Promise<{
     if (episodes === null) alerts.push("Couldn't load episodes from Sonarr.");
   }
 
-  const days: CalendarDay[] = daysFrom(from).map((date) => ({
+  const days: CalendarDay[] = daysFrom(from).map((date, index) => ({
     date,
     label: formatDay(date),
+    // The first cell and each 1st of a month name the month, so the grid shows where a month starts.
+    gridLabel: formatGridDay(date, index === 0 || date.endsWith("-01")),
     isToday: date === today,
   }));
   return {

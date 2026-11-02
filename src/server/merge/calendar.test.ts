@@ -337,6 +337,12 @@ describe("toCalendarEntries", () => {
     expect(find("episode-801").posterSrc).toBeNull();
   });
 
+  it("gives each entry a short detail for grid chips", () => {
+    expect(find("movie-101-digital").shortDetail).toBe("Digital");
+    expect(find("movie-103-physical").shortDetail).toBe("Physical");
+    expect(find("episode-703").shortDetail).toMatch(/^S\d{2}E\d{2}$/);
+  });
+
   it("gives episodes a null release type and movies their release type", () => {
     expect(find("episode-703").releaseType).toBeNull();
     expect(find("movie-103-physical").releaseType).toBe("physical");
@@ -353,6 +359,7 @@ describe("toCalendarEntries", () => {
         "kind",
         "posterSrc",
         "releaseType",
+        "shortDetail",
         "status",
         "title",
       ]);

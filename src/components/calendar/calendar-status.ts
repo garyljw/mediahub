@@ -19,11 +19,12 @@ export const CALENDAR_STATUS_CLASS: Record<CalendarStatus, string> = {
   unmonitored: "border-transparent bg-muted text-muted-foreground",
 };
 
-// The grid's one-line items use a coloured edge in place of a badge, so a dense cell stays readable.
-export const CALENDAR_STATUS_EDGE: Record<CalendarStatus, string> = {
-  downloaded: "border-emerald-600 dark:border-emerald-400",
-  missing: "border-amber-500",
-  upcoming: "border-muted-foreground/40",
-  notAvailable: "border-muted-foreground/40 border-dotted",
-  unmonitored: "border-muted-foreground/40 border-dashed",
+// The grid's one-line chips. Same hues as the badges above, lighter so a dense cell stays readable.
+// Every chip has a border so the sizes match; only "not available" shows it.
+export const CALENDAR_STATUS_CHIP: Record<CalendarStatus, string> = {
+  downloaded: "border-transparent bg-emerald-600/15 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
+  missing: "border-transparent bg-amber-500/20 text-amber-800 dark:text-amber-300",
+  upcoming: "border-transparent bg-muted text-muted-foreground",
+  notAvailable: "border-dashed border-muted-foreground/50 bg-transparent text-muted-foreground",
+  unmonitored: "border-transparent bg-muted text-muted-foreground opacity-60",
 };
