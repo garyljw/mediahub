@@ -51,7 +51,7 @@ function seriesItem(row: SeriesRow): HomeItem {
 }
 
 /**
- * Pure: merges the Movies and TV rows into Home grid items, newest added first (see compareHomeItems).
+ * Pure: merges the Movies and TV rows into Home grid items, A–Z by sort title (see compareHomeItems).
  */
 export function toHomeItems(movies: MovieRow[], series: SeriesRow[]): HomeItem[] {
   return [...movies.map(movieItem), ...series.map(seriesItem)].sort(compareHomeItems);

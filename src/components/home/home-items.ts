@@ -1,5 +1,5 @@
 // Pure helpers for the Home grid: the merged item shape, filtering and ordering. Client-safe: no runtime imports from src/server.
-import { addedTime, compareValues, matchesTitleOrYear, TITLE_COLLATOR } from "@/components/library/list";
+import { matchesTitleOrYear, TITLE_COLLATOR } from "@/components/library/list";
 
 /** One tile on the Home grid. `key` is needed because movie and series ids can collide. */
 export type HomeItem = {
@@ -9,6 +9,7 @@ export type HomeItem = {
   title: string;
   year: number | null;
   sortTitle: string;
+  /** Not used by the A–Z order. Kept for the planned "Date added" sort. */
   added: string | null;
   href: string;
   posterSrc: string | null;
@@ -33,12 +34,12 @@ export function filterHomeItems(items: HomeItem[], filter: HomeFilter): HomeItem
 const KIND_RANK: Record<HomeItem["kind"], number> = { movie: 0, series: 1 };
 
 /**
- * Newest added first. Items without a date go last. Ties go by title, then movie before series, then id.
- * Use with Array.prototype.sort.
+ * A–Z by sort title. Radarr and Sonarr both lowercase sortTitle and drop a leading "The" or "A" (checked on a live
+ * instance: "The Expanse" is "expanse"), so movies and series interleave correctly. Ties go movie before series,
+ * then by id. Use with Array.prototype.sort.
  */
 export function compareHomeItems(a: HomeItem, b: HomeItem): number {
   return (
-    compareValues(addedTime(a.added), addedTime(b.added), "desc") ||
     TITLE_COLLATOR.compare(a.sortTitle, b.sortTitle) ||
     KIND_RANK[a.kind] - KIND_RANK[b.kind] ||
     a.id - b.id

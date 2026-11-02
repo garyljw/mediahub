@@ -63,35 +63,37 @@ describe("filterHomeItems", () => {
 });
 
 describe("compareHomeItems", () => {
-  it("puts the newest added date first", () => {
-    const older = item({ kind: "movie", id: 1, title: "Alpha", added: "2026-01-01T00:00:00Z" });
-    const newer = item({ kind: "movie", id: 2, title: "Zulu", added: "2026-06-01T00:00:00Z" });
-    expect([older, newer].sort(compareHomeItems).map((entry) => entry.title)).toEqual(["Zulu", "Alpha"]);
+  const sorted = (list: HomeItem[]) => [...list].sort(compareHomeItems);
+
+  it("sorts A–Z by sort title, ignoring the added date", () => {
+    const zulu = item({ kind: "movie", id: 1, title: "Zulu", added: "2026-06-01T00:00:00Z" });
+    const alpha = item({ kind: "series", id: 2, title: "Alpha", added: "2020-01-01T00:00:00Z" });
+    expect(titles(sorted([zulu, alpha]))).toEqual(["Alpha", "Zulu"]);
   });
 
-  it("puts items with no date last", () => {
-    const dated = item({ kind: "series", id: 1, title: "Zulu", added: "2020-01-01T00:00:00Z" });
-    const undated = item({ kind: "movie", id: 2, title: "Alpha", added: null });
-    expect([undated, dated].sort(compareHomeItems).map((entry) => entry.title)).toEqual(["Zulu", "Alpha"]);
+  it("uses the sort title, so a leading article doesn't count", () => {
+    const beekeeper = item({ kind: "movie", id: 1, title: "The Beekeeper", sortTitle: "beekeeper" });
+    const carrie = item({ kind: "movie", id: 2, title: "Carrie", sortTitle: "carrie" });
+    const alpha = item({ kind: "movie", id: 3, title: "Alpha", sortTitle: "alpha" });
+    expect(titles(sorted([carrie, beekeeper, alpha]))).toEqual(["Alpha", "The Beekeeper", "Carrie"]);
   });
 
-  it("breaks date ties by title with the collator (accents sort in place)", () => {
-    const same = "2026-03-03T00:00:00Z";
-    const e = item({ kind: "movie", id: 1, title: "Éclair", sortTitle: "éclair", added: same });
-    const z = item({ kind: "movie", id: 2, title: "Zulu", sortTitle: "zulu", added: same });
-    const a = item({ kind: "movie", id: 3, title: "Alpha", sortTitle: "alpha", added: same });
-    expect([z, e, a].sort(compareHomeItems).map((entry) => entry.title)).toEqual(["Alpha", "Éclair", "Zulu"]);
+  it("sorts accented titles in place", () => {
+    const e = item({ kind: "movie", id: 1, title: "Éclair", sortTitle: "éclair" });
+    const z = item({ kind: "movie", id: 2, title: "Zulu", sortTitle: "zulu" });
+    const a = item({ kind: "movie", id: 3, title: "Alpha", sortTitle: "alpha" });
+    expect(titles(sorted([z, e, a]))).toEqual(["Alpha", "Éclair", "Zulu"]);
   });
 
-  it("puts a movie before a series when everything else ties", () => {
-    const series = item({ kind: "series", id: 1, title: "Same", added: null });
-    const movie = item({ kind: "movie", id: 9, title: "Same", added: null });
-    expect([series, movie].sort(compareHomeItems).map((entry) => entry.kind)).toEqual(["movie", "series"]);
+  it("puts a movie before a series when the sort titles tie", () => {
+    const series = item({ kind: "series", id: 1, title: "Same" });
+    const movie = item({ kind: "movie", id: 9, title: "Same" });
+    expect(sorted([series, movie]).map((entry) => entry.kind)).toEqual(["movie", "series"]);
   });
 
   it("breaks the last tie by id", () => {
-    const high = item({ kind: "movie", id: 9, title: "Same", added: null });
-    const low = item({ kind: "movie", id: 2, title: "Same", added: null });
-    expect([high, low].sort(compareHomeItems).map((entry) => entry.id)).toEqual([2, 9]);
+    const high = item({ kind: "movie", id: 9, title: "Same" });
+    const low = item({ kind: "movie", id: 2, title: "Same" });
+    expect(sorted([high, low]).map((entry) => entry.id)).toEqual([2, 9]);
   });
 });
