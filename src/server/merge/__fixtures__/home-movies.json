@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "title": "Harbour Lights",
+    "year": 2019,
+    "status": "downloaded",
+    "monitored": true,
+    "qualityProfileId": 1,
+    "qualityProfile": "HD-1080p",
+    "fileQuality": "Bluray-1080p",
+    "sizeOnDisk": 8000000000,
+    "added": "2026-10-01T10:00:00Z",
+    "sortTitle": "harbour lights",
+    "hasPoster": true
+  },
+  {
+    "id": 2,
+    "title": "Night Circuit",
+    "year": 2024,
+    "status": "missing",
+    "monitored": true,
+    "qualityProfileId": 1,
+    "qualityProfile": "HD-1080p",
+    "fileQuality": null,
+    "sizeOnDisk": 0,
+    "added": "2026-09-15T08:00:00Z",
+    "sortTitle": "night circuit",
+    "hasPoster": false
+  },
+  {
+    "id": 3,
+    "title": "Future Tense",
+    "year": 2027,
+    "status": "unreleased",
+    "monitored": false,
+    "qualityProfileId": 2,
+    "qualityProfile": "Any",
+    "fileQuality": null,
+    "sizeOnDisk": 0,
+    "added": null,
+    "sortTitle": "future tense",
+    "hasPoster": true
+  },
+  {
+    "id": 4,
+    "title": "Glass Orchard",
+    "year": null,
+    "status": "missing",
+    "monitored": true,
+    "qualityProfileId": 1,
+    "qualityProfile": "HD-1080p",
+    "fileQuality": null,
+    "sizeOnDisk": 0,
+    "added": "2026-10-20T12:00:00Z",
+    "sortTitle": "glass orchard",
+    "hasPoster": true
+  }
+]

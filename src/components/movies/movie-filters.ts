@@ -7,6 +7,7 @@ import {
   type ProfileFilter,
   type SortDir,
   type SortValue,
+  matchesTitleOrYear,
 } from "@/components/library/list";
 
 export type StatusFilter = "all" | MovieStatus;
@@ -44,10 +45,7 @@ export function hasActiveFilters(filters: MovieFilters): boolean {
 
 /** Case-insensitive substring match on the title or the year. An empty query matches everything. */
 export function matchesSearch(row: MovieRow, search: string): boolean {
-  const query = search.trim().toLowerCase();
-  if (query === "") return true;
-  if (row.title.toLowerCase().includes(query)) return true;
-  return row.year !== null && String(row.year).includes(query);
+  return matchesTitleOrYear(row, search);
 }
 
 export function filterMovies(rows: MovieRow[], filters: MovieFilters): MovieRow[] {

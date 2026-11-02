@@ -6,11 +6,10 @@ import { Film } from "lucide-react";
 import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
 
 /**
- * A 24x36 poster thumbnail, or a same-size placeholder when there is no src or it failed to load.
- * `src` is always one of MediaHub's own poster routes, never a Radarr or TMDB URL.
+ * Tracks whether a poster src failed to load, for both thumbnails and tiles. A failure belongs to the src that
+ * failed: a new src gets a fresh attempt, so the same <img> can recover.
  */
-export function Poster({ src }: { src: string | null }) {
-  // A failure belongs to the src that failed. A new src gets a fresh attempt, so the same <img> can recover.
+function usePosterFailure(src: string | null) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const failed = src !== null && failedSrc === src;
   const imgRef = useRef<HTMLImageElement>(null);
@@ -20,6 +19,16 @@ export function Poster({ src }: { src: string | null }) {
     const img = imgRef.current;
     if (img && src !== null && img.complete && img.naturalWidth === 0) setFailedSrc(src);
   }, [src]);
+
+  return { failed, imgRef, markFailed: () => setFailedSrc(src) };
+}
+
+/**
+ * A 24x36 poster thumbnail, or a same-size placeholder when there is no src or it failed to load.
+ * `src` is always one of MediaHub's own poster routes, never a Radarr or TMDB URL.
+ */
+export function Poster({ src }: { src: string | null }) {
+  const { failed, imgRef, markFailed } = usePosterFailure(src);
 
   if (src !== null && !failed) {
     return (
@@ -33,7 +42,7 @@ export function Poster({ src }: { src: string | null }) {
         height={36}
         loading="lazy"
         decoding="async"
-        onError={() => setFailedSrc(src)}
+        onError={markFailed}
         className="h-9 w-6 shrink-0 rounded-sm bg-muted object-cover"
       />
     );
@@ -42,6 +51,35 @@ export function Poster({ src }: { src: string | null }) {
   return (
     <div aria-hidden className="flex h-9 w-6 shrink-0 items-center justify-center rounded-sm bg-muted">
       <Film className="size-3 text-muted-foreground/60" />
+    </div>
+  );
+}
+
+/**
+ * A full-width poster for a grid tile (the Home page). It fills its container at 2:3, and shows a Film
+ * placeholder when there is no src or it failed to load.
+ */
+export function PosterTile({ src }: { src: string | null }) {
+  const { failed, imgRef, markFailed } = usePosterFailure(src);
+
+  if (src !== null && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it.
+      <img
+        ref={imgRef}
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={markFailed}
+        className="aspect-[2/3] w-full rounded-md object-cover bg-muted"
+      />
+    );
+  }
+
+  return (
+    <div aria-hidden className="flex aspect-[2/3] w-full items-center justify-center rounded-md bg-muted">
+      <Film className="size-8 text-muted-foreground/60" />
     </div>
   );
 }
