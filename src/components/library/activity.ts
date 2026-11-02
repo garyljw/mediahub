@@ -1,5 +1,5 @@
 // Pure display logic for the Activity column. Must not import from src/server at runtime.
-import type { ActivitySeverity, ActivityState, QueueActivity } from "@/server/arr/activity";
+import type { ActivityState, QueueActivity } from "@/server/arr/activity";
 import { formatEta } from "@/components/library/format";
 
 /** How often the browser asks for queue state, while the tab is visible. */
@@ -24,9 +24,6 @@ const BASE_LABEL: Record<ActivityState, string> = {
 export function stateLabel(state: ActivityState): string {
   return BASE_LABEL[state];
 }
-
-/** Order of severities, least to most serious. Shared by the server's merges and the Queue page's sort. */
-export const SEVERITY_RANK: Record<ActivitySeverity, number> = { ok: 0, warning: 1, error: 2 };
 
 /** The states whose progress the Activity column shows: downloading and paused. */
 export function showsProgressFor(state: ActivityState): boolean {

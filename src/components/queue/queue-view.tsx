@@ -177,11 +177,15 @@ export function QueueView({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className={CELL}>
+                    {/* Like the Activity column: the first message (admins only) shows under the state, all of them on hover. */}
+                    <TableCell className={CELL} title={[stateLabel(row.state), ...row.messages].join("\n")}>
                       <span className={`flex min-w-0 items-center gap-1.5 whitespace-nowrap ${ACTIVITY_CLASS[row.severity]}`}>
                         <Icon aria-hidden className="size-3.5 shrink-0" />
                         {stateLabel(row.state)}
                       </span>
+                      {row.messages.length > 0 && (
+                        <p className="mt-0.5 max-w-64 truncate text-xs text-muted-foreground">{row.messages[0]}</p>
+                      )}
                     </TableCell>
                     <TableCell className={`${CELL} whitespace-nowrap`}>
                       {showsProgressFor(row.state) && row.progress !== null ? `${row.progress}%` : "—"}

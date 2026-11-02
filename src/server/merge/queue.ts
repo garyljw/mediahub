@@ -34,7 +34,6 @@ function factsOf(
   severity: QueueRow["severity"],
   now: number,
   includeDetails: boolean,
-  details: QueueRowDetails | null,
 ): Facts {
   return {
     state,
@@ -42,7 +41,7 @@ function factsOf(
     progress: progressOf(item),
     etaSeconds: etaOf(item, now),
     messages: includeDetails ? messagesOf(item) : [],
-    details: includeDetails ? details : null,
+    details: includeDetails ? detailsOf(item) : null,
   };
 }
 
@@ -107,7 +106,7 @@ function episodesOf(items: EpisodeQueueItem[]): EpisodeRef[] {
  * season pack's per-episode items become one row). Items whose id isn't a positive integer are skipped, and so is any
  * repeat of an id already seen. A Sonarr row's state, severity, progress and ETA come from its worst item (see
  * pickWorst). Its key uses the smallest item id in the group, so the key doesn't depend on the order the app lists
- * items in. With `includeDetails` false (requesters), messages and details are left out. Sorted by compareQueueRows.
+ * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters), messages and details are left out. Sorted by compareQueueRows.
  */
 export function toQueueRows(
   movieItems: MovieQueueItem[],
@@ -135,7 +134,7 @@ export function toQueueRows(
       detail: year !== null && year > 0 ? String(year) : "",
       href: movieId !== null ? `/movies/${movieId}` : null,
       posterSrc: movieId !== null && hasPoster(movie?.images) ? `/api/movies/${movieId}/poster` : null,
-      ...factsOf(item, state, severity, now, includeDetails, includeDetails ? detailsOf(item) : null),
+      ...factsOf(item, state, severity, now, includeDetails),
     });
   }
 
@@ -159,7 +158,7 @@ export function toQueueRows(
     const queueId = Math.min(...items.map((item) => validId(item.id)).filter((id): id is number => id !== null));
     const { item: winner, state, severity } = pickWorst(items);
     const seriesId = items.map((item) => validId(item.seriesId) ?? validId(item.series?.id)).find((id) => id !== null) ?? null;
-    const seriesSource = items.find((item) => item.series !== undefined) ?? items[0];
+    const seriesSource = items.find((item) => nonEmpty(item.series?.title) !== null) ?? items[0];
     const episodes = episodesOf(items);
     rows.push({
       key: `sonarr-${queueId}`,
@@ -170,7 +169,7 @@ export function toQueueRows(
       detail: episodeDetail(episodes),
       href: seriesId !== null ? `/tv/${seriesId}` : null,
       posterSrc: seriesId !== null && hasPoster(seriesSource.series?.images) ? `/api/tv/${seriesId}/poster` : null,
-      ...factsOf(winner, state, severity, now, includeDetails, includeDetails ? detailsOf(winner) : null),
+      ...factsOf(winner, state, severity, now, includeDetails),
     });
   }
 

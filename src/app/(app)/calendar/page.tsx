@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { requirePageUser } from "@/server/authz";
 import { fetchEpisodeCalendar, fetchMovieCalendar } from "@/server/arr/calendar";
-import { ArrRequestError } from "@/server/arr/request";
+import { settledOrNull } from "@/server/arr/request";
 import { toCalendarEntries, type CalendarEntry } from "@/server/merge/calendar";
 import { CALENDAR_STEP_DAYS, addDays, daysFrom, lastDayOf, resolveFrom, utcDateOf } from "@/server/merge/calendar-dates";
 import { CalendarView } from "@/components/calendar/calendar-view";
@@ -22,18 +22,6 @@ export const instant = false;
 
 const VIEW_SCHEMA = z.enum(CALENDAR_VIEWS);
 
-/**
- * The list from one settled calendar fetch. A Radarr or Sonarr failure is logged and gives null, so the other
- * side can still show. Anything that isn't a request failure (a config error, a bug) is rethrown.
- */
-function listOrNull<T>(result: PromiseSettledResult<T[]>): T[] | null {
-  if (result.status === "fulfilled") return result.value;
-  if (!(result.reason instanceof ArrRequestError)) throw result.reason;
-  // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
-  console.error(`Calendar page: ${result.reason.message}`);
-  return null;
-}
-
 /** The range, both calendars for it, and the day labels. Failures become alert text, so the rest still renders. */
 async function loadCalendar(fromParam: unknown): Promise<{
   from: string;
@@ -51,8 +39,8 @@ async function loadCalendar(fromParam: unknown): Promise<{
     fetchMovieCalendar(from, to),
     fetchEpisodeCalendar(from, to),
   ]);
-  const movies = listOrNull(movieResult);
-  const episodes = listOrNull(episodeResult);
+  const movies = settledOrNull(movieResult, "Calendar page");
+  const episodes = settledOrNull(episodeResult, "Calendar page");
 
   const alerts: string[] = [];
   if (movies === null && episodes === null) {

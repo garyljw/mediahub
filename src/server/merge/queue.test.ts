@@ -187,3 +187,21 @@ describe("toQueueRows sort order", () => {
     ]);
   });
 });
+
+describe("toQueueRows series source", () => {
+  it("takes the series from an item that has one when an earlier item's series is null", () => {
+    const pack = [
+      { id: 2, seriesId: 7, downloadId: "pack", series: null, episode: { id: 21, seasonNumber: 1, episodeNumber: 1 } },
+      {
+        id: 3,
+        seriesId: 7,
+        downloadId: "pack",
+        series: { id: 7, title: "Real Series", images: [{ coverType: "poster" }] },
+        episode: { id: 22, seasonNumber: 1, episodeNumber: 2 },
+      },
+    ] as unknown as EpisodeQueueItem[];
+    const [row] = toQueueRows([], pack, NOW, { includeDetails: false });
+    expect(row.title).toBe("Real Series");
+    expect(row.posterSrc).toBe("/api/tv/7/poster");
+  });
+});

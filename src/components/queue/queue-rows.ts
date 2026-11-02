@@ -1,7 +1,7 @@
 // The Queue page's row shape, sort and "last known state" logic. Pure, and safe to import from both the server merge
 // and the client view, so it must not import server-only code at runtime (type imports only).
 import type { ActivitySeverity, ActivityState } from "@/server/arr/activity";
-import { SEVERITY_RANK } from "@/components/library/activity";
+import { SEVERITY_RANK } from "@/components/library/severity";
 
 /** The download details an admin can expand a row to see. Null for requesters. */
 export type QueueRowDetails = {

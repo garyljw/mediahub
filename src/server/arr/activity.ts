@@ -1,5 +1,5 @@
 import "server-only";
-import { SEVERITY_RANK } from "@/components/library/activity";
+import { SEVERITY_RANK } from "@/components/library/severity";
 import { fetchEpisodeQueue, fetchMovieQueue } from "./queue";
 import type { components as RadarrComponents } from "./generated/radarr";
 import type { components as SonarrComponents } from "./generated/sonarr";
@@ -154,7 +154,7 @@ export function messagesOf(item: QueueItem): string[] {
  * is the case that matters: one download becomes one queue item per episode, all with the same downloadId
  * (checked against Sonarr v4's QueueService.MapQueue). An item with no downloadId falls back to its title.
  * Without this, a 10-episode pack would show "(+9 more)" on the series row. Prefixes keep the three kinds of
- * key apart. Keys stay inside this module and are never returned.
+ * key apart. Also used by the Queue merge to group Sonarr rows. Keys are never returned to the browser.
  */
 export function downloadKeyOf(item: QueueItem, index: number): string {
   if (typeof item.downloadId === "string" && item.downloadId !== "") return `d:${item.downloadId}`;
