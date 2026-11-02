@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +107,8 @@ export function HomeGrid({
           <p className="text-sm text-muted-foreground">
             Showing {formatCount(shown.length)} of {formatCount(filtered.length)}
           </p>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {/* Fixed-width tiles fill each row, so wider screens get more columns rather than bigger posters. */}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
             {shown.map((item) => (
               <li key={item.key}>
                 <HomeTile
@@ -141,38 +142,44 @@ function ActivityFailed({ source }: { source: string }) {
 
 function HomeTile({ item, activity }: { item: HomeItem; activity: QueueActivity | undefined }) {
   const Icon = activity ? ACTIVITY_ICON[activity.state] : null;
+  const KindIcon = item.kind === "movie" ? Film : Tv;
   return (
     <Link
       href={item.href}
       className="group block rounded-lg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <PosterTile src={item.posterSrc} />
-      <div className="mt-2 space-y-1.5">
-        <p className="line-clamp-2 font-medium leading-snug group-hover:underline">{item.title}</p>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          {item.year !== null && <span>{item.year}</span>}
-          <Badge variant="outline">{item.kind === "movie" ? "Movie" : "TV"}</Badge>
-        </div>
-        <Badge className={item.badge.className}>{item.badge.label}</Badge>
-        {activity && Icon && (
-          <div className="space-y-1">
-            <p className={cn("flex min-w-0 items-center gap-1 text-xs", ACTIVITY_CLASS[activity.severity])}>
-              <Icon aria-hidden className="size-3 shrink-0" />
-              <span className="min-w-0 truncate">{activityLabel(activity)}</span>
-            </p>
-            {showsProgress(activity) && (
-              <div
-                role="progressbar"
-                aria-label={`Download progress for ${item.title}`}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={activity.progress}
-                className="h-1 w-full overflow-hidden rounded bg-muted"
-              >
-                <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
-              </div>
-            )}
+      <div className="relative overflow-hidden rounded-md transition-transform group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+        <PosterTile src={item.posterSrc} />
+        <span className="absolute top-1.5 right-1.5 rounded bg-black/65 p-1 text-white">
+          <KindIcon aria-hidden className="size-3" />
+          <span className="sr-only">{item.kind === "movie" ? "Movie" : "TV"}</span>
+        </span>
+        {activity && showsProgress(activity) && (
+          <div
+            role="progressbar"
+            aria-label={`Download progress for ${item.title}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={activity.progress}
+            className="absolute inset-x-0 bottom-0 h-1.5 bg-black/50"
+          >
+            <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
           </div>
+        )}
+      </div>
+      <div className="mt-1.5 space-y-1">
+        <p className="truncate text-sm font-medium leading-snug group-hover:underline" title={item.title}>
+          {item.title}
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-muted-foreground">
+          {item.year !== null && <span>{item.year}</span>}
+          <Badge className={cn("h-4 px-1.5 text-[10px]", item.badge.className)}>{item.badge.label}</Badge>
+        </div>
+        {activity && Icon && (
+          <p className={cn("flex min-w-0 items-center gap-1 text-xs", ACTIVITY_CLASS[activity.severity])}>
+            <Icon aria-hidden className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">{activityLabel(activity)}</span>
+          </p>
         )}
       </div>
     </Link>

@@ -88,29 +88,24 @@ describe("toHomeItems: badges", () => {
 });
 
 describe("toHomeItems: ordering", () => {
-  it("sorts newest added first, with missing dates last and ties by title", () => {
+  it("sorts A–Z by sort title, movies and series together", () => {
     expect(items.map((item) => item.key)).toEqual([
+      "movie:3",
       "movie:4",
       "series:4",
-      "series:5",
       "movie:1",
-      "movie:2",
       "series:8",
-      "series:7",
-      "movie:3",
+      "movie:2",
+      "series:5",
       "series:6",
+      "series:7",
     ]);
   });
 
-  it("puts a movie before a series when they share a date and title", () => {
-    const [first, second] = items;
-    expect(first.key).toBe("movie:4");
-    expect(second.key).toBe("series:4");
-    expect(first.added).toBe(second.added);
-  });
-
-  it("orders items with no date by title", () => {
-    const undated = items.filter((item) => item.added === null);
-    expect(undated.map((item) => item.title)).toEqual(["Future Tense", "Quiet Hills"]);
+  it("puts a movie before a series when they share a sort title", () => {
+    const [, second, third] = items;
+    expect(second.key).toBe("movie:4");
+    expect(third.key).toBe("series:4");
+    expect(second.sortTitle).toBe(third.sortTitle);
   });
 });
