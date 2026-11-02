@@ -101,12 +101,56 @@ function episodesOf(items: EpisodeQueueItem[]): EpisodeRef[] {
   );
 }
 
+/** One Sonarr download: the valid, unique ids of its items (sorted), its row id, and the items themselves. */
+type EpisodeGroup = { queueId: number; ids: number[]; items: EpisodeQueueItem[] };
+
+/**
+ * Pure: groups Sonarr's queue items by download (downloadKeyOf, within one series), so a season pack's per-episode
+ * items form one group. Items whose id isn't a positive integer are skipped, and so is any repeat of an id already
+ * seen. A group's queueId is its smallest id. The one grouping, used by toQueueRows.
+ */
+function groupEpisodeItems(episodeItems: EpisodeQueueItem[]): EpisodeGroup[] {
+  const groups = new Map<string, EpisodeQueueItem[]>();
+  const seenEpisode = new Set<number>();
+  episodeItems.forEach((item, index) => {
+    const id = validId(item.id);
+    if (id === null || seenEpisode.has(id)) return;
+    seenEpisode.add(id);
+    // Series id is part of the key, so two series can never share a group even if their fallback download keys match.
+    const seriesId = validId(item.seriesId) ?? validId(item.series?.id);
+    const groupKey = `${seriesId ?? "none"}\u0000${downloadKeyOf(item, index)}`;
+    const group = groups.get(groupKey);
+    if (group) group.push(item);
+    else groups.set(groupKey, [item]);
+  });
+
+  return [...groups.values()].map((items) => {
+    // Every item here has a valid id (checked when grouped), so sorting the ids gives the smallest first.
+    const ids = items.map((item) => validId(item.id)).filter((id): id is number => id !== null).sort((a, b) => a - b);
+    return { queueId: ids[0], ids, items };
+  });
+}
+
+/**
+ * Pure: the first id in `ids` (in the order given) that is the id of an item in `items`, or null when none of them is.
+ * `items` is one app's queue, so only that app's ids are checked. Ids that aren't positive integers never match.
+ */
+export function firstQueuedId(items: readonly { id?: number | null }[], ids: readonly number[]): number | null {
+  const queued = new Set<number>();
+  for (const item of items) {
+    const id = validId(item.id);
+    if (id !== null) queued.add(id);
+  }
+  return ids.find((id) => queued.has(id)) ?? null;
+}
+
 /**
  * Pure: builds the Queue rows from Radarr's queue (one row per item) and Sonarr's queue (one row per download, so a
  * season pack's per-episode items become one row). Items whose id isn't a positive integer are skipped, and so is any
  * repeat of an id already seen. A Sonarr row's state, severity, progress and ETA come from its worst item (see
  * pickWorst). Its key uses the smallest item id in the group, so the key doesn't depend on the order the app lists
- * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters), messages and details are left out. Sorted by compareQueueRows.
+ * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters),
+ * messages and details are left out. Sorted by compareQueueRows.
  */
 export function toQueueRows(
   movieItems: MovieQueueItem[],
@@ -129,7 +173,9 @@ export function toQueueRows(
       key: `radarr-${id}`,
       app: "radarr",
       queueId: id,
+      queueIds: [id],
       kind: "movie",
+      episodeCount: null,
       title: nonEmpty(movie?.title) ?? "Unknown movie",
       detail: year !== null && year > 0 ? String(year) : "",
       href: movieId !== null ? `/movies/${movieId}` : null,
@@ -138,33 +184,18 @@ export function toQueueRows(
     });
   }
 
-  // Group Sonarr items by download. The series id is part of the key, so two series can never share a row even if
-  // their fallback download keys (the title) happen to match.
-  const groups = new Map<string, EpisodeQueueItem[]>();
-  const seenEpisode = new Set<number>();
-  episodeItems.forEach((item, index) => {
-    const id = validId(item.id);
-    if (id === null || seenEpisode.has(id)) return;
-    seenEpisode.add(id);
-    const seriesId = validId(item.seriesId) ?? validId(item.series?.id);
-    const groupKey = `${seriesId ?? "none"}\u0000${downloadKeyOf(item, index)}`;
-    const group = groups.get(groupKey);
-    if (group) group.push(item);
-    else groups.set(groupKey, [item]);
-  });
-
-  for (const items of groups.values()) {
-    // Every item here has a valid id (checked when grouped), so the smallest one is the group's id.
-    const queueId = Math.min(...items.map((item) => validId(item.id)).filter((id): id is number => id !== null));
-    const { item: winner, state, severity } = pickWorst(items);
-    const seriesId = items.map((item) => validId(item.seriesId) ?? validId(item.series?.id)).find((id) => id !== null) ?? null;
-    const seriesSource = items.find((item) => nonEmpty(item.series?.title) !== null) ?? items[0];
-    const episodes = episodesOf(items);
+  for (const group of groupEpisodeItems(episodeItems)) {
+    const { item: winner, state, severity } = pickWorst(group.items);
+    const seriesId = group.items.map((item) => validId(item.seriesId) ?? validId(item.series?.id)).find((id) => id !== null) ?? null;
+    const seriesSource = group.items.find((item) => nonEmpty(item.series?.title) !== null) ?? group.items[0];
+    const episodes = episodesOf(group.items);
     rows.push({
-      key: `sonarr-${queueId}`,
+      key: `sonarr-${group.queueId}`,
       app: "sonarr",
-      queueId,
+      queueId: group.queueId,
+      queueIds: group.ids,
       kind: "episodes",
+      episodeCount: episodes.length,
       title: nonEmpty(seriesSource.series?.title) ?? "Unknown series",
       detail: episodeDetail(episodes),
       href: seriesId !== null ? `/tv/${seriesId}` : null,

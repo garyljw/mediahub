@@ -1,7 +1,7 @@
 import "server-only";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchEpisodeQueue, fetchMovieQueue } from "./queue";
-import { ArrRequestError } from "./request";
+import { fetchEpisodeQueue, fetchMovieQueue, removeEpisodeQueueItems, removeMovieQueueItems } from "./queue";
+import { ArrRequestError, DELETE_TIMEOUT_MS } from "./request";
 
 const { FAKE_KEY, fakeEnv } = vi.hoisted(() => {
   const key = "fake-api-key-0123456789abcdefghi"; // 32 chars, not a real secret
@@ -130,5 +130,93 @@ describe("fetchEpisodeQueue", () => {
     expect(error).toBeInstanceOf(ArrRequestError);
     expect((error as ArrRequestError).message).toBe("Sonarr queue request failed: network error");
     expect((error as ArrRequestError).message).not.toContain("sonarr.test");
+  });
+});
+
+describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
+  const OPTIONS = { removeFromClient: true, blocklist: true, skipRedownload: false };
+
+  async function sentBody(call = 0): Promise<unknown> {
+    return JSON.parse(await requestAt(call).text()) as unknown;
+  }
+
+  it("sends a DELETE to Radarr's bulk queue route with the key in a header, the ids in the body and the query flags", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await removeMovieQueueItems([4, 9], { removeFromClient: true, blocklist: false, skipRedownload: false });
+
+    const req = requestAt(0);
+    const url = new URL(req.url);
+    expect(req.method).toBe("DELETE");
+    expect(url.host).toBe("radarr.test:7878");
+    expect(url.pathname).toBe("/api/v3/queue/bulk");
+    expect(url.searchParams.get("removeFromClient")).toBe("true");
+    expect(url.searchParams.get("blocklist")).toBe("false");
+    expect(url.searchParams.get("skipRedownload")).toBe("false");
+    expect(url.searchParams.get("changeCategory")).toBe("false");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+    expect(await sentBody()).toStrictEqual({ ids: [4, 9] });
+  });
+
+  it("sends a DELETE to Sonarr's bulk queue route with the same query and body shape", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await removeEpisodeQueueItems([12, 13, 14], OPTIONS);
+
+    const req = requestAt(0);
+    const url = new URL(req.url);
+    expect(req.method).toBe("DELETE");
+    expect(url.host).toBe("sonarr.test:8989");
+    expect(url.pathname).toBe("/api/v3/queue/bulk");
+    expect(url.searchParams.get("removeFromClient")).toBe("true");
+    expect(url.searchParams.get("blocklist")).toBe("true");
+    expect(url.searchParams.get("skipRedownload")).toBe("false");
+    expect(url.searchParams.get("changeCategory")).toBe("false");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain(FAKE_KEY);
+    expect(await sentBody()).toStrictEqual({ ids: [12, 13, 14] });
+  });
+
+  it("sends skipRedownload true only when the release is also blocklisted", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await removeEpisodeQueueItems([1], { removeFromClient: false, blocklist: true, skipRedownload: true });
+    await removeEpisodeQueueItems([1], { removeFromClient: false, blocklist: false, skipRedownload: true });
+
+    expect(new URL(requestAt(0).url).searchParams.get("skipRedownload")).toBe("true");
+    expect(new URL(requestAt(1).url).searchParams.get("skipRedownload")).toBe("false");
+    expect(new URL(requestAt(1).url).searchParams.get("blocklist")).toBe("false");
+  });
+
+  it("allows the longer delete timeout", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await removeMovieQueueItems([1], OPTIONS);
+
+    expect(timeout).toHaveBeenCalledWith(DELETE_TIMEOUT_MS);
+    timeout.mockRestore();
+  });
+
+  it("names the upstream in the error and does not leak the key or host on HTTP 500", async () => {
+    fetchMock.mockResolvedValue(new Response(`boom ${FAKE_KEY} at http://sonarr.test:8989`, { status: 500 }));
+
+    const error = await removeEpisodeQueueItems([1], OPTIONS).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).message).toBe("Sonarr queue remove request failed: HTTP 500");
+    expect((error as ArrRequestError).message).not.toContain(FAKE_KEY);
+    expect((error as ArrRequestError).message).not.toContain("sonarr.test");
+  });
+
+  it("reports a Radarr network error without the host", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed to radarr.test:7878"));
+
+    const error = await removeMovieQueueItems([1], OPTIONS).catch((e: unknown) => e);
+
+    expect((error as ArrRequestError).message).toBe("Radarr queue remove request failed: network error");
+    expect((error as ArrRequestError).message).not.toContain("radarr.test");
   });
 });

@@ -12,7 +12,9 @@ function row(overrides: Partial<QueueRow> & Pick<QueueRow, "key">): QueueRow {
   return {
     app: "radarr",
     queueId: 1,
+    queueIds: [1],
     kind: "movie",
+    episodeCount: null,
     title: "Title",
     detail: "",
     href: null,

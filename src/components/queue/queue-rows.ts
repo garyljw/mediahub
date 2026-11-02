@@ -23,7 +23,14 @@ export type QueueRow = {
   app: "radarr" | "sonarr";
   /** A Radarr or Sonarr queue item id. For a Sonarr group, the smallest id in the group. */
   queueId: number;
+  /**
+   * Every valid item id this row stands for, sorted ascending. Radarr: [queueId]. Sonarr: all of a download's item
+   * ids. Removal sends one of these (see the Queue remove action), so it is never needed in full by the browser.
+   */
+  queueIds: number[];
   kind: "movie" | "episodes";
+  /** Sonarr only: how many episodes the download holds. Null for a movie. */
+  episodeCount: number | null;
   /** The movie title, or the series title. "Unknown movie" or "Unknown series" when the item doesn't include one. */
   title: string;
   /**

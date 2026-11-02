@@ -31,7 +31,7 @@ export default async function QueuePage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">Queue</h1>
-      <QueueView rows={rows} failed={failed} showDetails={showDetails} />
+      <QueueView rows={rows} failed={failed} showDetails={showDetails} canRemove={user.role === "admin"} />
     </div>
   );
 }
