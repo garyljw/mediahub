@@ -1,7 +1,7 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
-import { fetchPosterBytes } from "./poster";
+import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
@@ -173,5 +173,23 @@ export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayB
       parseAs: "stream",
       signal,
     }),
+  );
+}
+
+/** The one Radarr backdrop file MediaHub ever fetches. A module constant, like POSTER_FILENAME. */
+const BACKDROP_FILENAME = "fanart.jpg";
+
+/** Fetches Radarr's backdrop (fanart) for one movie as JPEG bytes. Only the fixed fanart file is requested. */
+export async function getMovieBackdrop(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+  const client = radarrClient();
+  return fetchPosterBytes(
+    "Radarr backdrop",
+    (signal) =>
+      client.GET("/api/v3/mediacover/{movieId}/{filename}", {
+        params: { path: { movieId, filename: BACKDROP_FILENAME } },
+        parseAs: "stream",
+        signal,
+      }),
+    MAX_BACKDROP_BYTES,
   );
 }

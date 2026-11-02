@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { components as RadarrComponents } from "./generated/radarr";
 import movieFixture from "./__fixtures__/radarr-movies.json";
 import profileFixture from "./__fixtures__/radarr-qualityprofiles.json";
+import creditsFixture from "./__fixtures__/radarr-credits.json";
 import { ArrRequestError } from "./request";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
+type CreditResource = RadarrComponents["schemas"]["CreditResource"];
 
 const movies = movieFixture as MovieResource[];
 const profiles = profileFixture as QualityProfileResource[];
@@ -29,6 +31,7 @@ vi.mock("@/server/env", () => ({
 }));
 
 import { getMovieDetail, toMovieDetail } from "./movie-detail";
+import { toMovieCredits } from "./movie-credits";
 import { sortedProfileOptions } from "./profiles";
 
 // movies[0] is downloaded, movies[1] is missing, movies[2] is unreleased, movies[4] has an unknown profile.
@@ -59,6 +62,16 @@ describe("toMovieDetail", () => {
       sizeOnDisk: 12345678901,
       added: "2024-03-12T10:21:45Z",
       hasPoster: true,
+      hasBackdrop: false,
+      genres: ["Science Fiction"],
+      certification: null,
+      ratings: { imdb: 7.1, tmdb: null },
+      inCinemas: null,
+      digitalRelease: null,
+      physicalRelease: null,
+      language: null,
+      imdbId: "tt0000001",
+      tmdbId: 900001,
     });
   });
 
@@ -114,6 +127,63 @@ describe("toMovieDetail", () => {
     expect(detail({ ...downloaded, overview: undefined })?.overview).toBe("");
   });
 
+  it("reports a backdrop only when a fanart cover exists", () => {
+    expect(detail({ ...downloaded, images: [{ coverType: "poster" }, { coverType: "fanart" }] })?.hasBackdrop).toBe(true);
+    expect(detail({ ...downloaded, images: [{ coverType: "poster" }] })?.hasBackdrop).toBe(false);
+    expect(detail({ ...downloaded, images: undefined })?.hasBackdrop).toBe(false);
+  });
+
+  it("keeps up to five non-empty genres, in order", () => {
+    const genres = ["Drama", "", "  ", "Thriller", "Mystery", "Crime", "Western", "Horror"];
+    expect(detail({ ...downloaded, genres })?.genres).toEqual(["Drama", "Thriller", "Mystery", "Crime", "Western"]);
+    expect(detail({ ...downloaded, genres: undefined })?.genres).toEqual([]);
+  });
+
+  it("shows the certification, the dates and the language only when Radarr sends them", () => {
+    const result = detail({
+      ...downloaded,
+      certification: "PG-13",
+      inCinemas: "2019-03-01T00:00:00Z",
+      digitalRelease: "2019-07-02T00:00:00Z",
+      physicalRelease: "",
+      originalLanguage: { id: 1, name: "English" },
+    });
+    expect(result).toMatchObject({
+      certification: "PG-13",
+      inCinemas: "2019-03-01T00:00:00Z",
+      digitalRelease: "2019-07-02T00:00:00Z",
+      physicalRelease: null,
+      language: "English",
+    });
+    expect(detail({ ...downloaded, certification: "", originalLanguage: { id: 1, name: "" } })).toMatchObject({
+      certification: null,
+      language: null,
+    });
+  });
+
+  it("gives a rating only when it has votes and a positive value", () => {
+    const withRatings = (ratings: MovieResource["ratings"]) => detail({ ...downloaded, ratings });
+    expect(withRatings({ imdb: { value: 7.1, votes: 1200 }, tmdb: { value: 6.8, votes: 300 } })?.ratings).toEqual({
+      imdb: 7.1,
+      tmdb: 6.8,
+    });
+    expect(withRatings({ imdb: { value: 7.1, votes: 0 } })?.ratings.imdb).toBeNull();
+    expect(withRatings({ imdb: { value: 0, votes: 40 } })?.ratings.imdb).toBeNull();
+    expect(withRatings({ imdb: { votes: 40 } })?.ratings.imdb).toBeNull();
+    expect(withRatings(undefined)?.ratings).toEqual({ imdb: null, tmdb: null });
+  });
+
+  it("keeps the IMDb id only when it has the tt-and-digits shape, and the TMDB id only when positive", () => {
+    expect(detail({ ...downloaded, imdbId: "tt1234567" })).toMatchObject({ imdbId: "tt1234567" });
+    expect(detail({ ...downloaded, imdbId: "https://example.invalid/tt1" })).toMatchObject({ imdbId: null });
+    expect(detail({ ...downloaded, imdbId: "tt12345678901" })).toMatchObject({ imdbId: null });
+    expect(detail({ ...downloaded, imdbId: null })).toMatchObject({ imdbId: null });
+    expect(detail({ ...downloaded, tmdbId: 0 })).toMatchObject({ tmdbId: null });
+    expect(detail({ ...downloaded, tmdbId: -3 })).toMatchObject({ tmdbId: null });
+    expect(detail({ ...downloaded, tmdbId: 1.5 })).toMatchObject({ tmdbId: null });
+    expect(detail({ ...downloaded, tmdbId: undefined })).toMatchObject({ tmdbId: null });
+  });
+
   it("uses the same poster rule as the table", () => {
     expect(detail({ ...downloaded, images: [] })?.hasPoster).toBe(false);
     expect(detail({ ...downloaded, images: [{ coverType: "fanart" }] })?.hasPoster).toBe(false);
@@ -124,19 +194,29 @@ describe("toMovieDetail", () => {
     expect(Object.keys(result ?? {}).sort()).toEqual(
       [
         "added",
+        "certification",
+        "digitalRelease",
         "fileQuality",
+        "genres",
+        "hasBackdrop",
         "hasPoster",
         "id",
+        "imdbId",
+        "inCinemas",
+        "language",
         "minimumAvailability",
         "monitored",
         "overview",
+        "physicalRelease",
         "qualityProfile",
         "qualityProfileId",
+        "ratings",
         "runtime",
         "sizeOnDisk",
         "status",
         "studio",
         "title",
+        "tmdbId",
         "year",
       ].sort(),
     );
@@ -159,12 +239,13 @@ describe("getMovieDetail", () => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-  /** Routes the two Radarr calls. A reply may be a function that returns a Response. */
-  function serve(movieReply: () => Response) {
+  /** Routes the three Radarr calls. A reply may be a function that returns a Response. Credits default to an empty list. */
+  function serve(movieReply: () => Response, creditsReply: () => Response = () => json([])) {
     fetchMock.mockImplementation(async (req: Request) => {
       const url = new URL(req.url);
       if (url.pathname === "/api/v3/movie/1") return movieReply();
       if (url.pathname === "/api/v3/qualityprofile") return json(profiles);
+      if (url.pathname === "/api/v3/credit") return creditsReply();
       throw new TypeError(`unexpected request to ${url.pathname}`);
     });
   }
@@ -173,6 +254,21 @@ describe("getMovieDetail", () => {
     serve(() => new Response("not found", { status: 404 }));
 
     await expect(getMovieDetail(1)).resolves.toBeNull();
+  });
+
+  it("doesn't log a credits failure when the movie itself is gone", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    serve(
+      () => new Response("not found", { status: 404 }),
+      () => new Response("not found", { status: 404 }),
+    );
+
+    try {
+      await expect(getMovieDetail(1)).resolves.toBeNull();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("propagates other Radarr failures instead of returning null", async () => {
@@ -191,6 +287,27 @@ describe("getMovieDetail", () => {
     expect((error as ArrRequestError).kind).toBe("invalid");
   });
 
+  it("returns null credits and logs one line when the credits request fails, and the rest of the page still loads", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    serve(
+      () => json(downloaded),
+      () => new Response(`boom ${FAKE_KEY} at http://radarr.test:7878`, { status: 500 }),
+    );
+
+    try {
+      const result = await getMovieDetail(1);
+
+      expect(result?.credits).toBeNull();
+      expect(result?.detail.title).toBe("Starfall Protocol");
+      expect(result?.profiles).toEqual(sortedProfileOptions(profiles));
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith("Movie page: Radarr credits request failed: HTTP 500");
+      expect(String(errorSpy.mock.calls[0]?.[0])).not.toContain(FAKE_KEY);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("returns the profile options sorted, from the same profile request", async () => {
     serve(() => json(downloaded));
 
@@ -200,14 +317,19 @@ describe("getMovieDetail", () => {
     expect(result?.profiles).toContainEqual({ id: 1, name: "HD-1080p" });
   });
 
-  it("returns the page's detail, requests only the movie and profiles, and sends the key in a header", async () => {
-    serve(() => json(downloaded));
+  it("returns the credits from the same request set, and the detail, and sends the key in a header", async () => {
+    serve(
+      () => json(downloaded),
+      () => json(creditsFixture),
+    );
 
     const result = await getMovieDetail(1);
 
     expect(result?.detail.title).toBe("Starfall Protocol");
+    expect(result?.credits).toEqual(toMovieCredits(creditsFixture as CreditResource[]));
     const requests = fetchMock.mock.calls.map((call) => call[0] as Request);
     expect(requests.map((req) => new URL(req.url).pathname).sort()).toEqual([
+      "/api/v3/credit",
       "/api/v3/movie/1",
       "/api/v3/qualityprofile",
     ]);

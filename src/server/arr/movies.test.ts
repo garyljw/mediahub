@@ -4,6 +4,7 @@ import type { components as RadarrComponents } from "./generated/radarr";
 import movieFixture from "./__fixtures__/radarr-movies.json";
 import profileFixture from "./__fixtures__/radarr-qualityprofiles.json";
 import { ARR_TIMEOUT_MS, ArrRequestError, DELETE_TIMEOUT_MS } from "./request";
+import { MAX_BACKDROP_BYTES, MAX_POSTER_BYTES } from "./poster";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type QualityProfileResource = RadarrComponents["schemas"]["QualityProfileResource"];
@@ -36,6 +37,7 @@ vi.mock("@/server/env", () => ({
 import {
   deleteMovies,
   editMovie,
+  getMovieBackdrop,
   getMoviePoster,
   listMovies,
   listQualityProfiles,
@@ -537,6 +539,63 @@ describe("listQualityProfiles", () => {
       { id: 3, name: "Ultra-HD" },
     ]);
     expect(options).toEqual(fromMovies);
+  });
+});
+
+describe("getMovieBackdrop", () => {
+  const BACKDROP_PATH = "/api/v3/mediacover/42/fanart.jpg";
+
+  function serveBackdrop(reply: () => Response) {
+    fetchMock.mockImplementation(async (req: Request) => {
+      if (new URL(req.url).pathname === BACKDROP_PATH) return reply();
+      throw new TypeError(`unexpected request to ${new URL(req.url).pathname}`);
+    });
+  }
+
+  it("requests exactly the fixed fanart file with the key in a header and not in the URL", async () => {
+    serveBackdrop(() => new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200 }));
+
+    await getMovieBackdrop(42);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("GET");
+    expect(req.url).toBe("http://radarr.test:7878/api/v3/mediacover/42/fanart.jpg");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+    expect(req.url).not.toContain(FAKE_KEY);
+  });
+
+  it("accepts a backdrop bigger than the poster cap, up to the backdrop cap", async () => {
+    const big = new Uint8Array(MAX_POSTER_BYTES + 1024);
+    big.set([0xff, 0xd8, 0xff]);
+    serveBackdrop(() => new Response(big, { status: 200 }));
+
+    const bytes = await getMovieBackdrop(42);
+
+    expect(bytes.byteLength).toBe(MAX_POSTER_BYTES + 1024);
+  });
+
+  it("rejects a backdrop over the backdrop cap", async () => {
+    const huge = new Uint8Array(MAX_BACKDROP_BYTES + 1);
+    huge.set([0xff, 0xd8, 0xff]);
+    serveBackdrop(() => new Response(huge, { status: 200 }));
+
+    const error = await rejectionOf(getMovieBackdrop(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr backdrop response was not a usable image");
+  });
+
+  it("throws ArrRequestError with HTTP 404 for a missing backdrop, without the host or key", async () => {
+    serveBackdrop(() => new Response(`not found at http://radarr.test:7878 ${FAKE_KEY}`, { status: 404 }));
+
+    const error = await rejectionOf(getMovieBackdrop(42));
+
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect(error.message).toBe("Radarr backdrop request failed: HTTP 404");
+    expect(error.message).not.toContain("radarr.test");
+    expect(error.message).not.toContain(FAKE_KEY);
   });
 });
 

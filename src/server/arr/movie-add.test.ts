@@ -13,6 +13,7 @@ import {
   MovieAddError,
   TMDB_POSTER_FILE,
   addMovie,
+  getTmdbHeadshot,
   getTmdbPoster,
   movieAddBody,
   tmdbPosterFile,
@@ -250,6 +251,44 @@ describe("tmdbPosterFile", () => {
     expect(TMDB_POSTER_FILE.test("a".repeat(64) + ".jpg")).toBe(true);
     expect(TMDB_POSTER_FILE.test("a".repeat(65) + ".jpg")).toBe(false);
     expect(TMDB_POSTER_FILE.test("../a.jpg")).toBe(false);
+  });
+});
+
+describe("getTmdbHeadshot", () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("rejects a bad file name without fetching", async () => {
+    await expect(getTmdbHeadshot("../etc.jpg")).rejects.toThrow("TMDB headshot request failed: invalid name");
+    await expect(getTmdbHeadshot("abc.png")).rejects.toThrow("TMDB headshot request failed: invalid name");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fetches the fixed w185 URL with no redirects, no headers and no Radarr key", async () => {
+    fetchMock.mockResolvedValue(new Response(JPEG, { status: 200 }));
+    await expect(getTmdbHeadshot("abc123.jpg")).resolves.toEqual(JPEG);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://image.tmdb.org/t/p/w185/abc123.jpg");
+    expect(init.redirect).toBe("error");
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("maps a non-OK status to a safe ArrRequestError with the status", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+    const error = await getTmdbHeadshot("abc123.jpg").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).message).toBe("TMDB headshot request failed: HTTP 404");
+    expect((error as ArrRequestError).status).toBe(404);
+  });
+
+  it("rejects a body that is not a JPEG", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>", { status: 200 }));
+    await expect(getTmdbHeadshot("abc123.jpg")).rejects.toThrow("TMDB headshot response was not a usable image");
   });
 });
 

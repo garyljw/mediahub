@@ -49,12 +49,13 @@ export const TMDB_POSTER_FILE = /^[A-Za-z0-9]{1,64}\.jpg$/;
 
 const TMDB_HOST = "image.tmdb.org";
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342/";
+const TMDB_HEADSHOT_BASE = "https://image.tmdb.org/t/p/w185/";
 
 /**
  * The file name of a TMDB poster URL, or null. Accepts only https, the exact host image.tmdb.org with
  * no port or credentials, and a last path segment that is a bare TMDB file name.
  */
-function posterFileFromUrl(raw: string): string | null {
+export function posterFileFromUrl(raw: string): string | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== "https:" || url.hostname !== TMDB_HOST || url.port !== "" || url.username !== "" || url.password !== "") {
@@ -188,10 +189,20 @@ export async function addMovie(add: MovieAdd, onSend: () => void = () => {}): Pr
 }
 
 /**
- * One TMDB poster thumbnail (w342), as JPEG bytes. The file name must match TMDB_POSTER_FILE, and the
- * fetch goes to one fixed base URL with no redirects, no custom headers and no Radarr key.
+ * One TMDB image as JPEG bytes. The file name must match TMDB_POSTER_FILE, and the fetch goes to the caller's fixed
+ * base URL (a module constant) with no redirects, no custom headers and no Radarr key.
  */
-export async function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {
-  if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError("TMDB poster request failed: invalid name", "invalid");
-  return fetchFixedJpeg("TMDB poster", `${TMDB_POSTER_BASE}${file}`);
+async function getTmdbImage(label: string, base: string, file: string): Promise<Uint8Array<ArrayBuffer>> {
+  if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError(`${label} request failed: invalid name`, "invalid");
+  return fetchFixedJpeg(label, `${base}${file}`);
+}
+
+/** One TMDB poster thumbnail (w342), for the Add movie search results. */
+export function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {
+  return getTmdbImage("TMDB poster", TMDB_POSTER_BASE, file);
+}
+
+/** One TMDB person headshot (w185), for the movie page's cast row. */
+export function getTmdbHeadshot(file: string): Promise<Uint8Array<ArrayBuffer>> {
+  return getTmdbImage("TMDB headshot", TMDB_HEADSHOT_BASE, file);
 }

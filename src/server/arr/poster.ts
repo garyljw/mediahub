@@ -5,6 +5,8 @@ import { ArrRequestError, arrRequest } from "./request";
 // Shared by the Radarr and Sonarr posters and the TMDB lookup poster: size cap and JPEG check for a fetched image.
 /** Largest poster we accept. Radarr's 250px thumbnail is far smaller, so anything bigger is not what we asked for. */
 export const MAX_POSTER_BYTES = 2 * 1024 * 1024;
+/** Largest backdrop (fanart.jpg) we accept. Radarr's fanart.jpg is far bigger than its posters (about 490 KB on the test instance), so the cap is higher. */
+export const MAX_BACKDROP_BYTES = 6 * 1024 * 1024;
 
 /**
  * Reads a body into memory, up to `max` bytes. Returns null as soon as it goes over and cancels the
@@ -41,16 +43,18 @@ export function isJpeg(bytes: Uint8Array): boolean {
 
 /**
  * Fetches one cover image from Radarr or Sonarr as JPEG bytes. `get` makes the typed client call (the caller
- * picks the fixed poster file) and is run inside arrRequest, so the timeout covers the body read too. On an
+ * picks the fixed file) and is run inside arrRequest, so the timeout covers the body read too. On an
  * error response the body is undefined and arrRequest throws on the status. `label` names the request in errors.
+ * `maxBytes` caps the body; it defaults to the poster cap.
  */
 export async function fetchPosterBytes(
   label: string,
   get: (signal: AbortSignal) => Promise<{ data?: ReadableStream<Uint8Array> | null; response: Response }>,
+  maxBytes: number = MAX_POSTER_BYTES,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const data = await arrRequest(label, async (signal) => {
     const { data: body, response } = await get(signal);
-    return { data: await readCapped(body, MAX_POSTER_BYTES), response };
+    return { data: await readCapped(body, maxBytes), response };
   });
   if (!data || !isJpeg(data)) {
     throw new ArrRequestError(`${label} response was not a usable image`, "invalid");
@@ -95,6 +99,7 @@ const posterId = z
 export async function servePosterResponse(
   rawId: string,
   fetchPoster: (id: number) => Promise<Uint8Array<ArrayBuffer>>,
+  logTag = "poster",
 ): Promise<Response> {
   const parsed = posterId.safeParse(rawId);
   if (!parsed.success) return Response.json({ error: "invalid id" }, { status: 400 });
@@ -111,7 +116,42 @@ export async function servePosterResponse(
   } catch (error) {
     if (error instanceof ArrRequestError) {
       // Log for operators. The upstream message stays out of the response body.
-      console.error(`[poster] ${error.message}`);
+      console.error(`[${logTag}] ${error.message}`);
+      return Response.json({ error: "poster unavailable" }, { status: 502 });
+    }
+    throw error;
+  }
+}
+
+/**
+ * Builds the response for a TMDB image route: checks the raw file name against `fileName`, fetches the image, and
+ * maps failures. A bad name gets a 404 before any fetch, an ArrRequestError gets a fixed 502 body with one
+ * `[logTag]` log line (the upstream message stays out of the body), and anything else is rethrown. Routes call this
+ * after their own requireRole check.
+ */
+export async function serveTmdbImageResponse(
+  rawFile: string,
+  fileName: RegExp,
+  fetchImage: (file: string) => Promise<Uint8Array<ArrayBuffer>>,
+  logTag: string,
+): Promise<Response> {
+  const parsed = z.string().regex(fileName).safeParse(rawFile);
+  if (!parsed.success) return Response.json({ error: "not found" }, { status: 404 });
+
+  try {
+    const bytes = await fetchImage(parsed.data);
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": "image/jpeg",
+        // TMDB file names are content-addressed, so a file never changes and a long cache is safe.
+        "Cache-Control": "private, max-age=604800",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error) {
+    if (error instanceof ArrRequestError) {
+      // Log for operators. The upstream message stays out of the response body.
+      console.error(`[${logTag}] ${error.message}`);
       return Response.json({ error: "poster unavailable" }, { status: 502 });
     }
     throw error;
