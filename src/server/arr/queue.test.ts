@@ -1,6 +1,6 @@
 import "server-only";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchEpisodeQueue, fetchMovieQueue, removeEpisodeQueueItems, removeMovieQueueItems } from "./queue";
+import { fetchEpisodeQueue, fetchMovieQueue, removeEpisodeQueueItem, removeMovieQueueItem } from "./queue";
 import { ArrRequestError, DELETE_TIMEOUT_MS } from "./request";
 
 const { FAKE_KEY, fakeEnv } = vi.hoisted(() => {
@@ -133,7 +133,7 @@ describe("fetchEpisodeQueue", () => {
   });
 });
 
-describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
+describe("removeMovieQueueItem and removeEpisodeQueueItem", () => {
   const OPTIONS = { removeFromClient: true, blocklist: true, skipRedownload: false };
 
   async function sentBody(call = 0): Promise<unknown> {
@@ -143,7 +143,7 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
   it("sends a DELETE to Radarr's bulk queue route with the key in a header, the ids in the body and the query flags", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
-    await removeMovieQueueItems([4, 9], { removeFromClient: true, blocklist: false, skipRedownload: false });
+    await removeMovieQueueItem(4, { removeFromClient: true, blocklist: false, skipRedownload: false });
 
     const req = requestAt(0);
     const url = new URL(req.url);
@@ -157,13 +157,13 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
     expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
     expect(req.url).not.toContain(FAKE_KEY);
     expect(req.url).not.toContain("apikey");
-    expect(await sentBody()).toStrictEqual({ ids: [4, 9] });
+    expect(await sentBody()).toStrictEqual({ ids: [4] });
   });
 
   it("sends a DELETE to Sonarr's bulk queue route with the same query and body shape", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
-    await removeEpisodeQueueItems([12, 13, 14], OPTIONS);
+    await removeEpisodeQueueItem(12, OPTIONS);
 
     const req = requestAt(0);
     const url = new URL(req.url);
@@ -176,14 +176,14 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
     expect(url.searchParams.get("changeCategory")).toBe("false");
     expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
     expect(req.url).not.toContain(FAKE_KEY);
-    expect(await sentBody()).toStrictEqual({ ids: [12, 13, 14] });
+    expect(await sentBody()).toStrictEqual({ ids: [12] });
   });
 
   it("sends skipRedownload true only when the release is also blocklisted", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
-    await removeEpisodeQueueItems([1], { removeFromClient: false, blocklist: true, skipRedownload: true });
-    await removeEpisodeQueueItems([1], { removeFromClient: false, blocklist: false, skipRedownload: true });
+    await removeEpisodeQueueItem(1, { removeFromClient: false, blocklist: true, skipRedownload: true });
+    await removeEpisodeQueueItem(1, { removeFromClient: false, blocklist: false, skipRedownload: true });
 
     expect(new URL(requestAt(0).url).searchParams.get("skipRedownload")).toBe("true");
     expect(new URL(requestAt(1).url).searchParams.get("skipRedownload")).toBe("false");
@@ -194,7 +194,7 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
 
-    await removeMovieQueueItems([1], OPTIONS);
+    await removeMovieQueueItem(1, OPTIONS);
 
     expect(timeout).toHaveBeenCalledWith(DELETE_TIMEOUT_MS);
     timeout.mockRestore();
@@ -203,7 +203,7 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
   it("names the upstream in the error and does not leak the key or host on HTTP 500", async () => {
     fetchMock.mockResolvedValue(new Response(`boom ${FAKE_KEY} at http://sonarr.test:8989`, { status: 500 }));
 
-    const error = await removeEpisodeQueueItems([1], OPTIONS).catch((e: unknown) => e);
+    const error = await removeEpisodeQueueItem(1, OPTIONS).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ArrRequestError);
     expect((error as ArrRequestError).message).toBe("Sonarr queue remove request failed: HTTP 500");
@@ -214,7 +214,7 @@ describe("removeMovieQueueItems and removeEpisodeQueueItems", () => {
   it("reports a Radarr network error without the host", async () => {
     fetchMock.mockRejectedValue(new TypeError("fetch failed to radarr.test:7878"));
 
-    const error = await removeMovieQueueItems([1], OPTIONS).catch((e: unknown) => e);
+    const error = await removeMovieQueueItem(1, OPTIONS).catch((e: unknown) => e);
 
     expect((error as ArrRequestError).message).toBe("Radarr queue remove request failed: network error");
     expect((error as ArrRequestError).message).not.toContain("radarr.test");

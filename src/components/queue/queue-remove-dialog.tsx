@@ -26,23 +26,30 @@ export function QueueRemoveDialog({ row, onClose }: { row: QueueRow; onClose: ()
   const errorId = useId();
 
   const appName = row.app === "radarr" ? "Radarr" : "Sonarr";
-  const isWholeDownload = row.kind === "episodes" && row.episodeCount !== null && row.episodeCount > 1;
+  // Sonarr lists one queue item per episode, so the count of queueIds is the count of episodes.
+  const episodeCount = row.queueIds.length;
+  const isWholeDownload = row.kind === "episodes" && episodeCount > 1;
 
   function confirm() {
     if (pending) return;
     setError(null);
     startTransition(async () => {
-      // The server sends skipRedownload upstream only together with blocklist, and it sends one id, so the browser
-      // sends the flags as they are.
-      const result = await removeQueueItem({
-        app: row.app,
-        queueIds: row.queueIds,
-        removeFromClient,
-        blocklist,
-        skipRedownload,
-      });
-      if (result.ok) onClose();
-      else setError(result.error);
+      try {
+        // The server sends skipRedownload upstream only together with blocklist, and it sends one id, so the browser
+        // sends the flags as they are.
+        const result = await removeQueueItem({
+          app: row.app,
+          queueIds: row.queueIds,
+          removeFromClient,
+          blocklist,
+          skipRedownload,
+        });
+        if (result.ok) onClose();
+        else setError(result.error);
+      } catch {
+        // The request itself failed (for example the network dropped), so the change may or may not have happened.
+        setError("Something went wrong. Check the queue before trying again.");
+      }
     });
   }
 
@@ -64,7 +71,7 @@ export function QueueRemoveDialog({ row, onClose }: { row: QueueRow; onClose: ()
         </DialogHeader>
 
         {isWholeDownload && (
-          <p className="text-sm">This removes the whole download, all {row.episodeCount} episodes.</p>
+          <p className="text-sm">This removes the whole download, all {episodeCount} episodes.</p>
         )}
 
         <form
@@ -74,6 +81,7 @@ export function QueueRemoveDialog({ row, onClose }: { row: QueueRow; onClose: ()
             confirm();
           }}
         >
+          {/* Checked against Radarr and Sonarr source (QueueController.Remove, FailedDownloadService, BlocklistService, RedownloadFailedDownloadService), 2026-11-02. */}
           <div className="grid gap-1">
             <label htmlFor={clientId} className="flex items-start gap-2 text-sm">
               <input

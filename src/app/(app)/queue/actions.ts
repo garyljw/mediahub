@@ -6,19 +6,19 @@ import { AuthzError, requireRole } from "@/server/authz";
 import {
   fetchEpisodeQueue,
   fetchMovieQueue,
-  removeEpisodeQueueItems,
-  removeMovieQueueItems,
+  removeEpisodeQueueItem,
+  removeMovieQueueItem,
 } from "@/server/arr/queue";
-import { ArrRequestError } from "@/server/arr/request";
+import { ArrRequestError, writeFailureMessage } from "@/server/arr/request";
 import { firstQueuedId } from "@/server/merge/queue";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-// strictObject rejects unknown keys (including the old single queueId). The browser sends the row's item ids, and
+// strictObject rejects unknown keys (including the old single queueId). A row holds one id per episode, so 1000 is generous. The browser sends the row's item ids, and
 // they only say which download the admin meant. The server checks them against the app's queue before it acts.
 const RemoveInput = z.strictObject({
   app: z.enum(["radarr", "sonarr"]),
-  queueIds: z.array(z.number().int().positive()).min(1).max(100),
+  queueIds: z.array(z.number().int().positive()).min(1).max(1000),
   removeFromClient: z.boolean(),
   blocklist: z.boolean(),
   skipRedownload: z.boolean(),
@@ -68,20 +68,14 @@ export async function removeQueueItem(input: unknown): Promise<ActionResult> {
   const options = { removeFromClient, blocklist, skipRedownload };
   try {
     // One id only: see the comment above.
-    if (app === "radarr") await removeMovieQueueItems([queuedId], options);
-    else await removeEpisodeQueueItems([queuedId], options);
+    if (app === "radarr") await removeMovieQueueItem(queuedId, options);
+    else await removeEpisodeQueueItem(queuedId, options);
   } catch (error) {
     if (!(error instanceof ArrRequestError)) throw error;
     // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
     console.error(`Queue remove: ${error.message}`);
-    if (error.status !== undefined && error.status >= 400 && error.status < 500) {
-      return { ok: false, error: `${appName} didn't accept it. Try again.` };
-    }
     // A timeout or a broken reply can come after the app removed the download, so the user must check first.
-    return {
-      ok: false,
-      error: `${appName} didn't confirm it. It may still have been removed, so check the queue.`,
-    };
+    return { ok: false, error: writeFailureMessage(error, appName, { done: "removed", check: "check the queue" }) };
   }
 
   // The page reads the queue on every request, so refresh() shows the change.

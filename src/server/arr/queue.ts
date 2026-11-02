@@ -57,10 +57,13 @@ function removeQuery({ removeFromClient, blocklist, skipRedownload }: RemoveOpti
   };
 }
 
-/** Removes the given Radarr queue items. Upstream de-duplicates by download, so one download is removed once. */
-export async function removeMovieQueueItems(ids: number[], opts: RemoveOptions): Promise<void> {
+/**
+ * Removes one Radarr queue item and its download. One id is enough: Radarr resolves the whole tracked download from any
+ * of its item ids. The body is always { ids: [id] }.
+ */
+export async function removeMovieQueueItem(id: number, opts: RemoveOptions): Promise<void> {
   const client = radarrClient();
-  const body: RadarrComponents["schemas"]["QueueBulkResource"] = { ids };
+  const body: RadarrComponents["schemas"]["QueueBulkResource"] = { ids: [id] };
   await arrRequest(
     "Radarr queue remove",
     (signal) => client.DELETE("/api/v3/queue/bulk", { params: { query: removeQuery(opts) }, body, signal }),
@@ -68,10 +71,14 @@ export async function removeMovieQueueItems(ids: number[], opts: RemoveOptions):
   );
 }
 
-/** Removes the given Sonarr queue items. Upstream de-duplicates by download, so one download is removed once. */
-export async function removeEpisodeQueueItems(ids: number[], opts: RemoveOptions): Promise<void> {
+/**
+ * Removes one Sonarr queue item and its download. One id is enough: Sonarr resolves the tracked download from any of its
+ * item ids, and for a pending release it removes it for all its episodes. Several ids of a pending pack make Sonarr's
+ * second lookup fail, so this takes exactly one id. The body is always { ids: [id] }.
+ */
+export async function removeEpisodeQueueItem(id: number, opts: RemoveOptions): Promise<void> {
   const client = sonarrClient();
-  const body: SonarrComponents["schemas"]["QueueBulkResource"] = { ids };
+  const body: SonarrComponents["schemas"]["QueueBulkResource"] = { ids: [id] };
   await arrRequest(
     "Sonarr queue remove",
     (signal) => client.DELETE("/api/v3/queue/bulk", { params: { query: removeQuery(opts) }, body, signal }),

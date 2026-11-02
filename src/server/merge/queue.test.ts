@@ -237,9 +237,12 @@ describe("toQueueRows queue ids", () => {
   });
 });
 
-describe("toQueueRows episode count", () => {
-  it("counts the episodes in a season pack and gives movies null", () => {
-    expect(find("sonarr-101").episodeCount).toBe(3);
-    expect(find("radarr-1").episodeCount).toBeNull();
+describe("toQueueRows queue ids for requesters", () => {
+  it("leaves out the queue ids for requesters, so only admins get item ids", () => {
+    const requesterRows = rows(false);
+    expect(requesterRows.length).toBeGreaterThan(0);
+    for (const row of requesterRows) expect(row.queueIds).toEqual([]);
+    // The queue ids are still the same for admins on the same data.
+    expect(rows(true).find((row) => row.key === "sonarr-101")?.queueIds).toEqual([101, 102, 103]);
   });
 });

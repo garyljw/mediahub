@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
   fetchMovieQueue: vi.fn(),
   fetchEpisodeQueue: vi.fn(),
-  removeMovieQueueItems: vi.fn(),
-  removeEpisodeQueueItems: vi.fn(),
+  removeMovieQueueItem: vi.fn(),
+  removeEpisodeQueueItem: vi.fn(),
   refresh: vi.fn(),
 }));
 
@@ -26,8 +26,8 @@ vi.mock("@/server/authz", () => {
 vi.mock("@/server/arr/queue", () => ({
   fetchMovieQueue: mocks.fetchMovieQueue,
   fetchEpisodeQueue: mocks.fetchEpisodeQueue,
-  removeMovieQueueItems: mocks.removeMovieQueueItems,
-  removeEpisodeQueueItems: mocks.removeEpisodeQueueItems,
+  removeMovieQueueItem: mocks.removeMovieQueueItem,
+  removeEpisodeQueueItem: mocks.removeEpisodeQueueItem,
 }));
 
 vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
@@ -54,8 +54,8 @@ beforeEach(() => {
   mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
   mocks.fetchMovieQueue.mockResolvedValue(MOVIES);
   mocks.fetchEpisodeQueue.mockResolvedValue(PACK);
-  mocks.removeMovieQueueItems.mockResolvedValue(undefined);
-  mocks.removeEpisodeQueueItems.mockResolvedValue(undefined);
+  mocks.removeMovieQueueItem.mockResolvedValue(undefined);
+  mocks.removeEpisodeQueueItem.mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -64,8 +64,8 @@ function input(overrides: Record<string, unknown> = {}) {
 }
 
 function nothingRemoved() {
-  expect(mocks.removeMovieQueueItems).not.toHaveBeenCalled();
-  expect(mocks.removeEpisodeQueueItems).not.toHaveBeenCalled();
+  expect(mocks.removeMovieQueueItem).not.toHaveBeenCalled();
+  expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
 }
 
@@ -106,7 +106,7 @@ describe("removeQueueItem input validation", () => {
     ["the old single queueId key", { app: "sonarr", queueId: 101, ...OPTIONS }],
     ["an unknown app", input({ app: "lidarr" })],
     ["an empty id list", input({ queueIds: [] })],
-    ["more than 100 ids", input({ queueIds: Array.from({ length: 101 }, (_, i) => i + 1) })],
+    ["more than 1000 ids", input({ queueIds: Array.from({ length: 1001 }, (_, i) => i + 1) })],
     ["a zero id", input({ queueIds: [0] })],
     ["a negative id", input({ queueIds: [-3] })],
     ["a string id", input({ queueIds: ["101"] })],
@@ -128,20 +128,28 @@ describe("removeQueueItem routing and results", () => {
     expect(
       await removeQueueItem(input({ app: "radarr", queueIds: [7], blocklist: true, skipRedownload: true })),
     ).toEqual({ ok: true });
-    expect(mocks.removeMovieQueueItems).toHaveBeenCalledWith([7], {
+    expect(mocks.removeMovieQueueItem).toHaveBeenCalledWith(7, {
       removeFromClient: true,
       blocklist: true,
       skipRedownload: true,
     });
-    expect(mocks.removeEpisodeQueueItems).not.toHaveBeenCalled();
+    expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts up to 1000 ids, the most a row can hold", async () => {
+    const ids = Array.from({ length: 1000 }, (_, i) => i + 1);
+    mocks.fetchEpisodeQueue.mockResolvedValue(ids.map((id) => ({ id, seriesId: 10, downloadId: "DL" })));
+
+    expect(await removeQueueItem(input({ queueIds: ids }))).toEqual({ ok: true });
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(1, OPTIONS);
   });
 
   it("sends exactly one id upstream for a season pack, even though all its ids are queued", async () => {
     expect(await removeQueueItem(input({ queueIds: [101, 102, 103] }))).toEqual({ ok: true });
-    expect(mocks.removeEpisodeQueueItems).toHaveBeenCalledTimes(1);
-    expect(mocks.removeEpisodeQueueItems).toHaveBeenCalledWith([101], OPTIONS);
-    expect(mocks.removeMovieQueueItems).not.toHaveBeenCalled();
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledTimes(1);
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(101, OPTIONS);
+    expect(mocks.removeMovieQueueItem).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -152,12 +160,12 @@ describe("removeQueueItem routing and results", () => {
     ]);
 
     expect(await removeQueueItem(input({ queueIds: [101, 102, 103] }))).toEqual({ ok: true });
-    expect(mocks.removeEpisodeQueueItems).toHaveBeenCalledWith([102], OPTIONS);
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(102, OPTIONS);
   });
 
   it("uses the first queued id in the order the browser sent them", async () => {
     await removeQueueItem(input({ queueIds: [103, 101] }));
-    expect(mocks.removeEpisodeQueueItems).toHaveBeenCalledWith([103], OPTIONS);
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(103, OPTIONS);
   });
 
   it("reads only the app's own queue, with the nested objects left out", async () => {
@@ -178,14 +186,14 @@ describe("removeQueueItem routing and results", () => {
       error: "That download is no longer in the queue.",
     });
     expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    expect(mocks.removeEpisodeQueueItems).not.toHaveBeenCalled();
-    expect(mocks.removeMovieQueueItems).not.toHaveBeenCalled();
+    expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
+    expect(mocks.removeMovieQueueItem).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("passes the flags on unchanged; the Arr client decides what skipRedownload sends", async () => {
     await removeQueueItem(input({ blocklist: false, skipRedownload: true }));
-    expect(mocks.removeEpisodeQueueItems).toHaveBeenCalledWith([101], {
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(101, {
       removeFromClient: true,
       blocklist: false,
       skipRedownload: true,
@@ -198,7 +206,7 @@ describe("removeQueueItem routing and results", () => {
       error: "That download is no longer in the queue.",
     });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    expect(mocks.removeEpisodeQueueItems).not.toHaveBeenCalled();
+    expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
   });
 
   it("says the app didn't answer when the queue read fails, and removes nothing", async () => {
@@ -210,7 +218,7 @@ describe("removeQueueItem routing and results", () => {
   });
 
   it("says the app didn't accept a 4xx, names it, logs only the safe message, and does not refresh", async () => {
-    mocks.removeMovieQueueItems.mockRejectedValue(
+    mocks.removeMovieQueueItem.mockRejectedValue(
       new ArrRequestError("Radarr queue remove request failed: HTTP 404", "http", 404),
     );
 
@@ -223,7 +231,7 @@ describe("removeQueueItem routing and results", () => {
   });
 
   it("says Sonarr didn't confirm a timeout, and that the download may have been removed", async () => {
-    mocks.removeEpisodeQueueItems.mockRejectedValue(
+    mocks.removeEpisodeQueueItem.mockRejectedValue(
       new ArrRequestError("Sonarr queue remove request failed: timed out", "timeout"),
     );
 
@@ -235,7 +243,7 @@ describe("removeQueueItem routing and results", () => {
   });
 
   it("says Radarr didn't confirm a 5xx, since it may have been done", async () => {
-    mocks.removeMovieQueueItems.mockRejectedValue(
+    mocks.removeMovieQueueItem.mockRejectedValue(
       new ArrRequestError("Radarr queue remove request failed: HTTP 500", "http", 500),
     );
 
@@ -246,7 +254,7 @@ describe("removeQueueItem routing and results", () => {
   });
 
   it("rethrows errors that are not Arr request failures", async () => {
-    mocks.removeEpisodeQueueItems.mockRejectedValue(new Error("bug"));
+    mocks.removeEpisodeQueueItem.mockRejectedValue(new Error("bug"));
 
     await expect(removeQueueItem(input())).rejects.toThrow("bug");
     expect(mocks.refresh).not.toHaveBeenCalled();

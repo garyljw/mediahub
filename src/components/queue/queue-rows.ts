@@ -21,16 +21,15 @@ export type QueueRow = {
   /** Unique within the list: `radarr-${queueId}` or `sonarr-${queueId}`. */
   key: string;
   app: "radarr" | "sonarr";
-  /** A Radarr or Sonarr queue item id. For a Sonarr group, the smallest id in the group. */
+  /** A Radarr or Sonarr queue item id. For a Sonarr group, the smallest of queueIds. */
   queueId: number;
   /**
-   * Every valid item id this row stands for, sorted ascending. Radarr: [queueId]. Sonarr: all of a download's item
-   * ids. Removal sends one of these (see the Queue remove action), so it is never needed in full by the browser.
+   * Every valid item id this row stands for, sorted ascending (Radarr: [queueId]; Sonarr: one per episode in the
+   * download). Admins only: [] for requesters. The Remove dialog sends them back, and the server removes using the first
+   * one still queued.
    */
   queueIds: number[];
   kind: "movie" | "episodes";
-  /** Sonarr only: how many episodes the download holds. Null for a movie. */
-  episodeCount: number | null;
   /** The movie title, or the series title. "Unknown movie" or "Unknown series" when the item doesn't include one. */
   title: string;
   /**
