@@ -3,6 +3,7 @@ import { radarrClient } from "./client";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { fetchPosterBytes } from "./poster";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
+import type { MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -89,21 +90,28 @@ export async function listMovies(): Promise<{ rows: MovieRow[]; profiles: Qualit
 }
 
 /**
- * A bulk edit. Only these two fields are sent, so Radarr never sees moveFiles, deleteFiles,
- * rootFolderPath, tags or anything else from the editor resource.
+ * An edit to one movie, from the movie's own page. The editor endpoint takes a list of ids, so the body carries
+ * this movie's id alone. Only these fields are sent, so Radarr never sees moveFiles, deleteFiles, rootFolderPath,
+ * tags or anything else from the editor resource.
  */
-export type MovieEdit = { movieIds: number[]; qualityProfileId?: number; monitored?: boolean };
+export type MovieEdit = {
+  movieId: number;
+  qualityProfileId?: number;
+  monitored?: boolean;
+  minimumAvailability?: MinimumAvailability;
+};
 
-/** Builds the editor body. Fields that are undefined are left out, not sent as null. */
+/** Builds the editor body: the one id, plus each field that is defined. Undefined fields are left out, not sent as null. */
 function movieEditorBody(edit: MovieEdit): MovieEditorResource {
-  const body: MovieEditorResource = { movieIds: edit.movieIds };
+  const body: MovieEditorResource = { movieIds: [edit.movieId] };
   if (edit.qualityProfileId !== undefined) body.qualityProfileId = edit.qualityProfileId;
   if (edit.monitored !== undefined) body.monitored = edit.monitored;
+  if (edit.minimumAvailability !== undefined) body.minimumAvailability = edit.minimumAvailability;
   return body;
 }
 
-/** Changes the quality profile and/or monitored flag for the given Radarr movie ids. */
-export async function editMovies(edit: MovieEdit): Promise<void> {
+/** Changes the quality profile, monitored flag and/or minimum availability of one Radarr movie. */
+export async function editMovie(edit: MovieEdit): Promise<void> {
   const client = radarrClient();
   const body = movieEditorBody(edit);
   await arrRequest("Radarr movie edit", (signal) => client.PUT("/api/v3/movie/editor", { body, signal }));

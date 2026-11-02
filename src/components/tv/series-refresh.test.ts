@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_EDIT_SERIES } from "./series-edit";
+import { MAX_BULK_SERIES } from "./series-bulk";
 import { MAX_REFRESH_SERIES, refreshStartedMessage } from "./series-refresh";
 
 describe("refreshStartedMessage", () => {
@@ -18,7 +18,7 @@ describe("MAX_REFRESH_SERIES", () => {
     expect(MAX_REFRESH_SERIES).toBeGreaterThan(0);
   });
 
-  it("shares the edit limit", () => {
-    expect(MAX_REFRESH_SERIES).toBe(MAX_EDIT_SERIES);
+  it("shares the bulk limit", () => {
+    expect(MAX_REFRESH_SERIES).toBe(MAX_BULK_SERIES);
   });
 });

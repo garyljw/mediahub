@@ -35,6 +35,7 @@ vi.mock("@/server/env", () => ({
 }));
 
 import { getSeriesDetail, toSeriesDetail } from "./series-detail";
+import { sortedProfileOptions } from "./profiles";
 
 function detail(overrides: Partial<SeriesResource> = {}, episodeList: EpisodeResource[] = episodes) {
   return toSeriesDetail({ ...series, ...overrides }, episodeList, profiles, NOW);
@@ -70,6 +71,48 @@ describe("toSeriesDetail", () => {
       qualityProfile: "HD-1080p",
       hasPoster: true,
     });
+  });
+
+  it("carries the profile id, series type, season folders and new-season monitoring the settings form starts from", () => {
+    expect(detail()).toMatchObject({
+      qualityProfileId: 1,
+      seriesType: "standard",
+      seasonFolder: true,
+      // The fixture has no monitorNewItems, so the form has no value to start from.
+      monitorNewItems: null,
+    });
+    expect(detail({ monitorNewItems: "all" })?.monitorNewItems).toBe("all");
+    expect(detail({ monitorNewItems: "none" })?.monitorNewItems).toBe("none");
+    expect(detail({ seasonFolder: false })?.seasonFolder).toBe(false);
+    expect(detail({ seasonFolder: undefined })?.seasonFolder).toBe(false);
+    expect(detail({ seriesType: "anime" })?.seriesType).toBe("anime");
+  });
+
+  it("gives a null type or monitor value for anything the form does not offer", () => {
+    expect(detail({ seriesType: "weird" as unknown as SeriesResource["seriesType"] })?.seriesType).toBeNull();
+    expect(detail({ seriesType: undefined })?.seriesType).toBeNull();
+    expect(detail({ monitorNewItems: "future" as unknown as SeriesResource["monitorNewItems"] })?.monitorNewItems).toBeNull();
+  });
+
+  it("returns exactly the page's top-level fields", () => {
+    expect(Object.keys(detail() ?? {}).sort()).toEqual(
+      [
+        "id",
+        "title",
+        "year",
+        "status",
+        "network",
+        "overview",
+        "monitored",
+        "qualityProfile",
+        "qualityProfileId",
+        "seriesType",
+        "seasonFolder",
+        "monitorNewItems",
+        "hasPoster",
+        "seasons",
+      ].sort(),
+    );
   });
 
   it("returns null for a series with no numeric id or no title", () => {
@@ -284,7 +327,8 @@ describe("getSeriesDetail", () => {
 
     const result = await getSeriesDetail(10);
 
-    expect(result?.title).toBe("Lantern Row");
+    expect(result?.detail.title).toBe("Lantern Row");
+    expect(result?.profiles).toEqual(sortedProfileOptions(profiles));
     const requests = fetchMock.mock.calls.map((call) => call[0] as Request);
     const urls = requests.map((req) => new URL(req.url));
     expect(urls.map((u) => u.pathname).sort()).toEqual(["/api/v3/episode", "/api/v3/qualityprofile", "/api/v3/series/10"]);

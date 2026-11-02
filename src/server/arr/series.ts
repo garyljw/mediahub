@@ -1,8 +1,10 @@
 import "server-only";
 import { sonarrClient } from "./client";
+import { queueSeriesWrite } from "./series-writes";
 import { fetchPosterBytes } from "./poster";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
+import type { NewItemMonitor, SeriesType } from "@/components/tv/series-edit";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -102,24 +104,38 @@ export async function listSeries(): Promise<{ rows: SeriesRow[]; profiles: Quali
 }
 
 /**
- * A bulk edit. Only these fields are sent, so Sonarr never sees moveFiles, rootFolderPath, tags, seriesType,
- * monitorNewItems or anything else from the editor resource.
+ * An edit to one series, from the series' own page. The editor endpoint takes a list of ids, so the body carries
+ * this series' id alone. Only these fields are sent, so Sonarr never sees moveFiles, rootFolderPath, tags or
+ * anything else from the editor resource.
  */
-export type SeriesEdit = { seriesIds: number[]; qualityProfileId?: number; monitored?: boolean };
+export type SeriesEdit = {
+  seriesId: number;
+  qualityProfileId?: number;
+  monitored?: boolean;
+  seriesType?: SeriesType;
+  seasonFolder?: boolean;
+  monitorNewItems?: NewItemMonitor;
+};
 
-/** Builds the editor body. Fields that are undefined are left out, not sent as null. */
+/** Builds the editor body: the one id, plus each field that is defined. Undefined fields are left out, not sent as null. */
 function seriesEditorBody(edit: SeriesEdit): SeriesEditorResource {
-  const body: SeriesEditorResource = { seriesIds: edit.seriesIds };
+  const body: SeriesEditorResource = { seriesIds: [edit.seriesId] };
   if (edit.qualityProfileId !== undefined) body.qualityProfileId = edit.qualityProfileId;
   if (edit.monitored !== undefined) body.monitored = edit.monitored;
+  if (edit.seriesType !== undefined) body.seriesType = edit.seriesType;
+  if (edit.seasonFolder !== undefined) body.seasonFolder = edit.seasonFolder;
+  if (edit.monitorNewItems !== undefined) body.monitorNewItems = edit.monitorNewItems;
   return body;
 }
 
-/** Changes the quality profile and/or monitored flag for the given Sonarr series ids. */
+/** Changes one Sonarr series' quality profile, monitored flag, type, season folders and new-season monitoring. */
 export async function editSeries(edit: SeriesEdit): Promise<void> {
   const client = sonarrClient();
   const body = seriesEditorBody(edit);
-  await arrRequest("Sonarr series edit", (signal) => client.PUT("/api/v3/series/editor", { body, signal }));
+  // Queued with the season toggles, which read and write back the whole series (see series-writes.ts).
+  await queueSeriesWrite(edit.seriesId, () =>
+    arrRequest("Sonarr series edit", (signal) => client.PUT("/api/v3/series/editor", { body, signal })).then(() => {}),
+  );
 }
 
 /**

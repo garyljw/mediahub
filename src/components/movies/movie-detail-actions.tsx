@@ -10,7 +10,7 @@ import { grabbedMessage } from "@/components/library/release";
 import { useStatusLine } from "@/components/library/use-status-line";
 import { findMovieReleases, grabMovieRelease, refreshLibraryMovies, searchLibraryMovies } from "@/app/(app)/movies/actions";
 import { deleteMovie } from "@/app/(app)/movies/[id]/actions";
-import { MAX_EDIT_MOVIES } from "./movie-edit";
+import { MAX_BULK_MOVIES } from "./movie-bulk";
 import { refreshStartedMessage } from "./movie-refresh";
 import { searchStartedMessage } from "./movie-search";
 
@@ -108,7 +108,7 @@ export function MovieDetailActions({
         <LibraryDeleteDialog
           items={[{ id: movieId, title, year }]}
           noun={MOVIE}
-          max={MAX_EDIT_MOVIES}
+          max={MAX_BULK_MOVIES}
           appName="Radarr"
           exclusionLabel="Prevent Radarr from re-adding (add to import exclusions)"
           submit={({ deleteFiles, addExclusion }) => deleteMovie({ movieId, deleteFiles, addImportExclusion: addExclusion })}

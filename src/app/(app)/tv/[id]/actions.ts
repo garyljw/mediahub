@@ -11,11 +11,13 @@ import {
   setEpisodeMonitored,
   setSeasonMonitored,
 } from "@/server/arr/episodes";
-import { deleteSeries } from "@/server/arr/series";
+import { deleteSeries, editSeries, listSeriesQualityProfiles, type SeriesEdit } from "@/server/arr/series";
 import { ArrRequestError } from "@/server/arr/request";
 import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
 import { grabSeriesRelease as sendSeriesRelease, searchSeriesReleases } from "@/server/arr/series-releases";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
+import { SERIES_TYPE_OPTIONS } from "@/components/tv/series-add";
+import { NEW_ITEM_MONITOR_OPTIONS } from "@/components/tv/series-edit";
 
 export type { GrabResult, ReleaseSearchResult };
 
@@ -330,4 +332,71 @@ export async function deleteSeriesItem(input: unknown): Promise<DeleteResult> {
 
   // replace, not push, so Back doesn't return to the deleted item's page.
   redirect("/tv", RedirectType.replace);
+}
+
+
+// Only the one series id and the fields the settings form offers cross from the browser. strictObject rejects any
+// other key (such as a rootFolderPath or moveFiles). The refine requires at least one change, so an empty edit is refused.
+const SeriesItemEditInput = z
+  .strictObject({
+    seriesId: z.number().int().positive(),
+    qualityProfileId: z.number().int().positive().optional(),
+    monitored: z.boolean().optional(),
+    seriesType: z.enum(SERIES_TYPE_OPTIONS).optional(),
+    seasonFolder: z.boolean().optional(),
+    monitorNewItems: z.enum(NEW_ITEM_MONITOR_OPTIONS).optional(),
+  })
+  .refine(
+    (input) =>
+      input.qualityProfileId !== undefined ||
+      input.monitored !== undefined ||
+      input.seriesType !== undefined ||
+      input.seasonFolder !== undefined ||
+      input.monitorNewItems !== undefined,
+  );
+
+/**
+ * Edits this series in Sonarr (admin only), for the series page. The role check is the first thing that runs. It sits
+ * inside try so a denial returns { ok: false } instead of throwing. The catch always returns or throws, so nothing
+ * after it runs without a passed check. src/app/server-actions-auth.test.ts enforces this shape for every action.
+ */
+export async function updateSeriesItem(input: unknown): Promise<ActionResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to edit series." };
+    throw error;
+  }
+
+  const parsed = SeriesItemEditInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid edit." };
+
+  const { seriesId, qualityProfileId, monitored, seriesType, seasonFolder, monitorNewItems } = parsed.data;
+  const edit: SeriesEdit = { seriesId };
+  if (qualityProfileId !== undefined) edit.qualityProfileId = qualityProfileId;
+  if (monitored !== undefined) edit.monitored = monitored;
+  if (seriesType !== undefined) edit.seriesType = seriesType;
+  if (seasonFolder !== undefined) edit.seasonFolder = seasonFolder;
+  if (monitorNewItems !== undefined) edit.monitorNewItems = monitorNewItems;
+
+  try {
+    if (qualityProfileId !== undefined) {
+      const profiles = await listSeriesQualityProfiles();
+      if (!profiles.some((profile) => profile.id === qualityProfileId)) {
+        // Re-render so the form offers Sonarr's current profiles instead of the deleted one.
+        refresh();
+        return { ok: false, error: "That quality profile no longer exists." };
+      }
+    }
+    await editSeries(edit);
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Series edit: ${error.message}`);
+    return { ok: false, error: "Sonarr didn't accept the change. Try again." };
+  }
+
+  // The series page reads Sonarr on every request and nothing is cached, so refresh() shows the new values.
+  refresh();
+  return { ok: true };
 }

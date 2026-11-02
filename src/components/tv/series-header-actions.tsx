@@ -8,7 +8,7 @@ import { SERIES } from "@/components/library/nouns";
 import { useStatusLine } from "@/components/library/use-status-line";
 import { refreshLibrarySeries, searchLibrarySeries } from "@/app/(app)/tv/actions";
 import { deleteSeriesItem } from "@/app/(app)/tv/[id]/actions";
-import { MAX_EDIT_SERIES } from "./series-edit";
+import { MAX_BULK_SERIES } from "./series-bulk";
 import { refreshStartedMessage } from "./series-refresh";
 import { searchStartedMessage } from "./series-search";
 
@@ -88,7 +88,7 @@ export function SeriesHeaderActions({
         <LibraryDeleteDialog
           items={[{ id: seriesId, title, year }]}
           noun={SERIES}
-          max={MAX_EDIT_SERIES}
+          max={MAX_BULK_SERIES}
           appName="Sonarr"
           exclusionLabel="Prevent this series from being re-added by import lists"
           submit={({ deleteFiles, addExclusion }) =>

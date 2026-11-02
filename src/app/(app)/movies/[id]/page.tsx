@@ -7,10 +7,11 @@ import { formatAdded, formatRuntime, formatSize } from "@/components/library/for
 import { STATUS_CLASS, STATUS_LABEL } from "@/components/movies/movie-status";
 import { MovieActivity } from "@/components/movies/movie-activity";
 import { MovieDetailActions } from "@/components/movies/movie-detail-actions";
+import { MovieEditForm } from "@/components/movies/movie-edit-form";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
 import { requirePageUser } from "@/server/authz";
 import { ArrRequestError } from "@/server/arr/request";
-import { getMovieDetail, type MovieDetail } from "@/server/arr/movie-detail";
+import { getMovieDetail, type MovieDetailPage } from "@/server/arr/movie-detail";
 
 export const metadata = { title: "Movies" };
 // Blocking route: the page waits for Radarr before rendering, so no Suspense fallback is needed.
@@ -23,7 +24,8 @@ const movieId = z
   .transform(Number)
   .refine((n) => n > 0);
 
-function MovieView({ detail, isAdmin }: { detail: MovieDetail; isAdmin: boolean }) {
+function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean }) {
+  const { detail, profiles } = page;
   const meta = [
     detail.year === null ? null : String(detail.year),
     detail.studio,
@@ -55,6 +57,20 @@ function MovieView({ detail, isAdmin }: { detail: MovieDetail; isAdmin: boolean 
           <MovieActivity movieId={detail.id} title={detail.title} />
         </div>
       </div>
+      {isAdmin && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-muted-foreground">Settings</h2>
+          <MovieEditForm
+            movieId={detail.id}
+            current={{
+              qualityProfileId: detail.qualityProfileId,
+              monitored: detail.monitored,
+              minimumAvailability: detail.minimumAvailability,
+            }}
+            profiles={profiles}
+          />
+        </section>
+      )}
       <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
         <dt className="text-muted-foreground">File quality</dt>
         <dd>{detail.fileQuality ?? "—"}</dd>
@@ -74,9 +90,9 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ id
   const parsed = movieId.safeParse((await params).id);
   if (!parsed.success) notFound();
 
-  let detail: MovieDetail | null;
+  let page: MovieDetailPage | null;
   try {
-    detail = await getMovieDetail(parsed.data);
+    page = await getMovieDetail(parsed.data);
   } catch (error) {
     // Anything that isn't a Radarr request failure (a config error, a bug) goes to Next's error handling.
     if (!(error instanceof ArrRequestError)) throw error;
@@ -92,6 +108,6 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ id
     );
   }
 
-  if (detail === null) notFound();
-  return <MovieView detail={detail} isAdmin={isAdmin} />;
+  if (page === null) notFound();
+  return <MovieView page={page} isAdmin={isAdmin} />;
 }

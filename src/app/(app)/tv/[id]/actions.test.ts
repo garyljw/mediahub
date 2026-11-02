@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => ({
   searchSeriesReleases: vi.fn(),
   grabSeriesRelease: vi.fn(),
   deleteSeries: vi.fn(),
+  editSeries: vi.fn(),
+  listSeriesQualityProfiles: vi.fn(),
   redirect: vi.fn(),
 }));
 
 vi.mock("@/server/arr/series", () => ({
   deleteSeries: mocks.deleteSeries,
+  editSeries: mocks.editSeries,
+  listSeriesQualityProfiles: mocks.listSeriesQualityProfiles,
 }));
 
 // redirect throws in Next, so the mock does too. A test can then tell a redirect from a returned result.
@@ -73,6 +77,7 @@ import {
   searchSeasonNow,
   setEpisodeMonitoring,
   setSeasonMonitoring,
+  updateSeriesItem,
 } from "./actions";
 import { ReleaseGrabError } from "@/server/arr/releases";
 
@@ -90,6 +95,11 @@ beforeEach(() => {
   mocks.searchSeriesReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
   mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02.1080p" });
   mocks.deleteSeries.mockResolvedValue(undefined);
+  mocks.editSeries.mockResolvedValue(undefined);
+  mocks.listSeriesQualityProfiles.mockResolvedValue([
+    { id: 1, name: "HD-1080p" },
+    { id: 2, name: "Any" },
+  ]);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -701,5 +711,195 @@ describe("deleteSeriesItem", () => {
     expect(result.error).toContain("didn't confirm");
     expect(result.error).toContain("refreshed");
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+});
+
+const SERIES_EDIT_DENIED = "You don't have permission to edit series.";
+const SERIES_EDIT_INVALID = "Invalid edit.";
+const seriesEdit = { seriesId: 10, monitored: true };
+const SERIES_PROFILES = [
+  { id: 1, name: "HD-1080p" },
+  { id: 2, name: "Any" },
+];
+
+describe("updateSeriesItem authorization", () => {
+  it("checks for the admin role only", async () => {
+    await updateSeriesItem(seriesEdit);
+
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("rejects a requester and never calls Sonarr or refreshes", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+
+    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: SERIES_EDIT_DENIED });
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+
+    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: SERIES_EDIT_DENIED });
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+
+    await expect(updateSeriesItem(seriesEdit)).rejects.toThrow("database down");
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateSeriesItem input validation", () => {
+  const invalid: [string, unknown][] = [
+    ["not an object", "series"],
+    ["null", null],
+    ["no series id", { monitored: true }],
+    ["a zero id", { seriesId: 0, monitored: true }],
+    ["a negative id", { seriesId: -1, monitored: true }],
+    ["a string id", { seriesId: "10", monitored: true }],
+    ["a fractional id", { seriesId: 10.5, monitored: true }],
+    ["an empty edit", { seriesId: 10 }],
+    ["an unknown key", { seriesId: 10, monitored: true, deleteFiles: true }],
+    ["a root folder path", { seriesId: 10, monitored: true, rootFolderPath: "/invented/tv/" }],
+    ["a moveFiles flag", { seriesId: 10, monitored: true, moveFiles: true }],
+    ["a seriesIds list", { seriesIds: [10], monitored: true }],
+    ["a string profile id", { seriesId: 10, qualityProfileId: "2" }],
+    ["a zero profile id", { seriesId: 10, qualityProfileId: 0 }],
+    ["a non-boolean monitored", { seriesId: 10, monitored: "yes" }],
+    ["a series type with the wrong case", { seriesId: 10, seriesType: "Anime" }],
+    ["a series type the form does not offer", { seriesId: 10, seriesType: "weird" }],
+    ["a null series type", { seriesId: 10, seriesType: null }],
+    ["a non-boolean season folder flag", { seriesId: 10, seasonFolder: "yes" }],
+    ["a new-season value the form does not offer", { seriesId: 10, monitorNewItems: "future" }],
+    ["a null new-season value", { seriesId: 10, monitorNewItems: null }],
+  ];
+
+  it.each(invalid)("rejects %s without calling Sonarr", async (_name, input) => {
+    expect(await updateSeriesItem(input)).toEqual({ ok: false, error: SERIES_EDIT_INVALID });
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not put Zod details in the error", async () => {
+    const result = await updateSeriesItem({ seriesId: -1, monitored: true });
+    expect(JSON.stringify(result)).not.toMatch(/Too small|received|issues|path/);
+  });
+});
+
+describe("updateSeriesItem edits", () => {
+  it("sends the id and a monitored flag, without checking profiles", async () => {
+    expect(await updateSeriesItem({ seriesId: 10, monitored: false })).toEqual({ ok: true });
+
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, monitored: false });
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+  });
+
+  it("checks that a chosen quality profile still exists, then sends it", async () => {
+    mocks.listSeriesQualityProfiles.mockResolvedValue(SERIES_PROFILES);
+
+    expect(await updateSeriesItem({ seriesId: 10, qualityProfileId: 2 })).toEqual({ ok: true });
+
+    expect(mocks.listSeriesQualityProfiles).toHaveBeenCalledTimes(1);
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, qualityProfileId: 2 });
+  });
+
+  it.each(["standard", "daily", "anime"] as const)("sends series type %s alone", async (seriesType) => {
+    expect(await updateSeriesItem({ seriesId: 10, seriesType })).toEqual({ ok: true });
+
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, seriesType });
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+  });
+
+  it("sends a false season folder flag, which is a real change", async () => {
+    expect(await updateSeriesItem({ seriesId: 10, seasonFolder: false })).toEqual({ ok: true });
+
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, seasonFolder: false });
+  });
+
+  it.each(["all", "none"] as const)("sends new-season monitoring %s alone", async (monitorNewItems) => {
+    expect(await updateSeriesItem({ seriesId: 10, monitorNewItems })).toEqual({ ok: true });
+
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, monitorNewItems });
+  });
+
+  it("sends every field together, and exactly those fields", async () => {
+    mocks.listSeriesQualityProfiles.mockResolvedValue(SERIES_PROFILES);
+
+    await updateSeriesItem({
+      seriesId: 10,
+      qualityProfileId: 1,
+      monitored: true,
+      seriesType: "daily",
+      seasonFolder: false,
+      monitorNewItems: "none",
+    });
+
+    expect(mocks.editSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.editSeries.mock.calls[0][0]).toStrictEqual({
+      seriesId: 10,
+      qualityProfileId: 1,
+      monitored: true,
+      seriesType: "daily",
+      seasonFolder: false,
+      monitorNewItems: "none",
+    });
+  });
+
+  it("refreshes the page after a successful edit", async () => {
+    await updateSeriesItem(seriesEdit);
+
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a quality profile that no longer exists, without editing, and refreshes so the form gets the current profiles", async () => {
+    mocks.listSeriesQualityProfiles.mockResolvedValue(SERIES_PROFILES);
+
+    const result = await updateSeriesItem({ seriesId: 10, qualityProfileId: 99 });
+
+    expect(result).toEqual({ ok: false, error: "That quality profile no longer exists." });
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the friendly error when Sonarr rejects the edit, and logs only the safe message", async () => {
+    mocks.editSeries.mockRejectedValue(new ArrRequestError("Sonarr series edit request failed: HTTP 500", "http", 500));
+
+    const result = await updateSeriesItem(seriesEdit);
+
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series edit: Sonarr series edit request failed: HTTP 500");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the same friendly error after a timeout", async () => {
+    mocks.editSeries.mockRejectedValue(new ArrRequestError("Sonarr series edit request failed: timed out", "timeout"));
+
+    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series edit: Sonarr series edit request failed: timed out");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the friendly error when the profile list cannot be fetched, and does not edit", async () => {
+    mocks.listSeriesQualityProfiles.mockRejectedValue(
+      new ArrRequestError("Sonarr quality profile request failed: timed out", "timeout"),
+    );
+
+    const result = await updateSeriesItem({ seriesId: 10, qualityProfileId: 1 });
+
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not Sonarr request failures", async () => {
+    mocks.editSeries.mockRejectedValue(new Error("config broken"));
+
+    await expect(updateSeriesItem(seriesEdit)).rejects.toThrow("config broken");
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });

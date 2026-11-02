@@ -2,6 +2,8 @@ import "server-only";
 import { radarrClient } from "./client";
 import { ArrRequestError, arrRequest } from "./request";
 import { fetchQualityProfiles, toMovieRows, type MovieStatus } from "./movies";
+import { sortedProfileOptions, type QualityProfileOption } from "./profiles";
+import { isMinimumAvailability, type MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -19,6 +21,10 @@ export type MovieDetail = {
   runtime: number | null;
   monitored: boolean;
   qualityProfile: string;
+  /** The profile's id, which the settings form starts from. */
+  qualityProfileId: number;
+  /** Radarr's minimum availability when it is one the form offers, otherwise null. */
+  minimumAvailability: MinimumAvailability | null;
   /** The file's quality name when the movie is downloaded, otherwise null. */
   fileQuality: string | null;
   /** The file's size in bytes, or 0 when the movie isn't downloaded. */
@@ -46,6 +52,8 @@ export function toMovieDetail(movie: MovieResource, profiles: QualityProfileReso
     runtime: typeof movie.runtime === "number" && movie.runtime > 0 ? movie.runtime : null,
     monitored: row.monitored,
     qualityProfile: row.qualityProfile,
+    qualityProfileId: row.qualityProfileId,
+    minimumAvailability: isMinimumAvailability(movie.minimumAvailability) ? movie.minimumAvailability : null,
     fileQuality: row.fileQuality,
     sizeOnDisk: row.sizeOnDisk,
     added: row.added,
@@ -53,12 +61,15 @@ export function toMovieDetail(movie: MovieResource, profiles: QualityProfileReso
   };
 }
 
+/** What the movie page loads: the movie, and the quality profiles the settings form offers (the page only uses them for admins). */
+export type MovieDetailPage = { detail: MovieDetail; profiles: QualityProfileOption[] };
+
 /**
- * One movie for the movie page. Returns null when Radarr answers 404 for the movie itself, so the page can show
- * not-found. A 404 from the profile request means something else (e.g. a wrong URL base), so it propagates like
- * any other failure.
+ * One movie for the movie page, with the quality profiles from the same request. Returns null when Radarr answers
+ * 404 for the movie itself, so the page can show not-found. A 404 from the profile request means something else
+ * (e.g. a wrong URL base), so it propagates like any other failure.
  */
-export async function getMovieDetail(movieId: number): Promise<MovieDetail | null> {
+export async function getMovieDetail(movieId: number): Promise<MovieDetailPage | null> {
   const client = radarrClient();
   const movieRequest = arrRequest("Radarr movie", (signal) =>
     client.GET("/api/v3/movie/{id}", { params: { path: { id: movieId } }, signal }),
@@ -69,5 +80,7 @@ export async function getMovieDetail(movieId: number): Promise<MovieDetail | nul
   const [movie, profiles] = await Promise.all([movieRequest, fetchQualityProfiles()]);
   if (movie === null) return null;
   if (!movie) throw new ArrRequestError("Radarr movie response was empty", "invalid");
-  return toMovieDetail(movie, profiles);
+  const detail = toMovieDetail(movie, profiles);
+  if (detail === null) return null;
+  return { detail, profiles: sortedProfileOptions(profiles) };
 }

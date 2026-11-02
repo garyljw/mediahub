@@ -1,33 +1,80 @@
 import { describe, expect, it } from "vitest";
-import { buildEditPayload } from "./movie-edit";
+import {
+  MINIMUM_AVAILABILITY,
+  MINIMUM_AVAILABILITY_LABELS,
+  buildMovieEdit,
+  isMinimumAvailability,
+  type MovieFormValues,
+} from "./movie-edit";
 
-describe("buildEditPayload", () => {
-  it("sends only the fields that were changed", () => {
-    expect(buildEditPayload([1, 2], 3, "keep")).toStrictEqual({ movieIds: [1, 2], qualityProfileId: 3 });
-    expect(buildEditPayload([1], null, "monitored")).toStrictEqual({ movieIds: [1], monitored: true });
-    expect(buildEditPayload([1], null, "unmonitored")).toStrictEqual({ movieIds: [1], monitored: false });
+const current: MovieFormValues = { qualityProfileId: 1, monitored: true, minimumAvailability: "released" };
+
+describe("buildMovieEdit", () => {
+  it("returns null when nothing differs from the current values", () => {
+    expect(buildMovieEdit(7, current, { ...current })).toBeNull();
   });
 
-  it("sends both fields when both were changed", () => {
-    expect(buildEditPayload([5], 2, "unmonitored")).toStrictEqual({
-      movieIds: [5],
-      qualityProfileId: 2,
-      monitored: false,
+  it("sends only the quality profile when only it changed", () => {
+    expect(buildMovieEdit(7, current, { ...current, qualityProfileId: 2 })).toStrictEqual({ movieId: 7, qualityProfileId: 2 });
+  });
+
+  it("sends only the monitored flag when it changed, including a change to false", () => {
+    expect(buildMovieEdit(7, current, { ...current, monitored: false })).toStrictEqual({ movieId: 7, monitored: false });
+  });
+
+  it("sends only the minimum availability when it changed", () => {
+    expect(buildMovieEdit(7, current, { ...current, minimumAvailability: "announced" })).toStrictEqual({
+      movieId: 7,
+      minimumAvailability: "announced",
     });
   });
 
-  it("returns null when everything is left at Keep current", () => {
-    expect(buildEditPayload([1, 2], null, "keep")).toBeNull();
+  it("sends every changed field, and no others", () => {
+    const edit = buildMovieEdit(7, current, { qualityProfileId: 2, monitored: false, minimumAvailability: "inCinemas" });
+
+    expect(edit).toStrictEqual({ movieId: 7, qualityProfileId: 2, monitored: false, minimumAvailability: "inCinemas" });
+    expect(Object.keys(edit ?? {}).sort()).toEqual(["minimumAvailability", "monitored", "movieId", "qualityProfileId"]);
   });
 
-  it("returns null when there are no movies, even if a change is set", () => {
-    expect(buildEditPayload([], 2, "monitored")).toBeNull();
+  it("sends a chosen minimum availability when the current one is one the form does not offer", () => {
+    const unknown = { ...current, minimumAvailability: null };
+
+    expect(buildMovieEdit(7, unknown, { ...unknown, minimumAvailability: "inCinemas" })).toStrictEqual({
+      movieId: 7,
+      minimumAvailability: "inCinemas",
+    });
   });
 
-  it("copies the ids, so later changes to the caller's array do not leak into the payload", () => {
-    const ids = [1, 2];
-    const payload = buildEditPayload(ids, null, "monitored");
-    ids.push(3);
-    expect(payload?.movieIds).toEqual([1, 2]);
+  it("never sends a null minimum availability, so an unknown value is left alone", () => {
+    const unknown = { ...current, minimumAvailability: null };
+
+    expect(buildMovieEdit(7, unknown, unknown)).toBeNull();
+    expect(buildMovieEdit(7, unknown, { ...unknown, qualityProfileId: 3 })).toStrictEqual({ movieId: 7, qualityProfileId: 3 });
+  });
+
+  it("uses the movie id it is given", () => {
+    expect(buildMovieEdit(42, current, { ...current, monitored: false })).toStrictEqual({ movieId: 42, monitored: false });
+  });
+});
+
+describe("isMinimumAvailability", () => {
+  it("accepts the three values the form offers", () => {
+    expect(MINIMUM_AVAILABILITY.every((value) => isMinimumAvailability(value))).toBe(true);
+  });
+
+  it("rejects the statuses the form leaves out, and anything else", () => {
+    for (const value of ["tba", "deleted", "Released", "", null, undefined, 1]) {
+      expect(isMinimumAvailability(value)).toBe(false);
+    }
+  });
+});
+
+describe("minimum availability options", () => {
+  it("labels each option, in the order the form shows them", () => {
+    expect(MINIMUM_AVAILABILITY.map((value) => MINIMUM_AVAILABILITY_LABELS[value])).toEqual([
+      "Announced",
+      "In cinemas",
+      "Released",
+    ]);
   });
 });
