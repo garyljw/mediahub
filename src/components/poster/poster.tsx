@@ -57,9 +57,10 @@ export function Poster({ src }: { src: string | null }) {
 
 /**
  * A full-width poster for a grid tile (the Home page). It fills its container at 2:3, and shows a Film
- * placeholder when there is no src or it failed to load.
+ * placeholder when there is no src or it failed to load. `previewThumb` marks the image as a thumbnail for
+ * usePosterPreview, for lists that show tiles at thumbnail size (the season cards).
  */
-export function PosterTile({ src }: { src: string | null }) {
+export function PosterTile({ src, previewThumb = false }: { src: string | null; previewThumb?: boolean }) {
   const { failed, imgRef, markFailed } = usePosterFailure(src);
 
   if (src !== null && !failed) {
@@ -67,6 +68,7 @@ export function PosterTile({ src }: { src: string | null }) {
       // eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it.
       <img
         ref={imgRef}
+        data-poster-thumb={previewThumb || undefined}
         src={src}
         alt=""
         loading="lazy"

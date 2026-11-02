@@ -95,15 +95,24 @@ describe("GET /api/tv/lookup-poster/[...path]", () => {
 
   it("returns 502 with a fixed body, without the upstream message, and logs one line", async () => {
     requireRoleMock.mockResolvedValue(ADMIN);
-    posterMock.mockRejectedValue(new ArrRequestError("TVDB poster request failed: HTTP 404", "http", 404));
+    posterMock.mockRejectedValue(new ArrRequestError("TVDB poster request failed: HTTP 500", "http", 500));
     const res = await call(PATH.split("/"));
     expect(res.status).toBe(502);
     const text = await res.text();
     expect(JSON.parse(text)).toEqual({ error: "poster unavailable" });
-    expect(text).not.toContain("HTTP 404");
+    expect(text).not.toContain("HTTP 500");
     expect(text).not.toContain("TVDB");
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("[tv-lookup-poster] TVDB poster request failed: HTTP 404");
+    expect(errorSpy).toHaveBeenCalledWith("[tv-lookup-poster] TVDB poster request failed: HTTP 500");
+  });
+
+  it("returns a plain 404 without logging when TVDB has no such file", async () => {
+    requireRoleMock.mockResolvedValue(ADMIN);
+    posterMock.mockRejectedValue(new ArrRequestError("TVDB poster request failed: HTTP 404", "http", 404));
+    const res = await call(PATH.split("/"));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not found" });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("rethrows errors that are not ArrRequestError", async () => {

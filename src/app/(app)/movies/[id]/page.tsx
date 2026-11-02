@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
@@ -8,7 +7,8 @@ import { PersonPhoto } from "@/components/poster/person-photo";
 import { PosterTile } from "@/components/poster/poster";
 import { formatAdded, formatSize } from "@/components/library/format";
 import { STATUS_CLASS, STATUS_LABEL } from "@/components/movies/movie-status";
-import { directorsLine, metaLine, ratingsLine } from "@/components/movies/movie-detail-format";
+import { directorsLine, metaLine, ratingsLine } from "@/components/library/detail-format";
+import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MovieActivity } from "@/components/movies/movie-activity";
 import { MovieDetailActions } from "@/components/movies/movie-detail-actions";
 import { MovieEditForm } from "@/components/movies/movie-edit-form";
@@ -28,16 +28,6 @@ const movieId = z
   .regex(/^\d{1,9}$/)
   .transform(Number)
   .refine((n) => n > 0);
-
-/** One label and value in the details grid. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">{children}</dd>
-    </div>
-  );
-}
 
 /** The cast row, or a message when Radarr's credits failed. Omitted when the cast is empty. */
 function CastRow({ credits }: { credits: MovieCredits | null }) {
@@ -127,20 +117,12 @@ function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean 
           <Fact label="Language">{detail.language ?? "—"}</Fact>
           <Fact label="Studio">{detail.studio ?? "—"}</Fact>
         </dl>
-        {(imdbUrl !== null || tmdbUrl !== null) && (
-          <p className="flex flex-wrap gap-4 text-sm">
-            {imdbUrl !== null && (
-              <a href={imdbUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                IMDb
-              </a>
-            )}
-            {tmdbUrl !== null && (
-              <a href={tmdbUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                TMDB
-              </a>
-            )}
-          </p>
-        )}
+        <ExternalLinks
+          links={[
+            { label: "IMDb", url: imdbUrl },
+            { label: "TMDB", url: tmdbUrl },
+          ]}
+        />
       </section>
 
       {isAdmin && (

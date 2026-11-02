@@ -3,7 +3,7 @@
 import { usePosterFailure } from "./poster";
 
 /**
- * A movie's backdrop behind its page header, faded with a gradient so the text stays readable in light and dark
+ * A movie's or series' backdrop behind its page header, faded with a gradient so the text stays readable in light and dark
  * themes. `src` is MediaHub's own backdrop route. It renders nothing when the image fails to load, so the header keeps
  * its card background.
  */

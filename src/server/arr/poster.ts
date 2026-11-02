@@ -92,7 +92,7 @@ const posterId = z
 
 /**
  * Builds the poster response for a route: validates the raw id, fetches the poster, and maps failures.
- * An invalid id gets a 400, an ArrRequestError gets a fixed 502 body with one `[poster]` log line
+ * An invalid id gets a 400, an upstream 404 gets a 404 with no log line, any other ArrRequestError gets a fixed 502 body with one `[poster]` log line
  * (the upstream message stays out of the body), and anything else is rethrown. Routes call this after
  * their own requireRole check.
  */
@@ -115,6 +115,9 @@ export async function servePosterResponse(
     });
   } catch (error) {
     if (error instanceof ArrRequestError) {
+      // A 404 means Radarr/Sonarr has no such file, e.g. it hasn't cached a new item's backdrop yet. That is expected,
+      // so it gets a plain 404 and no log line. The page then shows its placeholder.
+      if (error.status === 404) return Response.json({ error: "not found" }, { status: 404 });
       // Log for operators. The upstream message stays out of the response body.
       console.error(`[${logTag}] ${error.message}`);
       return Response.json({ error: "poster unavailable" }, { status: 502 });

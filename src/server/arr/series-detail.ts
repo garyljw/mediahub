@@ -3,6 +3,8 @@ import { sonarrClient } from "./client";
 import { ArrRequestError, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import { fetchQualityProfiles, seriesStatus, type SeriesStatus } from "./series";
+import { genreList, imdbIdOrNull, positiveIdOrNull, ratingValue, textOrNull } from "./detail-fields";
+import { tvdbImagePath } from "./series-add";
 import { episodeStatus, type EpisodeStatus } from "../merge/episode-status";
 import { isNewItemMonitor, isSeriesType, type NewItemMonitor, type SeriesType } from "@/components/tv/series-edit";
 import type { components as SonarrComponents } from "./generated/sonarr";
@@ -43,6 +45,11 @@ export type SeasonRow = {
   episodeCount: number;
   totalEpisodeCount: number;
   sizeOnDisk: number;
+  /**
+   * The TVDB path of the season's poster (see tvdbImagePath), or null. Null for a season that is only there
+   * because an episode belongs to it, and for a poster on any other host. The browser fetches it from the TVDB lookup-poster route (/api/tv/lookup-poster/).
+   */
+  posterPath: string | null;
   episodes: EpisodeRow[];
 };
 
@@ -63,6 +70,38 @@ export type SeriesDetail = {
   /** Sonarr's "monitor new seasons" value when it is one the form offers, otherwise null. */
   monitorNewItems: NewItemMonitor | null;
   hasPoster: boolean;
+  /** True when Sonarr has a backdrop (fanart) for the series. The browser then fetches it from MediaHub's backdrop route. */
+  hasBackdrop: boolean;
+  /** Up to five non-empty genres, in Sonarr's order. */
+  genres: string[];
+  /** Sonarr's content rating (e.g. "TV-MA"), or null when it sends none. */
+  certification: string | null;
+  /** The episode runtime in minutes, or null when Sonarr sends none (or 0). */
+  runtime: number | null;
+  /** Sonarr's rating value, or null when it has no votes or a zero value. */
+  rating: number | null;
+  /** Sonarr's first air date as an ISO string, or null. The page formats it. */
+  firstAired: string | null;
+  /** Sonarr's last air date as an ISO string, or null. The page formats it. */
+  lastAired: string | null;
+  /** Sonarr's next airing as an ISO string, or null. The page formats it. */
+  nextAiring: string | null;
+  /** When the series was added to Sonarr, as an ISO string, or null. The page formats it. */
+  added: string | null;
+  /** The original language's name, or null. */
+  language: string | null;
+  /** Episodes with a file, from Sonarr's statistics. 0 when Sonarr sends none. */
+  episodeFileCount: number;
+  /** Sonarr's statistics episodeCount. 0 when Sonarr sends none. */
+  episodeCount: number;
+  /** Bytes on disk for the whole series, from Sonarr's statistics. 0 when Sonarr sends none. */
+  sizeOnDisk: number;
+  /** The IMDb id (e.g. "tt0000001") when it has the expected shape, otherwise null. */
+  imdbId: string | null;
+  /** The TVDB series id when it is a positive integer, otherwise null. */
+  tvdbId: number | null;
+  /** The TMDB series id when it is a positive integer, otherwise null. */
+  tmdbId: number | null;
   seasons: SeasonRow[];
 };
 
@@ -86,6 +125,12 @@ function toEpisodeRow(episode: EpisodeResource, id: number, episodeNumber: numbe
     quality: file?.quality?.quality?.name ?? null,
     size: file?.size ?? 0,
   };
+}
+
+/** The TVDB path of a season's poster: its remoteUrl, then its url, each checked by tvdbImagePath. Null when neither passes. */
+function seasonPosterPath(season: SeasonResource | undefined): string | null {
+  const poster = season?.images?.find((image) => image.coverType === "poster");
+  return tvdbImagePath(poster?.remoteUrl) ?? tvdbImagePath(poster?.url);
 }
 
 /** Season 0 is Specials and sorts last. Otherwise the highest season number comes first. */
@@ -147,6 +192,7 @@ export function toSeriesDetail(
       episodeCount: stats?.episodeCount ?? 0,
       totalEpisodeCount: stats?.totalEpisodeCount ?? 0,
       sizeOnDisk: stats?.sizeOnDisk ?? 0,
+      posterPath: seasonPosterPath(season),
       episodes: seasonEpisodes,
     };
   });
@@ -166,6 +212,22 @@ export function toSeriesDetail(
     seasonFolder: series.seasonFolder === true,
     monitorNewItems: isNewItemMonitor(series.monitorNewItems) ? series.monitorNewItems : null,
     hasPoster: series.images?.some((image) => image.coverType === "poster") ?? false,
+    hasBackdrop: series.images?.some((image) => image.coverType === "fanart") ?? false,
+    genres: genreList(series.genres),
+    certification: textOrNull(series.certification),
+    runtime: typeof series.runtime === "number" && series.runtime > 0 ? series.runtime : null,
+    rating: ratingValue(series.ratings),
+    firstAired: textOrNull(series.firstAired),
+    lastAired: textOrNull(series.lastAired),
+    nextAiring: textOrNull(series.nextAiring),
+    added: textOrNull(series.added),
+    language: textOrNull(series.originalLanguage?.name),
+    episodeFileCount: series.statistics?.episodeFileCount ?? 0,
+    episodeCount: series.statistics?.episodeCount ?? 0,
+    sizeOnDisk: series.statistics?.sizeOnDisk ?? 0,
+    imdbId: imdbIdOrNull(series.imdbId),
+    tvdbId: positiveIdOrNull(series.tvdbId),
+    tmdbId: positiveIdOrNull(series.tmdbId),
     seasons,
   };
 }

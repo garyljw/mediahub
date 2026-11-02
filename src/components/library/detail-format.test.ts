@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directorsLine, metaLine, ratingsLine } from "./movie-detail-format";
+import { directorsLine, metaLine, ratingsLine, seriesRatingLine } from "./detail-format";
 
 describe("ratingsLine", () => {
   it("shows IMDb to one decimal and TMDB as a whole percent", () => {
@@ -32,6 +32,17 @@ describe("metaLine", () => {
   it("returns null when nothing is there, and treats a zero runtime as missing", () => {
     expect(metaLine({ certification: null, runtime: null, genres: [] })).toBeNull();
     expect(metaLine({ certification: null, runtime: 0, genres: [] })).toBeNull();
+  });
+});
+
+describe("seriesRatingLine", () => {
+  it("shows the rating to one decimal", () => {
+    expect(seriesRatingLine(8.4)).toBe("Rating 8.4");
+    expect(seriesRatingLine(7)).toBe("Rating 7.0");
+  });
+
+  it("returns null when there is no rating", () => {
+    expect(seriesRatingLine(null)).toBeNull();
   });
 });
 

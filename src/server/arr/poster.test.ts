@@ -169,15 +169,40 @@ describe("servePosterResponse", () => {
 
   it("returns a fixed 502 for an ArrRequestError and logs one line with the tag", async () => {
     const fetchPoster = vi.fn(async () => {
-      throw new ArrRequestError("Sonarr poster request failed: HTTP 404", "http", 404);
+      throw new ArrRequestError("Sonarr poster request failed: HTTP 500", "http", 500);
     });
     const res = await servePosterResponse("42", fetchPoster);
     expect(res.status).toBe(502);
     const text = await res.text();
     expect(JSON.parse(text)).toEqual({ error: "poster unavailable" });
-    expect(text).not.toContain("HTTP 404");
+    expect(text).not.toContain("HTTP 500");
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith("[poster] Sonarr poster request failed: HTTP 404");
+    expect(errorSpy).toHaveBeenCalledWith("[poster] Sonarr poster request failed: HTTP 500");
+  });
+
+  it("returns a plain 404 without logging when the upstream has no such file", async () => {
+    const fetchPoster = vi.fn(async () => {
+      throw new ArrRequestError("Sonarr backdrop request failed: HTTP 404", "http", 404);
+    });
+    const res = await servePosterResponse("42", fetchPoster, "backdrop");
+    expect(res.status).toBe(404);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ error: "not found" });
+    expect(text).not.toContain("HTTP 404");
+    expect(res.headers.get("Cache-Control")).toBeNull();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a timeout", new ArrRequestError("Sonarr poster timed out", "timeout")],
+    ["an invalid image", new ArrRequestError("Sonarr poster response was not a usable image", "invalid")],
+  ])("still returns 502 and logs for %s", async (_name, error) => {
+    const fetchPoster = vi.fn(async () => {
+      throw error;
+    });
+    const res = await servePosterResponse("42", fetchPoster);
+    expect(res.status).toBe(502);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it("rethrows errors that are not ArrRequestError", async () => {
