@@ -7,6 +7,7 @@ import { Poster } from "@/components/poster/poster";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
 import { MonitoredIcon } from "@/components/tv/series-monitored";
+import { SeriesHeaderActions } from "@/components/tv/series-header-actions";
 import {
   EpisodeActivityCell,
   EpisodeActivityHead,
@@ -198,6 +199,7 @@ function SeriesView({ detail, isAdmin }: { detail: SeriesDetail; isAdmin: boolea
             <span className="text-muted-foreground">Profile: {detail.qualityProfile}</span>
           </div>
           {detail.overview !== "" && <p className="max-w-prose text-sm">{detail.overview}</p>}
+          <SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />
         </div>
       </div>
       <section aria-label="Seasons" className="space-y-2">

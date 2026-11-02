@@ -1,5 +1,6 @@
 "use server";
 
+import { RedirectType, redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
@@ -10,6 +11,7 @@ import {
   setEpisodeMonitored,
   setSeasonMonitored,
 } from "@/server/arr/episodes";
+import { deleteSeries } from "@/server/arr/series";
 import { ArrRequestError } from "@/server/arr/request";
 import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
 import { grabSeriesRelease as sendSeriesRelease, searchSeriesReleases } from "@/server/arr/series-releases";
@@ -282,4 +284,50 @@ export async function grabSeriesRelease(input: unknown): Promise<GrabResult> {
       error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
     };
   }
+}
+
+// Only the one series id crosses from the browser. strictObject rejects any other key, and the two booleans are
+// required, so a missing choice can never be read as "no".
+const SeriesItemDeleteInput = z.strictObject({
+  seriesId: z.number().int().positive(),
+  deleteFiles: z.boolean(),
+  addImportListExclusion: z.boolean(),
+});
+
+export type DeleteResult = { ok: false; error: string };
+
+/**
+ * Deletes this series from Sonarr (admin only), for the series page. Same role check as the table's delete, and
+ * the catch always returns or throws. On success it sends the browser back to the TV list. The redirect sits
+ * outside the try, because redirect throws.
+ */
+export async function deleteSeriesItem(input: unknown): Promise<DeleteResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to delete series." };
+    throw error;
+  }
+
+  const parsed = SeriesItemDeleteInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid delete." };
+  const { seriesId, deleteFiles, addImportListExclusion } = parsed.data;
+
+  try {
+    await deleteSeries({ seriesIds: [seriesId], deleteFiles, addImportListExclusion });
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`Series delete: ${error.message}`);
+    // Sonarr may have deleted it anyway (certainly possible after a timeout), so re-read the page rather than keep
+    // showing an item that might be gone. If it is gone, the page shows not-found.
+    refresh();
+    if (error.kind === "timeout") {
+      return { ok: false, error: "Sonarr is taking a long time and may still be deleting. The page has been refreshed; check it before trying again." };
+    }
+    return { ok: false, error: "Sonarr didn't confirm the delete, so the series may already be gone. The page has been refreshed; check it before trying again." };
+  }
+
+  // replace, not push, so Back doesn't return to the deleted item's page.
+  redirect("/tv", RedirectType.replace);
 }

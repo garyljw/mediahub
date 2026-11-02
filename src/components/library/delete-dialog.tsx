@@ -85,7 +85,11 @@ export function LibraryDeleteDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{deleteTitle(items, noun)}</DialogTitle>
-          <DialogDescription>The selected {noun.many} are removed from {appName}.</DialogDescription>
+          <DialogDescription>
+            {items.length === 1
+              ? `${items[0].title} is removed from ${appName}.`
+              : `The selected ${noun.many} are removed from ${appName}.`}
+          </DialogDescription>
         </DialogHeader>
 
         <form

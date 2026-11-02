@@ -87,3 +87,14 @@ export function formatGridDay(ymd: string, withMonth: boolean): string {
   const day = String(date.getUTCDate());
   return withMonth ? `${day} ${MONTHS[date.getUTCMonth()]}` : day;
 }
+
+/** "2h 5m", "45m" or "2h" for a runtime in minutes. Null when there is none (or it is 0). Hand-written, not Intl. */
+export function formatRuntime(minutes: number | null): string | null {
+  if (minutes === null || !Number.isFinite(minutes) || minutes <= 0) return null;
+  const total = Math.round(minutes);
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest}m`;
+  if (rest === 0) return `${hours}h`;
+  return `${hours}h ${rest}m`;
+}

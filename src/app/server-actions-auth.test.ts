@@ -200,6 +200,8 @@ describe("server actions in src/", () => {
     expect(actions).toContain("app/(app)/tv/actions.ts#removeSeries");
     expect(actions).toContain("app/(app)/tv/[id]/actions.ts#setSeasonMonitoring");
     expect(actions).toContain("app/(app)/tv/[id]/actions.ts#setEpisodeMonitoring");
+    expect(actions).toContain("app/(app)/tv/[id]/actions.ts#deleteSeriesItem");
+    expect(actions).toContain("app/(app)/movies/[id]/actions.ts#deleteMovie");
     expect(actions).toContain("app/(app)/actions.ts#signOut");
   });
 
