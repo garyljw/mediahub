@@ -1,6 +1,6 @@
 import { requirePageUser } from "@/server/authz";
 import { fetchEpisodeHistory, fetchMovieHistory } from "@/server/arr/history";
-import { ArrRequestError } from "@/server/arr/request";
+import { settledOrNull } from "@/server/arr/request";
 import { env } from "@/server/env";
 import { radarrEventCodes, sonarrEventCodes, toHistoryEntries, type HistoryEntry } from "@/server/merge/history";
 import { HistoryView } from "@/components/history/history-view";
@@ -13,19 +13,6 @@ import {
 
 export const metadata = { title: "History" };
 export const instant = false;
-
-/**
- * The records from one settled history fetch. A side that wasn't asked for (the type filter excludes it) or that
- * failed gives null. A Radarr or Sonarr failure is logged and gives null, so the other side can still show. Anything
- * that isn't a request failure (a config error, a bug) is rethrown.
- */
-function loadedOrNull<T>(result: PromiseSettledResult<T | null>): T | null {
-  if (result.status === "fulfilled") return result.value;
-  if (!(result.reason instanceof ArrRequestError)) throw result.reason;
-  // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
-  console.error(`History page: ${result.reason.message}`);
-  return null;
-}
 
 export default async function HistoryPage({
   searchParams,
@@ -42,8 +29,8 @@ export default async function HistoryPage({
     wantMovies ? fetchMovieHistory(params.limit, radarrEventCodes(params.events)) : Promise.resolve(null),
     wantEpisodes ? fetchEpisodeHistory(params.limit, sonarrEventCodes(params.events)) : Promise.resolve(null),
   ]);
-  const movies = loadedOrNull(movieResult);
-  const episodes = loadedOrNull(episodeResult);
+  const movies = settledOrNull(movieResult, "History page");
+  const episodes = settledOrNull(episodeResult, "History page");
 
   const alerts: string[] = [];
   const moviesFailed = wantMovies && movies === null;

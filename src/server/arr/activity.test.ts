@@ -11,6 +11,7 @@ import {
   listEpisodeActivity,
   listMovieActivity,
   listSeriesActivity,
+  pickWorst,
   toActivity,
 } from "./activity";
 
@@ -628,5 +629,26 @@ describe("Sonarr queue listings", () => {
     );
     expect(error).toBeInstanceOf(ArrRequestError);
     expect((error as ArrRequestError).kind).toBe("invalid");
+  });
+});
+
+describe("pickWorst", () => {
+  it("returns the most severe item, with its state and severity", () => {
+    const ok = item({ id: 1 });
+    const failed = item({ id: 2, trackedDownloadState: "failedPending" });
+    const picked = pickWorst([ok, failed]);
+    expect(picked.item).toBe(failed);
+    expect(picked.severity).toBe("error");
+    expect(picked.state).toBe("failed");
+  });
+
+  it("keeps the earlier item on a tie", () => {
+    const first = item({ id: 1 });
+    const second = item({ id: 2 });
+    expect(pickWorst([first, second]).item).toBe(first);
+  });
+
+  it("refuses an empty list", () => {
+    expect(() => pickWorst([])).toThrow("pickWorst needs at least one item");
   });
 });

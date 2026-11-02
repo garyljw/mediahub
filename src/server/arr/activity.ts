@@ -1,6 +1,6 @@
 import "server-only";
-import { radarrClient, sonarrClient } from "./client";
-import { getList } from "./request";
+import { SEVERITY_RANK } from "@/components/library/activity";
+import { fetchEpisodeQueue, fetchMovieQueue } from "./queue";
 import type { components as RadarrComponents } from "./generated/radarr";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
@@ -54,8 +54,6 @@ export const MAX_ACTIVITY_MESSAGES = 5;
 /** Each message is cut to this many characters, counting the trailing "…" when it is cut. */
 export const MAX_ACTIVITY_MESSAGE_CHARS = 300;
 
-const SEVERITY_RANK: Record<ActivitySeverity, number> = { ok: 0, warning: 1, error: 2 };
-
 function raise(current: ActivitySeverity, floor: ActivitySeverity): ActivitySeverity {
   return SEVERITY_RANK[floor] > SEVERITY_RANK[current] ? floor : current;
 }
@@ -107,7 +105,7 @@ function severityOf(item: QueueItem, state: ActivityState): ActivitySeverity {
  * Whole percent downloaded, or null when the sizes are missing or contradict each other. The apps still send
  * `sizeleft`, which the spec marks deprecated, and there is no replacement field, so it is used here.
  */
-function progressOf(item: QueueItem): number | null {
+export function progressOf(item: QueueItem): number | null {
   const size = item.size;
   const left = item.sizeleft;
   if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return null;
@@ -116,7 +114,7 @@ function progressOf(item: QueueItem): number | null {
 }
 
 /** Seconds from `now` until the estimated completion, or null when unknown or already past. */
-function etaOf(item: QueueItem, now: number): number | null {
+export function etaOf(item: QueueItem, now: number): number | null {
   if (typeof item.estimatedCompletionTime !== "string") return null;
   const time = Date.parse(item.estimatedCompletionTime);
   if (Number.isNaN(time) || time <= now) return null;
@@ -127,7 +125,7 @@ function etaOf(item: QueueItem, now: number): number | null {
  * The app's warning and error text: the error message, then each status message's lines. The status
  * message title is left out, because it is usually a release or file name. Trimmed, de-duplicated and capped.
  */
-function messagesOf(item: QueueItem): string[] {
+export function messagesOf(item: QueueItem): string[] {
   const raw: unknown[] = [item.errorMessage];
   for (const status of item.statusMessages ?? []) raw.push(...(status.messages ?? []));
 
@@ -158,7 +156,7 @@ function messagesOf(item: QueueItem): string[] {
  * Without this, a 10-episode pack would show "(+9 more)" on the series row. Prefixes keep the three kinds of
  * key apart. Keys stay inside this module and are never returned.
  */
-function downloadKeyOf(item: QueueItem, index: number): string {
+export function downloadKeyOf(item: QueueItem, index: number): string {
   if (typeof item.downloadId === "string" && item.downloadId !== "") return `d:${item.downloadId}`;
   if (typeof item.title === "string" && item.title !== "") return `t:${item.title}`;
   if (typeof item.id === "number") return `i:${item.id}`;
@@ -166,14 +164,26 @@ function downloadKeyOf(item: QueueItem, index: number): string {
   return `u:${index}`;
 }
 
-/** The winning item for one key, with the state and severity worked out once, when it is ranked. */
-type Group<T extends QueueItem> = {
-  downloads: Set<string>;
-  winner: T;
-  winnerState: ActivityState;
-  winnerSeverity: ActivitySeverity;
-  winnerRank: number;
-};
+/**
+ * The worst item in a group: the highest severity wins, and a strictly higher one replaces the current pick, so on a
+ * tie the earlier item keeps the slot. `items` must not be empty. Its state and severity come back with the item, so
+ * callers don't work them out again. Shared by the Activity column and the Queue page.
+ */
+export function pickWorst<T extends QueueItem>(
+  items: T[],
+): { item: T; state: ActivityState; severity: ActivitySeverity } {
+  if (items.length === 0) throw new Error("pickWorst needs at least one item");
+  const first = items[0];
+  const firstState = stateOf(first);
+  let best = { item: first, state: firstState, severity: severityOf(first, firstState) };
+  for (let index = 1; index < items.length; index++) {
+    const item = items[index];
+    const state = stateOf(item);
+    const severity = severityOf(item, state);
+    if (SEVERITY_RANK[severity] > SEVERITY_RANK[best.severity]) best = { item, state, severity };
+  }
+  return best;
+}
 
 /**
  * Pure: reduces an app's queue items to one QueueActivity per key, in order of first appearance. `keyOf`
@@ -187,48 +197,31 @@ export function toActivity<T extends QueueItem>(
   now: number,
   { includeMessages }: { includeMessages: boolean },
 ): QueueActivity[] {
-  const groups = new Map<number, Group<T>>();
+  const groups = new Map<number, { items: T[]; downloads: Set<string> }>();
 
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
+  items.forEach((item, index) => {
     const key = keyOf(item);
-    if (typeof key !== "number" || !Number.isInteger(key) || key <= 0) continue;
-
-    const state = stateOf(item);
-    const severity = severityOf(item, state);
-    const rank = SEVERITY_RANK[severity];
+    if (typeof key !== "number" || !Number.isInteger(key) || key <= 0) return;
     const download = downloadKeyOf(item, index);
     const group = groups.get(key);
-    if (!group) {
-      groups.set(key, {
-        downloads: new Set([download]),
-        winner: item,
-        winnerState: state,
-        winnerSeverity: severity,
-        winnerRank: rank,
-      });
-    } else {
+    if (group) {
+      group.items.push(item);
       group.downloads.add(download);
-      // Strictly higher wins, so on a tie the earlier item in the app's list keeps the slot.
-      if (rank > group.winnerRank) {
-        group.winner = item;
-        group.winnerState = state;
-        group.winnerSeverity = severity;
-        group.winnerRank = rank;
-      }
+    } else {
+      groups.set(key, { items: [item], downloads: new Set([download]) });
     }
-  }
+  });
 
   const activity: QueueActivity[] = [];
   for (const [id, group] of groups) {
-    const { winner } = group;
+    const { item, state, severity } = pickWorst(group.items);
     activity.push({
       id,
-      state: group.winnerState,
-      severity: group.winnerSeverity,
-      progress: progressOf(winner),
-      etaSeconds: etaOf(winner, now),
-      messages: includeMessages ? messagesOf(winner) : [],
+      state,
+      severity,
+      progress: progressOf(item),
+      etaSeconds: etaOf(item, now),
+      messages: includeMessages ? messagesOf(item) : [],
       count: group.downloads.size,
     });
   }
@@ -240,22 +233,13 @@ export function toActivity<T extends QueueItem>(
  * text; requesters get none, because messages can contain server paths.
  */
 export async function listMovieActivity({ includeMessages }: { includeMessages: boolean }): Promise<QueueActivity[]> {
-  const client = radarrClient();
-  const items = await getList("Radarr queue", (signal) =>
-    client.GET("/api/v3/queue/details", { params: { query: { includeMovie: false } }, signal }),
-  );
+  const items = await fetchMovieQueue({ includeMovie: false });
   return toActivity(items, (item) => item.movieId, Date.now(), { includeMessages });
 }
 
 /** Sonarr's download queue with series and episode objects left out, as the summaries never use them. */
 async function sonarrQueue(seriesId?: number): Promise<SonarrQueueResource[]> {
-  const client = sonarrClient();
-  return getList("Sonarr queue", (signal) =>
-    client.GET("/api/v3/queue/details", {
-      params: { query: { seriesId, includeSeries: false, includeEpisode: false } },
-      signal,
-    }),
-  );
+  return fetchEpisodeQueue({ includeSeries: false, includeEpisode: false, seriesId });
 }
 
 /**

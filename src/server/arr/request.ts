@@ -73,3 +73,15 @@ function failureKind(error: unknown): Exclude<ArrFailureKind, "http"> {
   if (error instanceof SyntaxError) return "invalid";
   return "network";
 }
+
+/**
+ * A settled fetch's value, or null when the request to Radarr or Sonarr failed. A failure is logged as `label: message`
+ * and the other side can still show. Anything that isn't an ArrRequestError (a config error, a bug) is rethrown.
+ */
+export function settledOrNull<T>(result: PromiseSettledResult<T | null>, label: string): T | null {
+  if (result.status === "fulfilled") return result.value;
+  if (!(result.reason instanceof ArrRequestError)) throw result.reason;
+  // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+  console.error(`${label}: ${result.reason.message}`);
+  return null;
+}
