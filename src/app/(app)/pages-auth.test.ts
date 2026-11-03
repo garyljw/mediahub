@@ -78,6 +78,7 @@ function startsWithPageCheck(source: string): boolean {
 const BOTH = ["admin", "requester"];
 const PAGE_ROLES: Record<string, string[]> = {
   "page.tsx": BOTH,
+  "add/page.tsx": BOTH,
   "movies/page.tsx": BOTH,
   "tv/page.tsx": BOTH,
   "tv/[id]/page.tsx": BOTH,

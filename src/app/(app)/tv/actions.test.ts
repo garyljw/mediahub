@@ -10,9 +10,12 @@ const mocks = vi.hoisted(() => ({
   lookupSeries: vi.fn(),
   addSeries: vi.fn(),
   listSeriesRootFolders: vi.fn(),
+  getSeriesAddDefaults: vi.fn(),
   searchSeriesReleases: vi.fn(),
   refreshSeries: vi.fn(),
 }));
+
+vi.mock("@/server/settings/add-defaults", () => ({ getSeriesAddDefaults: mocks.getSeriesAddDefaults }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
 vi.mock("@/server/authz", () => {
@@ -73,6 +76,7 @@ beforeEach(() => {
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
   ]);
+  mocks.getSeriesAddDefaults.mockReturnValue({ profileId: null, rootFolderId: null, monitor: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -277,143 +281,284 @@ describe("searchSeries", () => {
 
 const ADD_DENIED = "You don't have permission to add series.";
 
-const VALID_ADD = {
-  tvdbId: 200001,
-  qualityProfileId: 1,
-  rootFolderId: 7,
-  monitor: "all",
-  seriesType: "standard",
-  searchForMissingEpisodes: true,
-};
+const ADDER = { id: "u1", email: "a@example.test", name: "A", role: "requester" };
+const ADMIN = { id: "u1", email: "a@example.test", name: "A", role: "admin" };
+const VALID_ADD = { tvdbId: 200001 };
 
-describe("addLibrarySeries", () => {
+describe("addLibrarySeries authorization", () => {
   beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
     mocks.listSeriesRootFolders.mockResolvedValue([{ id: 7, path: "/invented/tv/", freeSpace: null }]);
-    mocks.addSeries.mockResolvedValue({ title: "Harbour Lights", year: 2018 });
+    mocks.addSeries.mockResolvedValue({ id: 88, title: "Harbour Lights", year: 2018 });
   });
 
-  describe("authorization", () => {
-    it("allows both admin and requester", async () => {
-      mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "requester" } });
-      await expect(addLibrarySeries(VALID_ADD)).resolves.toEqual({ ok: true, title: "Harbour Lights", year: 2018 });
-      expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-    });
-
-    it("rejects a signed-out caller (401) without calling Sonarr", async () => {
-      mocks.requireRole.mockRejectedValue(new AuthzError(401));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: ADD_DENIED });
-      expect(mocks.addSeries).not.toHaveBeenCalled();
-      expect(mocks.listSeriesRootFolders).not.toHaveBeenCalled();
-    });
-
-    it("rethrows errors that are not authorization failures", async () => {
-      mocks.requireRole.mockRejectedValue(new Error("database down"));
-      await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("database down");
-    });
+  it("allows both admin and requester", async () => {
+    await addLibrarySeries(VALID_ADD);
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
   });
 
-  describe("input validation", () => {
-    const invalid: [string, unknown][] = [
-      ["an unknown key", { ...VALID_ADD, title: "Harbour Lights" }],
-      ["a path", { ...VALID_ADD, rootFolderPath: "/invented/tv/" }],
-      ["a bad monitor", { ...VALID_ADD, monitor: "lastSeason" }],
-      ["a monitor that is not offered", { ...VALID_ADD, monitor: "pilot" }],
-      ["a bad series type", { ...VALID_ADD, seriesType: "special" }],
-      ["a missing monitor", { ...VALID_ADD, monitor: undefined }],
-      ["a missing series type", { ...VALID_ADD, seriesType: undefined }],
-      ["a missing search flag", { ...VALID_ADD, searchForMissingEpisodes: undefined }],
-      ["a zero tvdbId", { ...VALID_ADD, tvdbId: 0 }],
-      ["a string root folder id", { ...VALID_ADD, rootFolderId: "7" }],
-      ["a non-boolean search flag", { ...VALID_ADD, searchForMissingEpisodes: "yes" }],
-      ["null", null],
-    ];
-
-    it.each(invalid)("rejects %s without calling Sonarr", async (_name, input) => {
-      expect(await addLibrarySeries(input)).toEqual({ ok: false, error: "Invalid add." });
-      expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
-      expect(mocks.addSeries).not.toHaveBeenCalled();
-      expect(mocks.refresh).not.toHaveBeenCalled();
-    });
+  it("rejects a signed-out caller (401) without calling Sonarr", async () => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: ADD_DENIED });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+    expect(mocks.listSeriesRootFolders).not.toHaveBeenCalled();
   });
 
-  describe("resolution and results", () => {
-    it("refuses an unknown quality profile without adding", async () => {
-      expect(await addLibrarySeries({ ...VALID_ADD, qualityProfileId: 99 })).toEqual({ ok: false, error: "That quality profile no longer exists." });
-      expect(mocks.addSeries).not.toHaveBeenCalled();
-    });
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("database down");
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+  });
+});
 
-    it("refuses an unknown root folder id without adding", async () => {
-      expect(await addLibrarySeries({ ...VALID_ADD, rootFolderId: 99 })).toEqual({ ok: false, error: "That root folder no longer exists." });
-      expect(mocks.addSeries).not.toHaveBeenCalled();
-    });
+describe("addLibrarySeries requester input", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+  });
 
-    it("passes the resolved root folder path, not the id, to addSeries", async () => {
-      await addLibrarySeries(VALID_ADD);
-      expect(mocks.addSeries).toHaveBeenCalledWith({
+  // A requester sends only the TVDB id. Any other key is refused before Sonarr is read.
+  it.each([
+    ["not an object", "series"],
+    ["null", null],
+    ["a missing tvdbId", {}],
+    ["a zero tvdbId", { tvdbId: 0 }],
+    ["a fractional tvdbId", { tvdbId: 1.5 }],
+    ["a string tvdbId", { tvdbId: "200001" }],
+    ["a qualityProfileId", { ...VALID_ADD, qualityProfileId: 1 }],
+    ["a rootFolderId", { ...VALID_ADD, rootFolderId: 7 }],
+    ["a monitor", { ...VALID_ADD, monitor: "none" }],
+    ["a seriesType", { ...VALID_ADD, seriesType: "anime" }],
+    ["a searchForMissingEpisodes flag", { ...VALID_ADD, searchForMissingEpisodes: false }],
+    ["a rootFolderPath", { ...VALID_ADD, rootFolderPath: "/invented/tv/" }],
+    ["a title", { ...VALID_ADD, title: "Chosen Title" }],
+  ])("refuses %s with Invalid add. and never calls Sonarr", async (_name, input) => {
+    expect(await addLibrarySeries(input)).toEqual({ ok: false, error: "Invalid add." });
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.listSeriesRootFolders).not.toHaveBeenCalled();
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("addLibrarySeries admin input", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADMIN });
+  });
+
+  // Every field the panel shows is required. Each one missing, or any extra key, is refused.
+  const full = {
+    tvdbId: 200001,
+    qualityProfileId: 1,
+    rootFolderId: 7,
+    monitor: "missing",
+    seriesType: "anime",
+    seasonFolder: false,
+    searchForMissingEpisodes: false,
+  };
+  const without = (key: string) => {
+    const copy: Record<string, unknown> = { ...full };
+    delete copy[key];
+    return copy;
+  };
+
+  it.each([
+    ["a missing tvdbId", without("tvdbId")],
+    ["a missing qualityProfileId", without("qualityProfileId")],
+    ["a missing rootFolderId", without("rootFolderId")],
+    ["a missing monitor", without("monitor")],
+    ["a missing seriesType", without("seriesType")],
+    ["a missing seasonFolder", without("seasonFolder")],
+    ["a missing searchForMissingEpisodes", without("searchForMissingEpisodes")],
+    ["a monitor that is not offered", { ...full, monitor: "pilot" }],
+    ["a bad series type", { ...full, seriesType: "special" }],
+    ["a string seasonFolder", { ...full, seasonFolder: "false" }],
+    ["a string profile id", { ...full, qualityProfileId: "1" }],
+    ["a rootFolderPath", { ...full, rootFolderPath: "/invented/tv/" }],
+    ["null", null],
+  ])("refuses %s with Invalid add. and never calls Sonarr", async (_name, input) => {
+    expect(await addLibrarySeries(input)).toEqual({ ok: false, error: "Invalid add." });
+    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+  });
+});
+
+describe("addLibrarySeries for a requester", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADDER });
+    mocks.listSeriesRootFolders.mockResolvedValue([
+      { id: 7, path: "/invented/tv/", freeSpace: null },
+      { id: 8, path: "/invented/other-tv/", freeSpace: null },
+    ]);
+    mocks.addSeries.mockResolvedValue({ id: 88, title: "Harbour Lights", year: 2018 });
+  });
+
+  it("adds with the saved profile, folder and monitor, standard type, and search on", async () => {
+    mocks.getSeriesAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 8, monitor: "missing" });
+
+    await addLibrarySeries(VALID_ADD);
+
+    expect(mocks.addSeries).toHaveBeenCalledWith(
+      {
         tvdbId: 200001,
-        qualityProfileId: 1,
-        rootFolderPath: "/invented/tv/",
-        monitor: "all",
+        qualityProfileId: 2,
+        rootFolderPath: "/invented/other-tv/",
+        monitor: "missing",
         seriesType: "standard",
+        seasonFolder: true,
         searchForMissingEpisodes: true,
-      }, expect.any(Function));
-    });
+      },
+      expect.any(Function),
+    );
+  });
 
-    it("refreshes after a successful add", async () => {
-      await addLibrarySeries(VALID_ADD);
-      expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    });
+  it("uses the monitor default of all when no monitor is saved", async () => {
+    mocks.getSeriesAddDefaults.mockReturnValue({ profileId: null, rootFolderId: null, monitor: null });
 
-    it("maps an exists error to the library message and does not refresh", async () => {
-      mocks.addSeries.mockRejectedValue(new SeriesAddError("exists"));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "That series is already in your library." });
-      expect(mocks.refresh).not.toHaveBeenCalled();
-    });
+    await addLibrarySeries(VALID_ADD);
 
-    it("maps a not-found error to the Sonarr message and does not refresh", async () => {
-      mocks.addSeries.mockRejectedValue(new SeriesAddError("not-found"));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr couldn't find that series." });
-      expect(mocks.refresh).not.toHaveBeenCalled();
-    });
+    expect(mocks.addSeries.mock.calls[0][0]).toMatchObject({ monitor: "all", seriesType: "standard", searchForMissingEpisodes: true });
+  });
 
-    it("gives the friendly error and logs the safe message when Sonarr rejects the add", async () => {
-      mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series add request failed: HTTP 400", "http", 400));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
-      expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: HTTP 400");
-    });
+  it("falls back to the first profile and folder when the saved ids are stale", async () => {
+    mocks.getSeriesAddDefaults.mockReturnValue({ profileId: 99, rootFolderId: 99, monitor: "none" });
 
-    it("gives the friendly error when the root folder list cannot be fetched", async () => {
-      mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: HTTP 500", "http", 500));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
-      expect(mocks.addSeries).not.toHaveBeenCalled();
-    });
+    await addLibrarySeries(VALID_ADD);
 
-    it("says the series may still have been added when the add times out, and logs the safe message", async () => {
-      mocks.addSeries.mockImplementation(async (_add: unknown, onSend: () => void) => {
-        onSend();
-        throw new ArrRequestError("Sonarr series add request failed: timed out", "timeout");
-      });
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({
-        ok: false,
-        error: "Sonarr took too long to answer. The series may still have been added, so reload the page to check.",
-      });
-      expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: timed out");
-    });
+    expect(mocks.addSeries.mock.calls[0][0]).toMatchObject({ qualityProfileId: 1, rootFolderPath: "/invented/tv/", monitor: "none" });
+  });
 
-    it("does not claim the series may have been added when the lookup before the add timed out", async () => {
-      mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series lookup request failed: timed out", "timeout"));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
-    });
+  it("returns the new id, title and year, then refreshes", async () => {
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: true, id: 88, title: "Harbour Lights", year: 2018 });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
 
-    it("does not claim the series may have been added when only the folder read timed out", async () => {
-      mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: timed out", "timeout"));
-      expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+  it("refuses when Sonarr has no root folders, without adding", async () => {
+    mocks.listSeriesRootFolders.mockResolvedValue([]);
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({
+      ok: false,
+      error: "Sonarr has no root folders set up, so series can't be added yet.",
     });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
 
-    it("rethrows errors that are not Sonarr request failures", async () => {
-      mocks.addSeries.mockRejectedValue(new Error("unexpected"));
-      await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("unexpected");
+  it("refuses when Sonarr has no quality profiles, without adding", async () => {
+    mocks.listSeriesQualityProfiles.mockResolvedValue([]);
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({
+      ok: false,
+      error: "Sonarr has no quality profiles set up, so series can't be added yet.",
     });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+  });
+
+  it("maps an exists error to the library message and does not refresh", async () => {
+    mocks.addSeries.mockRejectedValue(new SeriesAddError("exists"));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "That series is already in your library." });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("maps a not-found error to the Sonarr message and does not refresh", async () => {
+    mocks.addSeries.mockRejectedValue(new SeriesAddError("not-found"));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr couldn't find that series." });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("gives the friendly error and logs the safe message when Sonarr rejects the add", async () => {
+    mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series add request failed: HTTP 400", "http", 400));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+    expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: HTTP 400");
+  });
+
+  it("gives the friendly error when the root folder list cannot be fetched", async () => {
+    mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: HTTP 500", "http", 500));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+  });
+
+  it("says the series may still have been added when the add times out, and logs the safe message", async () => {
+    mocks.addSeries.mockImplementation(async (_add: unknown, onSend: () => void) => {
+      onSend();
+      throw new ArrRequestError("Sonarr series add request failed: timed out", "timeout");
+    });
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({
+      ok: false,
+      error: "Sonarr took too long to answer. The series may still have been added, so reload the page to check.",
+    });
+    expect(console.error).toHaveBeenCalledWith("Series add: Sonarr series add request failed: timed out");
+  });
+
+  it("does not claim the series may have been added when the lookup before the add timed out", async () => {
+    mocks.addSeries.mockRejectedValue(new ArrRequestError("Sonarr series lookup request failed: timed out", "timeout"));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+  });
+
+  it("does not claim the series may have been added when only the folder read timed out", async () => {
+    mocks.listSeriesRootFolders.mockRejectedValue(new ArrRequestError("Sonarr root folder request failed: timed out", "timeout"));
+    expect(await addLibrarySeries(VALID_ADD)).toEqual({ ok: false, error: "Sonarr didn't accept the series. Try again." });
+  });
+
+  it("rethrows errors that are not Sonarr request failures", async () => {
+    mocks.addSeries.mockRejectedValue(new Error("unexpected"));
+    await expect(addLibrarySeries(VALID_ADD)).rejects.toThrow("unexpected");
+  });
+});
+
+describe("addLibrarySeries for an admin", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADMIN });
+    mocks.listSeriesRootFolders.mockResolvedValue([
+      { id: 7, path: "/invented/tv/", freeSpace: null },
+      { id: 8, path: "/invented/other-tv/", freeSpace: null },
+    ]);
+    mocks.addSeries.mockResolvedValue({ id: 89, title: "Harbour Lights", year: 2018 });
+  });
+
+  const chosen = {
+    tvdbId: 200001,
+    qualityProfileId: 1,
+    rootFolderId: 8,
+    monitor: "missing",
+    seriesType: "anime",
+    seasonFolder: false,
+    searchForMissingEpisodes: false,
+  };
+
+  it("adds with every chosen value and returns the new id", async () => {
+    mocks.getSeriesAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 7, monitor: "future" });
+    expect(await addLibrarySeries(chosen)).toEqual({ ok: true, id: 89, title: "Harbour Lights", year: 2018 });
+    expect(mocks.addSeries.mock.calls[0][0]).toStrictEqual({
+      tvdbId: 200001,
+      qualityProfileId: 1,
+      rootFolderPath: "/invented/other-tv/",
+      monitor: "missing",
+      seriesType: "anime",
+      seasonFolder: false,
+      searchForMissingEpisodes: false,
+    });
+  });
+
+  it("does not use the saved defaults when the admin sends choices", async () => {
+    mocks.getSeriesAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 8, monitor: "none" });
+    await addLibrarySeries({ ...chosen, qualityProfileId: 1, rootFolderId: 7, monitor: "all" });
+    expect(mocks.addSeries.mock.calls[0][0]).toMatchObject({ qualityProfileId: 1, rootFolderPath: "/invented/tv/", monitor: "all" });
+  });
+
+  it("refuses an unknown quality profile without adding", async () => {
+    expect(await addLibrarySeries({ ...chosen, qualityProfileId: 99 })).toEqual({
+      ok: false,
+      error: "That quality profile no longer exists.",
+    });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown root folder without adding", async () => {
+    expect(await addLibrarySeries({ ...chosen, rootFolderId: 99 })).toEqual({
+      ok: false,
+      error: "That root folder no longer exists.",
+    });
+    expect(mocks.addSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
 

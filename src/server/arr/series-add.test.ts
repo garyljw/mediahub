@@ -167,6 +167,7 @@ describe("seriesAddBody", () => {
     rootFolderPath: "/invented/tv/",
     monitor: "all",
     seriesType: "standard",
+    seasonFolder: true,
     searchForMissingEpisodes: true,
   };
 
@@ -184,6 +185,10 @@ describe("seriesAddBody", () => {
       monitorNewItems: "all",
       addOptions: { monitor: "all", searchForMissingEpisodes: true, searchForCutoffUnmetEpisodes: false },
     });
+  });
+
+  it("sends the season folder choice from the add", () => {
+    expect(seriesAddBody({ ...add, seasonFolder: false }, { title: "X", titleSlug: null, year: null }).seasonFolder).toBe(false);
   });
 
   it("maps monitor none to unmonitored series and new items, and leaves out unknown year and slug", () => {
@@ -208,6 +213,7 @@ describe("addSeries", () => {
     rootFolderPath: "/invented/tv/",
     monitor: "future",
     seriesType: "anime",
+    seasonFolder: false,
     searchForMissingEpisodes: false,
   };
   const lookupHit = { tvdbId: 200001, title: "Harbour Lights", year: 2018, titleSlug: "harbour-lights" } as SeriesResource;
@@ -259,13 +265,28 @@ describe("addSeries", () => {
       .mockResolvedValueOnce({ data: [], response: new Response(null, { status: 200 }) });
     clientMock.POST.mockResolvedValue({ data: {}, response: new Response(null, { status: 201 }) });
 
-    await expect(addSeries(add)).resolves.toEqual({ title: "Harbour Lights", year: 2018 });
+    await expect(addSeries(add)).resolves.toEqual({ id: null, title: "Harbour Lights", year: 2018 });
 
     expect(clientMock.GET.mock.calls[0][1].params.query).toEqual({ term: "tvdb:200001" });
     expect(clientMock.GET.mock.calls[1][1].params.query).toEqual({ tvdbId: 200001 });
     expect(clientMock.POST.mock.calls[0][1].body).toStrictEqual(
       seriesAddBody(add, { title: "Harbour Lights", titleSlug: "harbour-lights", year: 2018 }),
     );
+  });
+
+  it.each([
+    ["a positive id", { id: 88 }, 88],
+    ["a zero id", { id: 0 }, null],
+    ["a fractional id", { id: 2.5 }, null],
+    ["a string id", { id: "88" }, null],
+    ["no id", {}, null],
+  ])("returns the new Sonarr id from the add reply when it is %s", async (_name, reply, expected) => {
+    clientMock.GET
+      .mockResolvedValueOnce({ data: [lookupHit], response: new Response(null, { status: 200 }) })
+      .mockResolvedValueOnce({ data: [], response: new Response(null, { status: 200 }) });
+    clientMock.POST.mockResolvedValue({ data: reply, response: new Response(null, { status: 201 }) });
+
+    await expect(addSeries(add)).resolves.toEqual({ id: expected, title: "Harbour Lights", year: 2018 });
   });
 });
 

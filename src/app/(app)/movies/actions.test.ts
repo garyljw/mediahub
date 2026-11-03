@@ -11,9 +11,12 @@ const mocks = vi.hoisted(() => ({
   searchMovieReleases: vi.fn(),
   refreshMovies: vi.fn(),
   listRootFolders: vi.fn(),
+  getMovieAddDefaults: vi.fn(),
   searchReleases: vi.fn(),
   grabRelease: vi.fn(),
 }));
+
+vi.mock("@/server/settings/add-defaults", () => ({ getMovieAddDefaults: mocks.getMovieAddDefaults }));
 
 // AuthzError must be a real class: the action checks `instanceof AuthzError`.
 vi.mock("@/server/authz", () => {
@@ -91,6 +94,7 @@ beforeEach(() => {
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
   ]);
+  mocks.getMovieAddDefaults.mockReturnValue({ profileId: null, rootFolderId: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -238,8 +242,9 @@ describe("removeMovies deletes", () => {
 });
 
 const ADDER = { id: "u1", email: "a@example.test", name: "A", role: "requester" };
+const ADMIN = { id: "u1", email: "a@example.test", name: "A", role: "admin" };
 const ADD_DENIED = "You don't have permission to add movies.";
-const validAdd = { tmdbId: 910001, qualityProfileId: 1, rootFolderId: 7, monitored: true, searchForMovie: true };
+const validAdd = { tmdbId: 910001 };
 
 describe("searchMovies", () => {
   beforeEach(() => {
@@ -299,7 +304,7 @@ describe("addLibraryMovie authorization", () => {
   beforeEach(() => {
     mocks.requireRole.mockResolvedValue({ user: ADDER });
     mocks.listRootFolders.mockResolvedValue([{ id: 7, path: "/invented/movies/", freeSpace: 1 }]);
-    mocks.addMovie.mockResolvedValue({ title: "Lantern Harbour", year: 2021 });
+    mocks.addMovie.mockResolvedValue({ id: 42, title: "Lantern Harbour", year: 2021 });
   });
 
   it("allows both admin and requester", async () => {
@@ -323,41 +328,27 @@ describe("addLibraryMovie authorization", () => {
   });
 });
 
-describe("addLibraryMovie input validation", () => {
+describe("addLibraryMovie requester input", () => {
   beforeEach(() => {
     mocks.requireRole.mockResolvedValue({ user: ADDER });
   });
 
-  const without = (key: string) => {
-    const copy: Record<string, unknown> = { ...validAdd };
-    delete copy[key];
-    return copy;
-  };
-
-  const invalid: [string, unknown][] = [
+  // A requester sends only the TMDB id. Any other key is refused before Radarr is read.
+  it.each([
     ["not an object", "movie"],
     ["null", null],
-    ["a missing tmdbId", without("tmdbId")],
-    ["a missing qualityProfileId", without("qualityProfileId")],
-    ["a missing rootFolderId", without("rootFolderId")],
-    ["a missing monitored", without("monitored")],
-    ["a missing searchForMovie", without("searchForMovie")],
-    ["a string boolean for monitored", { ...validAdd, monitored: "true" }],
-    ["a string boolean for searchForMovie", { ...validAdd, searchForMovie: "false" }],
-    ["a zero tmdbId", { ...validAdd, tmdbId: 0 }],
-    ["a fractional tmdbId", { ...validAdd, tmdbId: 1.5 }],
-    ["a string tmdbId", { ...validAdd, tmdbId: "910001" }],
-    ["a negative profile id", { ...validAdd, qualityProfileId: -1 }],
-    ["a zero root folder id", { ...validAdd, rootFolderId: 0 }],
-    ["a string root folder id", { ...validAdd, rootFolderId: "7" }],
-    ["a rootFolderPath key", { ...validAdd, rootFolderPath: "/invented/movies/" }],
-    ["a title key", { ...validAdd, title: "Chosen Title" }],
-    ["a string rootFolderPath instead of an id", { tmdbId: 910001, qualityProfileId: 1, rootFolderPath: "/invented/movies/", monitored: true, searchForMovie: true }],
-  ];
-
-  it.each(invalid)("rejects %s without calling Radarr", async (_name, input) => {
-    const result = await addLibraryMovie(input);
-    expect(result).toEqual({ ok: false, error: "Invalid add." });
+    ["a missing tmdbId", {}],
+    ["a zero tmdbId", { tmdbId: 0 }],
+    ["a fractional tmdbId", { tmdbId: 1.5 }],
+    ["a string tmdbId", { tmdbId: "910001" }],
+    ["a qualityProfileId", { ...validAdd, qualityProfileId: 1 }],
+    ["a rootFolderId", { ...validAdd, rootFolderId: 7 }],
+    ["a monitored flag", { ...validAdd, monitored: false }],
+    ["a searchForMovie flag", { ...validAdd, searchForMovie: false }],
+    ["a rootFolderPath", { ...validAdd, rootFolderPath: "/invented/movies/" }],
+    ["a title", { ...validAdd, title: "Chosen Title" }],
+  ])("refuses %s with Invalid add. and never calls Radarr", async (_name, input) => {
+    expect(await addLibraryMovie(input)).toEqual({ ok: false, error: "Invalid add." });
     expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
     expect(mocks.listRootFolders).not.toHaveBeenCalled();
     expect(mocks.addMovie).not.toHaveBeenCalled();
@@ -365,74 +356,116 @@ describe("addLibraryMovie input validation", () => {
   });
 });
 
-describe("addLibraryMovie resolution and results", () => {
+describe("addLibraryMovie admin input", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADMIN });
+  });
+
+  // Every field the panel shows is required. Each one missing, or any extra key, is refused.
+  const full = { tmdbId: 910001, qualityProfileId: 1, rootFolderId: 7, monitored: true, searchForMovie: true };
+  const without = (key: string) => {
+    const copy: Record<string, unknown> = { ...full };
+    delete copy[key];
+    return copy;
+  };
+
+  it.each([
+    ["a missing tmdbId", without("tmdbId")],
+    ["a missing qualityProfileId", without("qualityProfileId")],
+    ["a missing rootFolderId", without("rootFolderId")],
+    ["a missing monitored", without("monitored")],
+    ["a missing searchForMovie", without("searchForMovie")],
+    ["a string profile id", { ...full, qualityProfileId: "1" }],
+    ["a zero root folder id", { ...full, rootFolderId: 0 }],
+    ["a string monitored", { ...full, monitored: "true" }],
+    ["a rootFolderPath", { ...full, rootFolderPath: "/invented/movies/" }],
+    ["a title", { ...full, title: "Chosen Title" }],
+    ["null", null],
+  ])("refuses %s with Invalid add. and never calls Radarr", async (_name, input) => {
+    expect(await addLibraryMovie(input)).toEqual({ ok: false, error: "Invalid add." });
+    expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+  });
+});
+
+describe("addLibraryMovie for a requester", () => {
   beforeEach(() => {
     mocks.requireRole.mockResolvedValue({ user: ADDER });
-    mocks.listQualityProfiles.mockResolvedValue([{ id: 1, name: "HD-1080p" }]);
     mocks.listRootFolders.mockResolvedValue([
       { id: 7, path: "/invented/movies/", freeSpace: 1 },
       { id: 8, path: "/invented/other/", freeSpace: 2 },
     ]);
-    mocks.addMovie.mockResolvedValue({ title: "Lantern Harbour", year: 2021 });
+    mocks.addMovie.mockResolvedValue({ id: 42, title: "Lantern Harbour", year: 2021 });
   });
 
-  it("refuses an unknown quality profile without adding", async () => {
-    const result = await addLibraryMovie({ ...validAdd, qualityProfileId: 99 });
-    expect(result).toEqual({ ok: false, error: "That quality profile no longer exists." });
-    expect(mocks.addMovie).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
+  it("adds with the saved profile and folder, monitored, with search on", async () => {
+    mocks.getMovieAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 8 });
+
+    await addLibraryMovie(validAdd);
+
+    expect(mocks.addMovie).toHaveBeenCalledWith(
+      { tmdbId: 910001, qualityProfileId: 2, rootFolderPath: "/invented/other/", monitored: true, searchForMovie: true },
+      expect.any(Function),
+    );
   });
 
-  it("refuses an unknown root folder id without adding", async () => {
-    const result = await addLibraryMovie({ ...validAdd, rootFolderId: 99 });
-    expect(result).toEqual({ ok: false, error: "That root folder no longer exists." });
-    expect(mocks.addMovie).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
+  it("falls back to the first profile and folder when the saved ids are stale", async () => {
+    mocks.getMovieAddDefaults.mockReturnValue({ profileId: 99, rootFolderId: 99 });
+
+    await addLibraryMovie(validAdd);
+
+    expect(mocks.addMovie).toHaveBeenCalledWith(
+      { tmdbId: 910001, qualityProfileId: 1, rootFolderPath: "/invented/movies/", monitored: true, searchForMovie: true },
+      expect.any(Function),
+    );
   });
 
-  it("passes the resolved root folder path, not the id, to addMovie", async () => {
-    await addLibraryMovie({ ...validAdd, rootFolderId: 8, monitored: false, searchForMovie: false });
-    expect(mocks.addMovie).toHaveBeenCalledWith({
-      tmdbId: 910001,
-      qualityProfileId: 1,
-      rootFolderPath: "/invented/other/",
-      monitored: false,
-      searchForMovie: false,
-    }, expect.any(Function));
-  });
-
-  it("returns the title and year from addMovie, then refreshes", async () => {
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: true, title: "Lantern Harbour", year: 2021 });
+  it("returns the new id, title and year, then refreshes", async () => {
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: true, id: 42, title: "Lantern Harbour", year: 2021 });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses when Radarr has no root folders, without adding", async () => {
+    mocks.listRootFolders.mockResolvedValue([]);
+    expect(await addLibraryMovie(validAdd)).toEqual({
+      ok: false,
+      error: "Radarr has no root folders set up, so movies can't be added yet.",
+    });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refuses when Radarr has no quality profiles, without adding", async () => {
+    mocks.listQualityProfiles.mockResolvedValue([]);
+    expect(await addLibraryMovie(validAdd)).toEqual({
+      ok: false,
+      error: "Radarr has no quality profiles set up, so movies can't be added yet.",
+    });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 
   it("maps an exists error to the library message and does not refresh", async () => {
     mocks.addMovie.mockRejectedValue(new MovieAddError("exists"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "That movie is already in your library." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "That movie is already in your library." });
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("maps a not-found error to the Radarr message and does not refresh", async () => {
     mocks.addMovie.mockRejectedValue(new MovieAddError("not-found"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "Radarr couldn't find that movie." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr couldn't find that movie." });
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("gives the friendly error and logs the safe message when Radarr fails", async () => {
     mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie add request failed: HTTP 500"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
     expect(console.error).toHaveBeenCalledWith("Movie add: Radarr movie add request failed: HTTP 500");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("gives the friendly error when the root folder list cannot be fetched", async () => {
     mocks.listRootFolders.mockRejectedValue(new ArrRequestError("Radarr root folder request failed: timed out", "timeout"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
     expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 
@@ -441,8 +474,7 @@ describe("addLibraryMovie resolution and results", () => {
       onSend();
       throw new ArrRequestError("Radarr movie add request failed: timed out", "timeout");
     });
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({
+    expect(await addLibraryMovie(validAdd)).toEqual({
       ok: false,
       error: "Radarr took too long to answer. The movie may still have been added, so reload the page to check.",
     });
@@ -452,20 +484,73 @@ describe("addLibraryMovie resolution and results", () => {
 
   it("does not claim the movie may have been added when the lookup before the add timed out", async () => {
     mocks.addMovie.mockRejectedValue(new ArrRequestError("Radarr movie lookup request failed: timed out", "timeout"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
   });
 
   it("does not claim the movie may have been added when only the root folder read timed out", async () => {
     mocks.listRootFolders.mockRejectedValue(new ArrRequestError("Radarr root folder request failed: timed out", "timeout"));
-    const result = await addLibraryMovie(validAdd);
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
+    expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
     expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 
   it("rethrows errors that are not Radarr request failures", async () => {
     mocks.addMovie.mockRejectedValue(new Error("config broken"));
     await expect(addLibraryMovie(validAdd)).rejects.toThrow("config broken");
+  });
+});
+
+describe("addLibraryMovie for an admin", () => {
+  beforeEach(() => {
+    mocks.requireRole.mockResolvedValue({ user: ADMIN });
+    mocks.listRootFolders.mockResolvedValue([
+      { id: 7, path: "/invented/movies/", freeSpace: 1 },
+      { id: 8, path: "/invented/other/", freeSpace: 2 },
+    ]);
+    mocks.addMovie.mockResolvedValue({ id: 43, title: "Lantern Harbour", year: 2021 });
+  });
+
+  const chosen = { tmdbId: 910001, qualityProfileId: 1, rootFolderId: 8, monitored: false, searchForMovie: false };
+
+  it("adds with the chosen profile, folder, monitored and search values", async () => {
+    mocks.getMovieAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 7 });
+    expect(await addLibraryMovie(chosen)).toEqual({ ok: true, id: 43, title: "Lantern Harbour", year: 2021 });
+    expect(mocks.addMovie.mock.calls[0][0]).toStrictEqual({
+      tmdbId: 910001,
+      qualityProfileId: 1,
+      rootFolderPath: "/invented/other/",
+      monitored: false,
+      searchForMovie: false,
+    });
+  });
+
+  it("does not use the saved defaults when the admin sends choices", async () => {
+    mocks.getMovieAddDefaults.mockReturnValue({ profileId: 2, rootFolderId: 7 });
+    await addLibraryMovie({ ...chosen, qualityProfileId: 1, rootFolderId: 7 });
+    expect(mocks.addMovie.mock.calls[0][0]).toMatchObject({ qualityProfileId: 1, rootFolderPath: "/invented/movies/" });
+  });
+
+  it("refuses an unknown quality profile without adding", async () => {
+    expect(await addLibraryMovie({ ...chosen, qualityProfileId: 99 })).toEqual({
+      ok: false,
+      error: "That quality profile no longer exists.",
+    });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown root folder without adding", async () => {
+    expect(await addLibraryMovie({ ...chosen, rootFolderId: 99 })).toEqual({
+      ok: false,
+      error: "That root folder no longer exists.",
+    });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("refuses when Radarr has no root folders, without adding", async () => {
+    mocks.listRootFolders.mockResolvedValue([]);
+    expect(await addLibraryMovie(chosen)).toEqual({ ok: false, error: "That root folder no longer exists." });
+    expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 });
 

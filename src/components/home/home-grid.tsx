@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,10 +29,13 @@ const CHIP_CLASS = "rounded-full border px-3 py-1 text-sm transition-colors focu
 export function HomeGrid({
   items,
   unavailable,
+  action,
 }: {
   items: HomeItem[];
   /** Kinds whose library failed to load. The page already shows an error for each, so no empty-state text is added. */
   unavailable: HomeItem["kind"][];
+  /** Shown at the end of the filter row, e.g. the Add button. */
+  action?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
@@ -68,23 +71,26 @@ export function HomeGrid({
           aria-label="Search your library"
           className="sm:max-w-sm"
         />
-        <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
-          {KIND_CHIPS.map((chip) => (
-            <button
-              key={chip.kind}
-              type="button"
-              aria-pressed={kind === chip.kind}
-              onClick={() => setKind(chip.kind)}
-              className={cn(
-                CHIP_CLASS,
-                kind === chip.kind
-                  ? "border-transparent bg-primary text-primary-foreground"
-                  : "border-border bg-background text-foreground hover:bg-accent",
-              )}
-            >
-              {chip.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+            {KIND_CHIPS.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                aria-pressed={kind === chip.kind}
+                onClick={() => setKind(chip.kind)}
+                className={cn(
+                  CHIP_CLASS,
+                  kind === chip.kind
+                    ? "border-transparent bg-primary text-primary-foreground"
+                    : "border-border bg-background text-foreground hover:bg-accent",
+                )}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          {action}
         </div>
       </div>
 

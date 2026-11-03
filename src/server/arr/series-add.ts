@@ -4,6 +4,7 @@ import { sonarrClient } from "./client";
 import { LOOKUP_IMAGE_TTL_MS, cachedImage } from "@/server/image-cache";
 import { fetchFixedJpeg } from "./poster";
 import { ArrRequestError, arrRequest, getList } from "./request";
+import { positiveIdOrNull } from "./detail-fields";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
@@ -29,6 +30,8 @@ export type SeriesAdd = {
   rootFolderPath: string;
   monitor: SeriesMonitor;
   seriesType: SeriesTypeOption;
+  /** Sonarr's season folders option. */
+  seasonFolder: boolean;
   searchForMissingEpisodes: boolean;
 };
 
@@ -159,7 +162,7 @@ export function seriesAddBody(add: SeriesAdd, found: { title: string; titleSlug:
     qualityProfileId: add.qualityProfileId,
     rootFolderPath: add.rootFolderPath,
     seriesType: add.seriesType,
-    seasonFolder: true,
+    seasonFolder: add.seasonFolder,
     monitored: add.monitor !== "none",
     monitorNewItems: add.monitor === "none" ? "none" : "all",
     addOptions: {
@@ -176,9 +179,13 @@ export function seriesAddBody(add: SeriesAdd, found: { title: string; titleSlug:
 /**
  * Adds one series to Sonarr. Looks the id up again so the title and year come from Sonarr, not from
  * the browser. Refuses a series that is already in the library. `onSend` runs just before the add request
- * goes out, so the caller knows that a later timeout may mean Sonarr added the series.
+ * goes out, so the caller knows that a later timeout may mean Sonarr added the series. `id` is the new
+ * Sonarr series id from the reply, or null when the reply has none.
  */
-export async function addSeries(add: SeriesAdd, onSend: () => void = () => {}): Promise<{ title: string; year: number | null }> {
+export async function addSeries(
+  add: SeriesAdd,
+  onSend: () => void = () => {},
+): Promise<{ id: number | null; title: string; year: number | null }> {
   const client = sonarrClient();
 
   const hits = await getList("Sonarr series lookup", (signal) =>
@@ -197,9 +204,9 @@ export async function addSeries(add: SeriesAdd, onSend: () => void = () => {}): 
 
   const body = seriesAddBody(add, { title, titleSlug, year });
   onSend();
-  await arrRequest("Sonarr series add", (signal) => client.POST("/api/v3/series", { body, signal }));
+  const created = await arrRequest("Sonarr series add", (signal) => client.POST("/api/v3/series", { body, signal }));
 
-  return { title, year };
+  return { id: positiveIdOrNull(created?.id), title, year };
 }
 
 /**

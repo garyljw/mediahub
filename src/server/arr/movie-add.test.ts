@@ -191,8 +191,25 @@ describe("addMovie", () => {
       .mockResolvedValueOnce({ data: [], response: new Response(null, { status: 200 }) });
     clientMock.POST.mockResolvedValue({ data: {}, response: new Response(null, { status: 201 }) });
 
-    await expect(addMovie(add)).resolves.toEqual({ title: "Lantern Harbour", year: 2021 });
+    await expect(addMovie(add)).resolves.toEqual({ id: null, title: "Lantern Harbour", year: 2021 });
     expect(clientMock.POST.mock.calls[0][1].body).toStrictEqual(movieAddBody(add, "Lantern Harbour", 2021));
+  });
+
+  it.each([
+    ["a positive id", { id: 77 }, 77],
+    ["a zero id", { id: 0 }, null],
+    ["a negative id", { id: -3 }, null],
+    ["a fractional id", { id: 1.5 }, null],
+    ["an id above the safe integer range", { id: Number.MAX_SAFE_INTEGER + 2 }, null],
+    ["a string id", { id: "77" }, null],
+    ["no id", {}, null],
+  ])("returns the new Radarr id from the add reply when it is %s", async (_name, reply, expected) => {
+    clientMock.GET
+      .mockResolvedValueOnce({ data: { title: "Lantern Harbour", year: 2021 }, response: new Response(null, { status: 200 }) })
+      .mockResolvedValueOnce({ data: [], response: new Response(null, { status: 200 }) });
+    clientMock.POST.mockResolvedValue({ data: reply, response: new Response(null, { status: 201 }) });
+
+    await expect(addMovie(add)).resolves.toEqual({ id: expected, title: "Lantern Harbour", year: 2021 });
   });
 });
 

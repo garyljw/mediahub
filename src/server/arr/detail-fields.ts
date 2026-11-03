@@ -1,7 +1,7 @@
 import "server-only";
 
-// Field checks shared by the movie and series page mappers (movie-detail.ts, series-detail.ts), so both apply the
-// same rules to Radarr's and Sonarr's optional fields.
+// Field checks shared by the movie and series page mappers (movie-detail.ts, series-detail.ts) and the add replies
+// (movie-add.ts, series-add.ts), so all apply the same rules to Radarr's and Sonarr's optional fields.
 
 /** Most genres shown on an item page. Radarr and Sonarr can send more; the header only has room for a few. */
 const MAX_GENRES = 5;
@@ -30,7 +30,7 @@ export function imdbIdOrNull(value: string | null | undefined): string | null {
   return typeof value === "string" && IMDB_ID.test(value) ? value : null;
 }
 
-/** A positive integer id (TMDB, TVDB), otherwise null. */
+/** A positive safe-integer id (TMDB, TVDB, or a new library id from an add reply), otherwise null. Never guessed. */
 export function positiveIdOrNull(value: number | undefined): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
 }

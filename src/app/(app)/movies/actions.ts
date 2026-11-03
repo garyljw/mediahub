@@ -17,6 +17,8 @@ import {
   type LookupResult,
 } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
+import { getMovieAddDefaults } from "@/server/settings/add-defaults";
+import { resolveAddTarget } from "@/server/settings/add-target";
 import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases } from "@/server/arr/releases";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
@@ -110,11 +112,16 @@ export async function searchMovies(input: unknown): Promise<SearchResult> {
   }
 }
 
-export type AddResult = { ok: true; title: string; year: number | null } | { ok: false; error: string };
+export type AddResult = { ok: true; id: number | null; title: string; year: number | null } | { ok: false; error: string };
 
-// Only ids and booleans cross from the browser. The root folder is an id too: the server resolves it
-// to a path itself, so no path or title is ever accepted from the client.
-const MovieAddInput = z.strictObject({
+// Requesters send only the TMDB id. strictObject rejects any other key, so a requester cannot pick a profile,
+// a folder or monitoring.
+const RequesterMovieAddInput = z.strictObject({
+  tmdbId: z.number().int().positive(),
+});
+
+// Admins send every choice the add panel shows. All fields are required, and strictObject rejects any other key.
+const AdminMovieAddInput = z.strictObject({
   tmdbId: z.number().int().positive(),
   qualityProfileId: z.number().int().positive(),
   rootFolderId: z.number().int().positive(),
@@ -122,39 +129,82 @@ const MovieAddInput = z.strictObject({
   searchForMovie: z.boolean(),
 });
 
+/** One add, as the action sees it after the role check. The requested ids are set for an admin only. */
+type MovieAddRequest = {
+  tmdbId: number;
+  requestedProfileId?: number;
+  requestedRootFolderId?: number;
+  monitored: boolean;
+  searchForMovie: boolean;
+};
+
 /**
- * Adds one TMDB movie to the Radarr library (admin and requester). Same shape as the other actions:
- * the role check runs first inside try, and the catch always returns or throws.
+ * Adds one TMDB movie to the Radarr library. A requester sends only the TMDB id, and the saved Add defaults
+ * decide the profile and folder (or the first item when those are missing), with the movie monitored and search on.
+ * An admin also sends the profile, folder, monitored and search choices. Same shape as the other actions: the role
+ * check runs first inside try, and the catch always returns or throws.
  */
 export async function addLibraryMovie(input: unknown): Promise<AddResult> {
   try {
-    await requireRole("admin", "requester");
+    const { user } = await requireRole("admin", "requester");
+    return await addLibraryMovieAs(user.role === "admin", input);
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to add movies." };
     throw error;
   }
+}
 
-  const parsed = MovieAddInput.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid add." };
-  const { tmdbId, qualityProfileId, rootFolderId, monitored, searchForMovie } = parsed.data;
+/** The add itself, once the role is known. The role check above has already run. */
+async function addLibraryMovieAs(isAdmin: boolean, input: unknown): Promise<AddResult> {
+  let request: MovieAddRequest;
+  if (isAdmin) {
+    const parsed = AdminMovieAddInput.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "Invalid add." };
+    request = {
+      tmdbId: parsed.data.tmdbId,
+      requestedProfileId: parsed.data.qualityProfileId,
+      requestedRootFolderId: parsed.data.rootFolderId,
+      monitored: parsed.data.monitored,
+      searchForMovie: parsed.data.searchForMovie,
+    };
+  } else {
+    const parsed = RequesterMovieAddInput.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "Invalid add." };
+    request = { tmdbId: parsed.data.tmdbId, monitored: true, searchForMovie: true };
+  }
+  const { tmdbId, requestedProfileId, requestedRootFolderId, monitored, searchForMovie } = request;
 
   // Set by addMovie's onSend, just before the add request goes out. Only a timeout after that point can mean
   // Radarr added the movie; a timeout in the lookup or the library check before it cannot.
   let addSent = false;
   try {
     const [profiles, folders] = await Promise.all([listQualityProfiles(), listRootFolders()]);
-    if (!profiles.some((profile) => profile.id === qualityProfileId)) {
-      return { ok: false, error: "That quality profile no longer exists." };
-    }
-    const folder = folders.find((option) => option.id === rootFolderId);
-    if (!folder) return { ok: false, error: "That root folder no longer exists." };
-
-    const added = await addMovie({ tmdbId, qualityProfileId, rootFolderPath: folder.path, monitored, searchForMovie }, () => {
-      addSent = true;
+    const target = resolveAddTarget({
+      app: "Radarr",
+      noun: "movies",
+      profiles,
+      folders,
+      saved: getMovieAddDefaults(),
+      requestedProfileId,
+      requestedRootFolderId,
     });
+    if (!target.ok) return { ok: false, error: target.error };
+
+    const added = await addMovie(
+      {
+        tmdbId,
+        qualityProfileId: target.qualityProfileId,
+        rootFolderPath: target.rootFolderPath,
+        monitored,
+        searchForMovie,
+      },
+      () => {
+        addSent = true;
+      },
+    );
     // The Movies page reads Radarr on every request, so refresh() is enough for the new row to appear.
     refresh();
-    return { ok: true, title: added.title, year: added.year };
+    return { ok: true, id: added.id, title: added.title, year: added.year };
   } catch (error) {
     if (error instanceof MovieAddError) {
       if (error.reason === "exists") return { ok: false, error: "That movie is already in your library." };
