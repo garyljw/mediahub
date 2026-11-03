@@ -25,16 +25,17 @@ import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { z } from "zod";
-import { getAuth, type Auth } from "../src/server/auth";
+import { getAuth } from "../src/server/auth";
 import { ROLES, isRole, type Role } from "../src/server/roles";
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  PasswordSetupError,
+  createRequester,
+  setRequesterPassword,
+} from "../src/server/users";
 
-const MIN_PASSWORD_LENGTH = 12;
-// Matches Better Auth's default emailAndPassword.maxPasswordLength (128). It is
-// hardcoded in better-auth/dist/context/create-context.mjs and not exported, so keep the two in step.
-const MAX_PASSWORD_LENGTH = 128;
 const ADMIN_REFUSAL = "Admins sign in with Plex. Run `npm run reset-plex-admin` to set Plex up again.";
-
-type AuthContext = Awaited<Auth["$context"]>;
 
 function fail(message: string): never {
   console.error(`create-user: ${message}`);
@@ -85,26 +86,6 @@ async function askNewPassword(): Promise<string> {
   return password;
 }
 
-/**
- * Sets a user's password through the credential account: updates the existing
- * account, or creates one if the user has none (a half-created user). Uses
- * Better Auth's own password hasher, so the stored hash matches sign-in.
- */
-async function setCredentialPassword(ctx: AuthContext, userId: string, password: string) {
-  const passwordHash = await ctx.password.hash(password);
-  const credential = await ctx.internalAdapter.findCredentialAccount(userId);
-  if (credential) {
-    await ctx.internalAdapter.updateAccount(credential.id, { password: passwordHash });
-    return;
-  }
-  await ctx.internalAdapter.linkAccount({
-    userId,
-    providerId: "credential",
-    accountId: userId,
-    password: passwordHash,
-  });
-}
-
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -144,10 +125,11 @@ async function main() {
   if (resetPassword) {
     if (!existing) fail("no user with that email. Create them with --role requester.");
     if (isAdminUser(existing.user)) fail(ADMIN_REFUSAL);
-    const userId = existing.user.id;
-    await setCredentialPassword(ctx, userId, await askNewPassword());
-    // Revoke existing sessions so whoever had the old password is signed out.
-    await ctx.internalAdapter.deleteUserSessions(userId);
+    // The shared module also refuses any role other than requester, and signs existing sessions out.
+    const outcome = await setRequesterPassword(ctx, existing.user.id, await askNewPassword());
+    if (!outcome.ok) {
+      fail(outcome.reason === "not-found" ? "no user with that email." : "that user is not a requester, so it cannot be reset here.");
+    }
     console.log(`Password reset for ${email}. Existing sessions were signed out.`);
     return;
   }
@@ -174,25 +156,20 @@ async function main() {
   // Ask for the password before creating anything, so an aborted prompt leaves no user behind.
   const password = await askNewPassword();
 
-  const user = await ctx.internalAdapter.createUser(
-    { email, name, role, emailVerified: false },
-    { method: "email-password" },
-  );
+  // The role is always requester here: admin was refused above.
   try {
-    await setCredentialPassword(ctx, user.id, password);
+    const outcome = await createRequester(ctx, { name, email, password });
+    if (!outcome.ok) fail("a user with that email already exists.");
   } catch (error) {
-    // Without a credential account the user cannot sign in, so remove the partial user.
-    const message = error instanceof Error ? error.message : "unexpected error.";
-    try {
-      await ctx.internalAdapter.deleteUser(user.id);
-    } catch {
-      fail(
-        `password setup failed (${message}) and the partial user ${email} could not be removed. Run --reset-password to repair it, or delete it manually.`,
-      );
+    if (!(error instanceof PasswordSetupError)) throw error;
+    if (error.removed) {
+      fail(`password setup failed (${error.message}). The partial user ${email} was removed; nothing was created.`);
     }
-    fail(`password setup failed (${message}). The partial user ${email} was removed; nothing was created.`);
+    fail(
+      `password setup failed (${error.message}) and the partial user ${email} could not be removed. Run --reset-password to repair it, or delete it manually.`,
+    );
   }
-  console.log(`Created ${role} ${email}.`);
+  console.log(`Created requester ${email}.`);
 }
 
 main().catch((error: unknown) => {
