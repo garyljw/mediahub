@@ -22,7 +22,14 @@ describe("isActive", () => {
   });
 
   it("matches a child route", () => {
-    expect(isActive("/movies/123", "/movies")).toBe(true);
+    expect(isActive("/settings/users", "/settings")).toBe(true);
+  });
+
+  it("highlights Home, not Movies or TV, on an item page", () => {
+    expect(isActive("/movies/123", "/")).toBe(true);
+    expect(isActive("/movies/123", "/movies")).toBe(false);
+    expect(isActive("/tv/45", "/")).toBe(true);
+    expect(isActive("/tv/45", "/tv")).toBe(false);
   });
 
   it("does not match a sibling that only shares a prefix", () => {
@@ -36,6 +43,5 @@ describe("isActive", () => {
   it("matches Home only on the exact root path", () => {
     expect(isActive("/", "/")).toBe(true);
     expect(isActive("/movies", "/")).toBe(false);
-    expect(isActive("/movies/123", "/")).toBe(false);
   });
 });

@@ -110,7 +110,6 @@ export function MovieDetailActions({
           noun={MOVIE}
           max={MAX_BULK_MOVIES}
           appName="Radarr"
-          exclusionLabel="Prevent Radarr from re-adding (add to import exclusions)"
           submit={({ deleteFiles, addExclusion }) => deleteMovie({ movieId, deleteFiles, addImportExclusion: addExclusion })}
           onClose={() => setDeleting(false)}
           onDeleted={() => setDeleting(false)}

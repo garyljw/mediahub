@@ -1,18 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { Badge } from "@/components/ui/badge";
-import { Backdrop } from "@/components/poster/backdrop";
 import { PersonPhoto } from "@/components/poster/person-photo";
-import { PosterTile } from "@/components/poster/poster";
 import { formatAdded, formatSize } from "@/components/library/format";
 import { STATUS_CLASS, STATUS_LABEL } from "@/components/movies/movie-status";
 import { directorsLine, metaLine, ratingsLine } from "@/components/library/detail-format";
-import { ExternalLinks, Fact } from "@/components/library/detail-parts";
+import { ItemPageLayout } from "@/components/library/item-page";
 import { MovieActivity } from "@/components/movies/movie-activity";
 import { MovieDetailActions } from "@/components/movies/movie-detail-actions";
 import { MovieEditForm } from "@/components/movies/movie-edit-form";
-import { MonitoredIcon } from "@/components/tv/series-monitored";
 import { requirePageUser } from "@/server/authz";
 import { ArrRequestError } from "@/server/arr/request";
 import { getMovieDetail, type MovieDetailPage } from "@/server/arr/movie-detail";
@@ -67,67 +62,36 @@ function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean 
   const tmdbUrl = detail.tmdbId === null ? null : `https://www.themoviedb.org/movie/${detail.tmdbId}`;
 
   return (
-    <div className="space-y-6">
-      <Link href="/movies" className="text-sm text-muted-foreground hover:underline">
-        ← Movies
-      </Link>
-
-      <section className="relative overflow-hidden rounded-xl border bg-card">
-        {detail.hasBackdrop && <Backdrop src={`/api/movies/${detail.id}/backdrop`} />}
-        <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-          <div className="w-32 shrink-0 rounded-md shadow-lg sm:w-40 md:w-48">
-            <PosterTile src={detail.hasPoster ? `/api/movies/${detail.id}/poster` : null} />
-          </div>
-          <div className="min-w-0 flex-1 space-y-3">
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              {detail.title}
-              {detail.year !== null && <span className="ml-2 font-normal text-muted-foreground">{detail.year}</span>}
-            </h1>
-            {meta !== null && <p className="text-sm text-muted-foreground">{meta}</p>}
-            {directors !== null && <p className="text-sm">{directors}</p>}
-            {ratings !== null && <p className="text-sm">{ratings}</p>}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              <Badge variant="outline" className={STATUS_CLASS[detail.status]}>
-                {STATUS_LABEL[detail.status]}
-              </Badge>
-              <span className="inline-flex items-center gap-1">
-                <MonitoredIcon monitored={detail.monitored} />
-                <span>{detail.monitored ? "Monitored" : "Unmonitored"}</span>
-              </span>
-              <span className="text-muted-foreground">Profile: {detail.qualityProfile}</span>
-            </div>
-            {detail.overview !== "" && <p className="max-w-prose text-sm">{detail.overview}</p>}
-            <MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />
-            <MovieActivity movieId={detail.id} title={detail.title} />
-          </div>
-        </div>
-      </section>
-
-      <CastRow credits={credits} />
-
-      <section className="space-y-3 rounded-xl border bg-card p-4">
-        <h2 className="text-lg font-semibold">Details</h2>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
-          <Fact label="File quality">{detail.fileQuality ?? "—"}</Fact>
-          <Fact label="Size">{formatSize(detail.sizeOnDisk)}</Fact>
-          <Fact label="Added">{formatAdded(detail.added)}</Fact>
-          <Fact label="In cinemas">{formatAdded(detail.inCinemas)}</Fact>
-          <Fact label="Digital release">{formatAdded(detail.digitalRelease)}</Fact>
-          <Fact label="Physical release">{formatAdded(detail.physicalRelease)}</Fact>
-          <Fact label="Language">{detail.language ?? "—"}</Fact>
-          <Fact label="Studio">{detail.studio ?? "—"}</Fact>
-        </dl>
-        <ExternalLinks
-          links={[
-            { label: "IMDb", url: imdbUrl },
-            { label: "TMDB", url: tmdbUrl },
-          ]}
-        />
-      </section>
-
-      {isAdmin && (
-        <section className="space-y-3 rounded-xl border bg-card p-4">
-          <h2 className="text-lg font-semibold">Settings</h2>
+    <ItemPageLayout
+      title={detail.title}
+      year={detail.year}
+      meta={meta}
+      extraLines={[directors, ratings].filter((line): line is string => line !== null)}
+      backdropSrc={detail.hasBackdrop ? `/api/movies/${detail.id}/backdrop` : null}
+      posterSrc={detail.hasPoster ? `/api/movies/${detail.id}/poster` : null}
+      status={{ label: STATUS_LABEL[detail.status], className: STATUS_CLASS[detail.status] }}
+      monitored={detail.monitored}
+      qualityProfile={detail.qualityProfile}
+      overview={detail.overview}
+      actions={<MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />}
+      activity={<MovieActivity movieId={detail.id} title={detail.title} />}
+      typeSection={<CastRow credits={credits} />}
+      facts={[
+        { label: "Studio", value: detail.studio ?? "—" },
+        { label: "File quality", value: detail.fileQuality ?? "—" },
+        { label: "Size", value: formatSize(detail.sizeOnDisk) },
+        { label: "Added", value: formatAdded(detail.added) },
+        { label: "In cinemas", value: formatAdded(detail.inCinemas) },
+        { label: "Digital release", value: formatAdded(detail.digitalRelease) },
+        { label: "Physical release", value: formatAdded(detail.physicalRelease) },
+        { label: "Language", value: detail.language ?? "—" },
+      ]}
+      links={[
+        { label: "IMDb", url: imdbUrl },
+        { label: "TMDB", url: tmdbUrl },
+      ]}
+      settings={
+        isAdmin ? (
           <MovieEditForm
             movieId={detail.id}
             current={{
@@ -137,9 +101,9 @@ function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean 
             }}
             profiles={profiles}
           />
-        </section>
-      )}
-    </div>
+        ) : null
+      }
+    />
   );
 }
 

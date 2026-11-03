@@ -474,7 +474,6 @@ export function SeriesTable({
           noun={SERIES}
           max={MAX_BULK_SERIES}
           appName="Sonarr"
-          exclusionLabel="Prevent this series from being re-added by import lists"
           submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>
             removeSeries({ seriesIds: ids, deleteFiles, addImportListExclusion: addExclusion, confirmCount })
           }

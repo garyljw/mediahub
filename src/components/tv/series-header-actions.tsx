@@ -90,7 +90,6 @@ export function SeriesHeaderActions({
           noun={SERIES}
           max={MAX_BULK_SERIES}
           appName="Sonarr"
-          exclusionLabel="Prevent this series from being re-added by import lists"
           submit={({ deleteFiles, addExclusion }) =>
             deleteSeriesItem({ seriesId, deleteFiles, addImportListExclusion: addExclusion })
           }

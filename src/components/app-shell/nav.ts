@@ -18,7 +18,11 @@ export function navItemsFor(isAdmin: boolean): NavItem[] {
   return NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly);
 }
 
-/** True for an exact match or a child route, so /movies/123 highlights Movies but /moviesx does not. */
+// A movie or series page, e.g. /movies/123. Its back link goes to Home, so Home is the nav item it highlights.
+const ITEM_PAGE = /^\/(movies|tv)\/[^/]+/;
+
+/** True for an exact match or a child route, so /settings/users highlights Settings but /settingsx does not. Item pages highlight Home. */
 export function isActive(pathname: string, href: string): boolean {
+  if (ITEM_PAGE.test(pathname)) return href === "/";
   return pathname === href || pathname.startsWith(href + "/");
 }
