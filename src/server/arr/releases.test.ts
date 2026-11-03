@@ -10,23 +10,21 @@ type ReleaseResource = RadarrComponents["schemas"]["ReleaseResource"];
 
 const releases = releaseFixture as ReleaseResource[];
 
-const { FAKE_KEY, fakeEnv, testCache } = vi.hoisted(() => {
+const { FAKE_KEY, fakeConnections, testCache } = vi.hoisted(() => {
   const key = "fake-api-key-0123456789abcdefghi"; // 32 chars, not a real secret
   return {
     FAKE_KEY: key,
-    fakeEnv: {
-      RADARR_URL: "http://radarr.test:7878",
-      RADARR_API_KEY: key,
-      SONARR_URL: "http://sonarr.test:8989",
-      SONARR_API_KEY: key,
+    fakeConnections: {
+      radarr: { url: "http://radarr.test:7878", apiKey: key },
+      sonarr: { url: "http://sonarr.test:8989", apiKey: key },
     },
     // Each test gets a fresh cache, so tokens never leak between tests.
     testCache: { current: null as ReleaseCache | null },
   };
 });
 
-vi.mock("@/server/env", () => ({
-  env: () => fakeEnv,
+vi.mock("@/server/settings/connections", () => ({
+  getConnection: (app: "radarr" | "sonarr") => fakeConnections[app],
 }));
 
 vi.mock("./release-cache", async () => {

@@ -12,10 +12,6 @@ function isValidTimeZone(zone: string): boolean {
 }
 
 const schema = z.object({
-  RADARR_URL: z.url(),
-  RADARR_API_KEY: z.string().min(20),
-  SONARR_URL: z.url(),
-  SONARR_API_KEY: z.string().min(20),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   DATABASE_PATH: z.string().min(1).default("./data/mediahub.db"),

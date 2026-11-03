@@ -5,8 +5,8 @@ import lookupFixture from "./__fixtures__/sonarr-series-lookup.json";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
 
-// series-add.ts imports the client, which imports env. The fixed-URL helpers are tested with fetch stubbed.
-vi.mock("@/server/env", () => ({ env: () => ({}) }));
+// series-add.ts imports the client, which reads the saved connections. The fixed-URL helpers are tested with fetch stubbed.
+vi.mock("@/server/settings/connections", () => ({ getConnection: () => null }));
 
 import { ArrRequestError } from "./request";
 import {

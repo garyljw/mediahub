@@ -5,8 +5,8 @@ import lookupFixture from "./__fixtures__/radarr-movie-lookup.json";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 
-// movie-add.ts imports the client, which imports env. Only the pure functions are tested here.
-vi.mock("@/server/env", () => ({ env: () => ({}) }));
+// movie-add.ts imports the client, which reads the saved connections. Only the pure functions are tested here.
+vi.mock("@/server/settings/connections", () => ({ getConnection: () => null }));
 
 import { ArrRequestError } from "./request";
 import {

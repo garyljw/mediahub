@@ -4,6 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { env } from "../env";
+import { assertMigrated } from "./migration-check";
 import { schema } from "./schema";
 
 export type Db = BetterSQLite3Database<typeof schema>;
@@ -31,17 +32,15 @@ function restrictFiles(file: string) {
 }
 
 /**
- * Lazily-created SQLite connection. Nothing touches the file until the first
- * call, so importing this module (or running `next build`) never needs the DB.
- * Schema changes are applied with `npm run db:migrate`, not here.
+ * Opens the SQLite file at DATABASE_PATH with the permissions and pragmas MediaHub
+ * uses. Shared by db() and openDbForMigration().
  *
  * Permissions: a missing parent directory is created with mode 0700. An existing
  * directory is never changed, since its mode is the operator's choice. A missing DB
  * file is created empty with mode 0600 before SQLite opens it, so it is never
  * world-readable, even briefly.
  */
-export function db(): Db {
-  if (instance) return instance;
+function openSqlite(): Database.Database {
   const file = path.resolve(env().DATABASE_PATH);
   const dir = path.dirname(file);
 
@@ -56,7 +55,34 @@ export function db(): Db {
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   restrictFiles(file);
+  return sqlite;
+}
 
+/**
+ * Lazily-created SQLite connection. Nothing touches the file until the first
+ * call, so importing this module (or running `next build`) never needs the DB.
+ * Schema changes are applied with `npm run db:migrate`, not here.
+ *
+ * Throws DB_OUT_OF_DATE when migrations are missing. Nothing is cached in that case,
+ * so the next call checks again and succeeds once the operator has migrated.
+ */
+export function db(): Db {
+  if (instance) return instance;
+  const sqlite = openSqlite();
+  try {
+    assertMigrated(sqlite);
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
   instance = drizzle(sqlite, { schema });
   return instance;
+}
+
+/**
+ * For db:migrate only. Opens the same file without the up-to-date check, because the
+ * migrator is what brings it up to date.
+ */
+export function openDbForMigration(): Db {
+  return drizzle(openSqlite(), { schema });
 }

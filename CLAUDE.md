@@ -9,7 +9,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 
 ## Security rules (non-negotiable)
 1. **API keys never reach the browser.** All Radarr/Sonarr calls live in `src/server/**`, and every file there starts with `import "server-only";`.
-2. **Read config only via `env()` from `src/server/env.ts`.** Never read `process.env` directly elsewhere, and never prefix secrets with `NEXT_PUBLIC_`.
+2. **Read config only via `env()` from `src/server/env.ts` (deployment config) or `src/server/settings/` (Radarr/Sonarr connections, stored in SQLite).** Never read `process.env` directly elsewhere, and never prefix secrets with `NEXT_PUBLIC_`.
 3. **No open pass-through proxy.** Each upstream action is an explicit route handler or server action that:
    - calls `requireRole(...)` first (only `await connection()` may come before it, because it just stops Next prerendering the route),
    - validates input with Zod,
@@ -18,6 +18,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB/TVDB, add, trigger a release search for library movies and for library series, seasons or episodes, view queue/calendar/history; no delete, edit, monitoring changes or settings).
 5. **Never commit real secrets.** `.env.example` holds placeholders only, and real values go in `.env.local`. A gitleaks pre-commit hook enforces this; don't bypass it with `--no-verify`.
 6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`.** Send the key as the `X-Api-Key` header, not as a query parameter.
+7. **Stored API keys are write-only.** Never send a stored Arr key to the browser. Using a stored key with a different URL origin requires the key to be entered again.
 
 ## Conventions
 - Use the generated Radarr/Sonarr types in `src/server/arr/generated/`. Don't hand-write upstream response types or guess endpoints.

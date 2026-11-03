@@ -22,7 +22,7 @@ async function statusFor(
   return { version: data.version, appName: data.appName };
 }
 
-// Build the client outside statusFor's try so env() config errors surface as-is.
+// Build the client outside statusFor's try so an unconfigured app's error surfaces as-is.
 export async function getRadarrStatus(): Promise<ArrStatus> {
   const client = radarrClient();
   return statusFor("Radarr", (signal) => client.GET("/api/v3/system/status", { signal }));

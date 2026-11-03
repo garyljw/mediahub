@@ -18,21 +18,19 @@ const profiles = profileFixture as QualityProfileResource[];
 // A fixed clock: episodes air-dated before this are past, the 2027 one is in the future.
 const NOW = Date.parse("2026-06-01T00:00:00Z");
 
-const { FAKE_KEY, fakeEnv } = vi.hoisted(() => {
+const { FAKE_KEY, fakeConnections } = vi.hoisted(() => {
   const key = "fake-api-key-0123456789abcdefghi"; // 32 chars, not a real secret
   return {
     FAKE_KEY: key,
-    fakeEnv: {
-      RADARR_URL: "http://radarr.test:7878",
-      RADARR_API_KEY: key,
-      SONARR_URL: "http://sonarr.test:8989",
-      SONARR_API_KEY: key,
+    fakeConnections: {
+      radarr: { url: "http://radarr.test:7878", apiKey: key },
+      sonarr: { url: "http://sonarr.test:8989", apiKey: key },
     },
   };
 });
 
-vi.mock("@/server/env", () => ({
-  env: () => fakeEnv,
+vi.mock("@/server/settings/connections", () => ({
+  getConnection: (app: "radarr" | "sonarr") => fakeConnections[app],
 }));
 
 import { getSeriesDetail, toSeriesDetail } from "./series-detail";

@@ -1,26 +1,21 @@
 import "server-only";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { FAKE_KEY, fakeEnv } = vi.hoisted(() => {
+const { FAKE_KEY, fakeConnections } = vi.hoisted(() => {
   const key = "fake-api-key-0123456789abcdefghi"; // 32 chars, not a real secret
   return {
     FAKE_KEY: key,
-    fakeEnv: {
-      RADARR_URL: "http://radarr.test:7878",
-      RADARR_API_KEY: key,
-      SONARR_URL: "http://sonarr.test:8989",
-      SONARR_API_KEY: key,
+    fakeConnections: {
+      radarr: { url: "http://radarr.test:7878", apiKey: key },
+      sonarr: { url: "http://sonarr.test:8989", apiKey: key },
     },
   };
 });
 
-const envMock = vi.hoisted(() => ({ fail: false }));
+const connectionMock = vi.hoisted(() => ({ unset: false }));
 
-vi.mock("@/server/env", () => ({
-  env: () => {
-    if (envMock.fail) throw new Error("Invalid environment configuration: RADARR_URL");
-    return fakeEnv;
-  },
+vi.mock("@/server/settings/connections", () => ({
+  getConnection: (app: "radarr" | "sonarr") => (connectionMock.unset ? null : fakeConnections[app]),
 }));
 
 import { getRadarrStatus, getSonarrStatus } from "./system";
@@ -146,20 +141,28 @@ describe.each([
   });
 });
 
-describe("env errors", () => {
+describe("unconfigured connection", () => {
   afterEach(() => {
-    envMock.fail = false;
+    connectionMock.unset = false;
   });
 
-  it.each(["getRadarrStatus", "getSonarrStatus"] as const)(
-    "%s surfaces config errors instead of reporting a network error",
-    async (fn) => {
-      vi.resetModules(); // drop memoized clients
-      envMock.fail = true;
-      const mod = await import("./system");
+  it.each([
+    ["getRadarrStatus", "Radarr"],
+    ["getSonarrStatus", "Sonarr"],
+  ] as const)("%s rejects with an unconfigured error and sends no request", async (fn, name) => {
+    vi.resetModules(); // drop memoized clients
+    connectionMock.unset = true;
+    const mod = await import("./system");
 
-      await expect(mod[fn]()).rejects.toThrow("Invalid environment configuration");
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
+    const error = await mod[fn]().then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e as Error & { kind?: string },
+    );
+
+    expect(error).toMatchObject({ name: "ArrRequestError", kind: "unconfigured" });
+    expect(error.message).toBe(`${name} isn't set up`);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
