@@ -8,21 +8,23 @@ One web UI for Radarr (movies) and Sonarr (TV), self-hosted on a Synology DS425+
 Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · TanStack Query · Better Auth · SQLite via Drizzle · Zod · Vitest.
 
 ## Security rules (non-negotiable)
-1. **API keys never reach the browser.** All Radarr/Sonarr calls live in `src/server/**`, and every file there starts with `import "server-only";`.
+1. **API keys never reach the browser.** All Radarr/Sonarr and Plex calls live in `src/server/**`, and every file there starts with `import "server-only";`.
 2. **Read config only via `env()` from `src/server/env.ts` (deployment config) or `src/server/settings/` (Radarr/Sonarr connections, stored in SQLite).** Never read `process.env` directly elsewhere, and never prefix secrets with `NEXT_PUBLIC_`.
 3. **No open pass-through proxy.** Each upstream action is an explicit route handler or server action that:
    - calls `requireRole(...)` first (only `await connection()` may come before it, because it just stops Next prerendering the route),
    - validates input with Zod,
    - calls a typed client function,
    - returns only the fields the UI needs.
-4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB/TVDB, add, trigger a release search for library movies and for library series, seasons or episodes, view queue/calendar/history; no delete, edit, monitoring changes or settings).
+4. **Role checks are enforced on the server.** Hiding a button is a UX nicety, not security. Roles are `admin` (everything) and `requester` (browse, search TMDB/TVDB, add, trigger a release search for library movies and for library series, seasons or episodes, view queue/calendar/history; no delete, edit, monitoring changes or settings). Admins sign in only with Plex: the account must own the configured Plex server and match the stored owner account id. Password sign-in is refused for admins.
 5. **Never commit real secrets.** `.env.example` holds placeholders only, and real values go in `.env.local`. A gitleaks pre-commit hook enforces this; don't bypass it with `--no-verify`.
-6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`.** Send the key as the `X-Api-Key` header, not as a query parameter.
+6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`. Don't log Plex tokens.** Send the key as the `X-Api-Key` header, not as a query parameter.
 7. **Stored API keys are write-only.** Never send a stored Arr key to the browser. Using a stored key with a different URL origin requires the key to be entered again.
+8. **Plex sign-in uses Plex's PIN flow with one fixed client id and keeps no Plex token.** The JWT method is for a future Plex data connection only. Never sign anyone in with a stored Plex credential.
 
 ## Conventions
 - Use the generated Radarr/Sonarr types in `src/server/arr/generated/`. Don't hand-write upstream response types or guess endpoints.
 - Don't state how Radarr/Sonarr behave (what a search covers, what a flag changes) in UI text or comments unless it has been checked against their source or a live instance. If it hasn't, leave the claim out.
+- Plex has no generated types: validate plex.tv replies with Zod, keeping only the fields we use, and only rely on fields checked against a live reply.
 - Merge logic goes in `src/server/merge/` as pure functions with Vitest tests that use JSON fixtures in `src/server/merge/__fixtures__/`.
 - Prefer server components. Add `"use client"` only for interactivity.
 - Text that a client component renders must come out identical on the server and in the browser. Don't format it with `Intl`, `toLocaleString` or `toLocaleDateString`: Node and the browser ship different ICU data (Node printed "Sept" where Safari printed "Sep"), which causes hydration errors. Use the helpers in `src/components/library/format.ts`, with dates in UTC. Local times are the exception: format them on the server with `formatLocalDateTime` from `src/server/merge/local-time.ts` in `env().DISPLAY_TIMEZONE`, and pass the finished string to the client.

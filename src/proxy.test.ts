@@ -61,6 +61,12 @@ describe("proxy matcher", () => {
     expect(await matches("/loginhelp")).toBe(true);
   });
 
+  it("excludes the first-run setup pages, exactly /setup and /setup/...", async () => {
+    expect(await matches("/setup")).toBe(false);
+    expect(await matches("/setup/server")).toBe(false);
+    expect(await matches("/setupx")).toBe(true);
+  });
+
   it("excludes auth endpoints, route handlers, Next internals and files", async () => {
     expect(await matches("/api/auth/sign-in/email")).toBe(false);
     expect(await matches("/api/system/status")).toBe(false);

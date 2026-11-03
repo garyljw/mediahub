@@ -1,0 +1,66 @@
+[
+  {
+    "name": "Fake Home Server",
+    "product": "Plex Media Server",
+    "productVersion": "1.00.0.0000-fake",
+    "platform": "Linux",
+    "platformVersion": "fake",
+    "device": "PC",
+    "clientIdentifier": "fakemachineid0123456789abcdef0123456789",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "lastSeenAt": "2026-11-01T00:00:00Z",
+    "provides": "server",
+    "owned": true,
+    "ownerId": 1000001,
+    "home": false,
+    "sourceTitle": null,
+    "accessToken": "fake-server-access-token-0123456789",
+    "publicAddress": "192.0.2.10",
+    "httpsRequired": false,
+    "synced": false,
+    "relay": false,
+    "dnsRebindingProtection": false,
+    "presence": true,
+    "connections": [
+      {
+        "protocol": "https",
+        "address": "192.0.2.10",
+        "port": 32400,
+        "uri": "https://192.0.2.10:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      }
+    ]
+  },
+  {
+    "name": "Fake Friend Server",
+    "product": "Plex Media Server",
+    "clientIdentifier": "fakefriendmachine0123456789abcdef0123",
+    "provides": "server",
+    "owned": false,
+    "ownerId": 1000002,
+    "accessToken": "fake-shared-access-token-0123456789",
+    "connections": [
+      {
+        "protocol": "https",
+        "address": "198.51.100.20",
+        "port": 32400,
+        "uri": "https://198.51.100.20:32400",
+        "local": false,
+        "relay": false,
+        "IPv6": false
+      }
+    ]
+  },
+  {
+    "name": "Fake Living Room Player",
+    "product": "Plex for Fake TV",
+    "clientIdentifier": "fakeplayermachine0123456789abcdef012",
+    "provides": "player",
+    "owned": true,
+    "ownerId": 1000001,
+    "accessToken": null,
+    "connections": []
+  }
+]

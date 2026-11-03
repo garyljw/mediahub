@@ -2,12 +2,13 @@
 // email flow, so this script is the only way to manage accounts.
 //
 // Usage:
-//   npm run create-user -- --email you@example.com --role admin|requester [--name "Name"]
-//   npm run create-user -- --email you@example.com --role admin|requester --set-role
+//   npm run create-user -- --email you@example.com --role requester [--name "Name"]
+//   npm run create-user -- --email you@example.com --role requester --set-role
 //   npm run create-user -- --email you@example.com --reset-password
-//   npm run create-admin -- --email you@example.com          (shortcut for --role admin)
 //
-// --role has no default, so nobody becomes admin by accident.
+// Admins sign in with Plex only, so this script never creates or makes an admin, and never resets an
+// admin's password. To set Plex up again, run `npm run reset-plex-admin`.
+// --role has no default, so a user is never created by accident.
 // Passwords are only read from a hidden interactive prompt, never from argv or env.
 //
 // Why --conditions=react-server (set in package.json): src/server/* imports
@@ -31,12 +32,18 @@ const MIN_PASSWORD_LENGTH = 12;
 // Matches Better Auth's default emailAndPassword.maxPasswordLength (128). It is
 // hardcoded in better-auth/dist/context/create-context.mjs and not exported, so keep the two in step.
 const MAX_PASSWORD_LENGTH = 128;
+const ADMIN_REFUSAL = "Admins sign in with Plex. Run `npm run reset-plex-admin` to set Plex up again.";
 
 type AuthContext = Awaited<Auth["$context"]>;
 
 function fail(message: string): never {
   console.error(`create-user: ${message}`);
   process.exit(1);
+}
+
+/** Role is an additional field, so it is not in the base User type. Read it defensively. */
+function isAdminUser(user: object): boolean {
+  return "role" in user && user.role === "admin";
 }
 
 /** Reads a line from the terminal without echoing it. Rejects if input closes first (Ctrl+D). */
@@ -119,6 +126,7 @@ async function main() {
     fail(`--role must be one of: ${ROLES.join(", ")}.`);
   }
   const role: Role | undefined = roleInput;
+  if (role === "admin") fail(ADMIN_REFUSAL);
   const setRole = values["set-role"];
   const resetPassword = values["reset-password"];
 
@@ -134,7 +142,8 @@ async function main() {
   const existing = await ctx.internalAdapter.findUserByEmail(email);
 
   if (resetPassword) {
-    if (!existing) fail("no user with that email. Create them with --role admin|requester.");
+    if (!existing) fail("no user with that email. Create them with --role requester.");
+    if (isAdminUser(existing.user)) fail(ADMIN_REFUSAL);
     const userId = existing.user.id;
     await setCredentialPassword(ctx, userId, await askNewPassword());
     // Revoke existing sessions so whoever had the old password is signed out.
@@ -149,7 +158,6 @@ async function main() {
         "a user with that email already exists. Use --set-role to change their role, or --reset-password to set a new password.",
       );
     }
-    // Additional fields are not in the base User type, so read role defensively.
     const currentRole: unknown = (existing.user as Record<string, unknown>).role;
     if (currentRole === role) {
       console.log(`${email} already has role ${role}. Nothing to do.`);
