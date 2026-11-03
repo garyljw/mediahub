@@ -34,6 +34,7 @@ import {
   buildSeriesAddRequest,
   defaultSeriesOptions,
   isSeriesInLibrary,
+  type SeriesAddDefaultOptions,
   type SeriesAddOptions,
 } from "./series-add";
 
@@ -50,17 +51,20 @@ function lookupPosterSrc(result: SeriesLookupResult): string | null {
 export function SeriesAddDialog({
   profiles,
   rootFolders,
+  defaults,
 }: {
   profiles: QualityProfileOption[];
   /** null when Sonarr's root folders could not be loaded. Series can't be added then, but search still works. */
   rootFolders: RootFolderOption[] | null;
+  /** The admin's saved defaults. Each one is used only when it is still in the lists. */
+  defaults: SeriesAddDefaultOptions;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SeriesLookupResult[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
-  const [options, setOptions] = useState<SeriesAddOptions>(() => defaultSeriesOptions(profiles, rootFolders));
+  const [options, setOptions] = useState<SeriesAddOptions>(() => defaultSeriesOptions(profiles, rootFolders, defaults));
   // Series added during this opening. They show "In library" even though the search results are older.
   const [addedIds, setAddedIds] = useState<Set<number>>(() => new Set());
   // Several rows can be adding at once, so this is a set, not one id.
@@ -89,7 +93,7 @@ export function SeriesAddDialog({
     setAddedIds(new Set());
     setAddError(null);
     setStatus(null);
-    setOptions(defaultSeriesOptions(profiles, rootFolders));
+    setOptions(defaultSeriesOptions(profiles, rootFolders, defaults));
     setOpen(true);
   }
 

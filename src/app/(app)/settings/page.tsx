@@ -11,6 +11,11 @@ const SECTIONS = [
     title: "Connections",
     description: "Radarr and Sonarr addresses and API keys.",
   },
+  {
+    href: "/settings/add-defaults",
+    title: "Add defaults",
+    description: "Quality profile, root folder and monitoring that new movies and series start with.",
+  },
 ];
 
 export default async function SettingsPage() {

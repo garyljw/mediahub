@@ -26,7 +26,7 @@ import {
 } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
-import { buildAddRequest, defaultOptions, isInLibrary, type AddOptions } from "./movie-add";
+import { buildAddRequest, defaultOptions, isInLibrary, type AddOptions, type MovieAddDefaultOptions } from "./movie-add";
 
 /** A search result's thumbnail, from MediaHub's lookup route. Null when TMDB had no usable poster. */
 function lookupPosterSrc(result: LookupResult): string | null {
@@ -40,17 +40,20 @@ function lookupPosterSrc(result: LookupResult): string | null {
 export function MovieAddDialog({
   profiles,
   rootFolders,
+  defaults,
 }: {
   profiles: QualityProfileOption[];
   /** null when Radarr's root folders could not be loaded. Movies can't be added then, but search still works. */
   rootFolders: RootFolderOption[] | null;
+  /** The admin's saved defaults. Each one is used only when it is still in the lists. */
+  defaults: MovieAddDefaultOptions;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LookupResult[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
-  const [options, setOptions] = useState<AddOptions>(() => defaultOptions(profiles, rootFolders));
+  const [options, setOptions] = useState<AddOptions>(() => defaultOptions(profiles, rootFolders, defaults));
   // Movies added during this opening. They show "In library" even though the search results are older.
   const [addedIds, setAddedIds] = useState<Set<number>>(() => new Set());
   // Several rows can be adding at once, so this is a set, not one id.
@@ -78,7 +81,7 @@ export function MovieAddDialog({
     setAddedIds(new Set());
     setAddError(null);
     setStatus(null);
-    setOptions(defaultOptions(profiles, rootFolders));
+    setOptions(defaultOptions(profiles, rootFolders, defaults));
     setOpen(true);
   }
 

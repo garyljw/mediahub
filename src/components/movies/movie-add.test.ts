@@ -22,6 +22,27 @@ describe("defaultOptions", () => {
   it("selects no root folder when the folder list could not be loaded (null)", () => {
     expect(defaultOptions(profiles, null)).toEqual({ profileId: 4, rootFolderId: null, monitored: true, searchForMovie: true });
   });
+
+  it("uses the saved profile and root folder when they are in the lists", () => {
+    expect(defaultOptions(profiles, folders, { profileId: 2, rootFolderId: 8 })).toEqual({
+      profileId: 2,
+      rootFolderId: 8,
+      monitored: true,
+      searchForMovie: true,
+    });
+  });
+
+  it("falls back to the first of each when the saved ids are missing from the lists", () => {
+    expect(defaultOptions(profiles, folders, { profileId: 99, rootFolderId: 99 })).toMatchObject({ profileId: 4, rootFolderId: 7 });
+  });
+
+  it("falls back to the first of each when no defaults are saved (null ids)", () => {
+    expect(defaultOptions(profiles, folders, { profileId: null, rootFolderId: null })).toMatchObject({ profileId: 4, rootFolderId: 7 });
+  });
+
+  it("keeps the saved profile but selects no folder when the folder list is null", () => {
+    expect(defaultOptions(profiles, null, { profileId: 2, rootFolderId: 8 })).toMatchObject({ profileId: 2, rootFolderId: null });
+  });
 });
 
 describe("buildAddRequest", () => {

@@ -11,17 +11,24 @@ export type AddOptions = {
   searchForMovie: boolean;
 };
 
+/** The admin's saved Radarr defaults (see src/server/settings/add-defaults.ts). Either id may be null. */
+export type MovieAddDefaultOptions = { profileId: number | null; rootFolderId: number | null };
+
 /**
- * First profile and first root folder selected, both checkboxes on. Lists come from the server sorted.
- * A null folder list (Radarr's root folders could not be loaded) selects nothing.
+ * The saved profile and root folder when they are still in the lists, otherwise the first of each. Both
+ * checkboxes on. Lists come from the server sorted. A null folder list (Radarr's root folders could not be
+ * loaded) selects no folder.
  */
 export function defaultOptions(
   profiles: readonly QualityProfileOption[],
   folders: readonly RootFolderOption[] | null,
+  defaults?: MovieAddDefaultOptions,
 ): AddOptions {
+  const profile = profiles.find((option) => option.id === defaults?.profileId) ?? profiles[0];
+  const folder = folders?.find((option) => option.id === defaults?.rootFolderId) ?? folders?.[0];
   return {
-    profileId: profiles[0]?.id ?? null,
-    rootFolderId: folders?.[0]?.id ?? null,
+    profileId: profile?.id ?? null,
+    rootFolderId: folder?.id ?? null,
     monitored: true,
     searchForMovie: true,
   };

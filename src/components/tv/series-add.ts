@@ -44,18 +44,25 @@ export type SeriesAddOptions = {
   searchForMissingEpisodes: boolean;
 };
 
+/** The admin's saved Sonarr defaults (see src/server/settings/add-defaults.ts). Ids and monitor may be null. */
+export type SeriesAddDefaultOptions = { profileId: number | null; rootFolderId: number | null; monitor: SeriesMonitor | null };
+
 /**
- * First profile and first root folder selected, monitor "all", series type "standard", search on. Lists come
- * from the server sorted. A null folder list (Sonarr's root folders could not be loaded) selects nothing.
+ * The saved profile and root folder when they are still in the lists, otherwise the first of each. The saved
+ * monitor option, or "all" when none is saved. Series type "standard", search on. Lists come from the server
+ * sorted. A null folder list (Sonarr's root folders could not be loaded) selects no folder.
  */
 export function defaultSeriesOptions(
   profiles: readonly QualityProfileOption[],
   folders: readonly RootFolderOption[] | null,
+  defaults?: SeriesAddDefaultOptions,
 ): SeriesAddOptions {
+  const profile = profiles.find((option) => option.id === defaults?.profileId) ?? profiles[0];
+  const folder = folders?.find((option) => option.id === defaults?.rootFolderId) ?? folders?.[0];
   return {
-    profileId: profiles[0]?.id ?? null,
-    rootFolderId: folders?.[0]?.id ?? null,
-    monitor: "all",
+    profileId: profile?.id ?? null,
+    rootFolderId: folder?.id ?? null,
+    monitor: defaults?.monitor ?? "all",
     seriesType: "standard",
     searchForMissingEpisodes: true,
   };
