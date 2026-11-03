@@ -5,15 +5,17 @@ import { nextCookies } from "better-auth/next-js";
 import { db } from "./db";
 import { schema } from "./db/schema";
 import { env } from "./env";
+import { plexAuth } from "./plex/auth-plugin";
+import { getAuthSecret } from "./settings/auth-secret";
 import { ROLES } from "./roles";
 
 function createAuth() {
-  const { BETTER_AUTH_SECRET, BETTER_AUTH_URL } = env();
+  const { BETTER_AUTH_URL } = env();
   // Secure cookies only when the public URL is https (LAN http dev stays usable).
   const secure = BETTER_AUTH_URL.startsWith("https://");
 
   return betterAuth({
-    secret: BETTER_AUTH_SECRET,
+    secret: getAuthSecret(),
     baseURL: BETTER_AUTH_URL,
     database: drizzleAdapter(db(), {
       provider: "sqlite",
@@ -26,7 +28,7 @@ function createAuth() {
     }),
     emailAndPassword: {
       enabled: true,
-      // Accounts are created by `npm run create-admin` only. The public sign-up endpoint is refused.
+      // Accounts are created by `npm run create-user` only. Admins sign in with Plex, not a password.
       disableSignUp: true,
     },
     user: {
@@ -44,8 +46,12 @@ function createAuth() {
       useSecureCookies: secure,
       defaultCookieAttributes: { httpOnly: true, sameSite: "lax", secure },
     },
-    // Lets server actions (sign-out) set/clear cookies.
-    plugins: [nextCookies()],
+    plugins: [
+      // Lets server actions (sign-out) set/clear cookies.
+      nextCookies(),
+      // Plex sign-in for admins and first-run setup. See src/server/plex/auth-plugin.ts.
+      plexAuth(),
+    ],
   });
 }
 

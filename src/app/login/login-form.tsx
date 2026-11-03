@@ -36,35 +36,35 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex w-full flex-col gap-4">
-      <label className="flex flex-col gap-1 text-sm font-medium text-zinc-800">
+      <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
         Email
         <input
           name="email"
           type="email"
           autoComplete="email"
           required
-          className="rounded-md border border-zinc-300 px-3 py-2 text-base font-normal"
+          className="rounded-md border border-input bg-transparent px-3 py-2 text-base font-normal"
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm font-medium text-zinc-800">
+      <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
         Password
         <input
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          className="rounded-md border border-zinc-300 px-3 py-2 text-base font-normal"
+          className="rounded-md border border-input bg-transparent px-3 py-2 text-base font-normal"
         />
       </label>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+        className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
       >
         {pending ? "Signing in..." : "Sign in"}
       </button>

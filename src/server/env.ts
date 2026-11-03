@@ -12,7 +12,9 @@ function isValidTimeZone(zone: string): boolean {
 }
 
 const schema = z.object({
-  BETTER_AUTH_SECRET: z.string().min(32),
+  // Optional. When unset, MediaHub generates one and stores it (see settings/auth-secret.ts).
+  // An empty value counts as unset, so a copied-but-blank line in .env.local doesn't stop startup.
+  BETTER_AUTH_SECRET: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(32).optional()),
   BETTER_AUTH_URL: z.url(),
   DATABASE_PATH: z.string().min(1).default("./data/mediahub.db"),
   DISPLAY_TIMEZONE: z

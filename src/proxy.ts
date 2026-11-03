@@ -19,8 +19,8 @@ export function proxy(request: NextRequest) {
 }
 
 // Pages only. Route handlers do their own requireRole (they must return 401/403 JSON,
-// not a redirect). Login (exactly /login and /login/...), auth endpoints, Next
-// internals and static files are excluded.
+// not a redirect). Login and setup (exactly /login, /setup and their sub-paths), auth
+// endpoints, Next internals and static files are excluded.
 export const config = {
-  matcher: ["/((?!api/|login(?:/|$)|_next/|favicon.ico|.*\\..*).*)"],
+  matcher: ["/((?!api/|login(?:/|$)|setup(?:/|$)|_next/|favicon.ico|.*\\..*).*)"],
 };
