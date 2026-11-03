@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MobileNav } from "./mobile-nav";
 import { NavLinks } from "./nav-links";
+import { SessionKeepAlive } from "./session-keep-alive";
 import { UserMenu } from "./user-menu";
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
 export function AppShell({ user, isAdmin, children }: Props) {
   return (
     <div className="min-h-screen">
+      <SessionKeepAlive />
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 hidden w-56 flex-col border-r bg-background md:flex">
         <div className="flex h-14 items-center px-4 text-base font-semibold">MediaHub</div>

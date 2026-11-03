@@ -9,6 +9,9 @@ import { plexAuth } from "./plex/auth-plugin";
 import { getAuthSecret } from "./settings/auth-secret";
 import { ROLES } from "./roles";
 
+/** Session lifetime: 400 days, the most browsers allow for a cookie. */
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 400;
+
 function createAuth() {
   const { BETTER_AUTH_URL } = env();
   // Secure cookies only when the public URL is https (LAN http dev stays usable).
@@ -45,6 +48,12 @@ function createAuth() {
     advanced: {
       useSecureCookies: secure,
       defaultCookieAttributes: { httpOnly: true, sameSite: "lax", secure },
+    },
+    session: {
+      // Browsers cap cookie lifetime at 400 days. Renewed at most once a day while in use,
+      // so anyone who opens MediaHub within 400 days stays signed in.
+      expiresIn: SESSION_MAX_AGE_SECONDS,
+      updateAge: 60 * 60 * 24,
     },
     plugins: [
       // Lets server actions (sign-out) set/clear cookies.

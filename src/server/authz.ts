@@ -76,7 +76,12 @@ const lookupFromRequest = cache(async (): Promise<SessionUser | null> => {
   // without this the clock is read in a render stage where Next forbids it (dev error "unstable value
   // `new Date()`", raised because partialPrefetching is on). connection() defers the rest to request time.
   await connection();
-  const session = await getAuth().api.getSession({ headers: requestHeaders });
+  // Never renew here: pages can't set cookies, so the DB expiry would move without the cookie.
+  // SessionKeepAlive renews via /api/auth/get-session instead.
+  const session = await getAuth().api.getSession({
+    headers: requestHeaders,
+    query: { disableRefresh: true },
+  });
   if (!session) return null;
   const { id, email, name, role } = session.user;
   // name is nullable in the Better Auth schema; the UI only needs a string.
