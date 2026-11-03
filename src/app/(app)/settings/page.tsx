@@ -16,6 +16,11 @@ const SECTIONS = [
     title: "Add defaults",
     description: "Quality profile, root folder and monitoring that new movies and series start with.",
   },
+  {
+    href: "/settings/users",
+    title: "Users",
+    description: "Add, reset and remove requester accounts.",
+  },
 ];
 
 export default async function SettingsPage() {
