@@ -6,6 +6,11 @@ import lookupFixture from "./__fixtures__/sonarr-series-lookup.json";
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
 
 // series-add.ts imports the client, which reads the saved connections. The fixed-URL helpers are tested with fetch stubbed.
+vi.mock("@/server/image-cache", () => ({
+  ARR_IMAGE_TTL_MS: 0,
+  LOOKUP_IMAGE_TTL_MS: 0,
+  cachedImage: (_key: string, _ttl: number, fetchFresh: () => Promise<unknown>) => fetchFresh(),
+}));
 vi.mock("@/server/settings/connections", () => ({ getConnection: () => null }));
 
 import { ArrRequestError } from "./request";

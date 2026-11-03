@@ -1,5 +1,6 @@
 import "server-only";
 import { radarrClient } from "./client";
+import { cachedArrImage } from "@/server/image-cache";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
@@ -164,8 +165,7 @@ export async function refreshMovies(movieIds: number[]): Promise<void> {
 /** The one Radarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const POSTER_FILENAME = "poster-250.jpg";
 
-/** Fetches Radarr's cached 250px poster for one movie as JPEG bytes. Only the fixed poster file is requested. */
-export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+async function fetchMoviePoster(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = radarrClient();
   return fetchPosterBytes("Radarr poster", (signal) =>
     client.GET("/api/v3/mediacover/{movieId}/{filename}", {
@@ -179,8 +179,7 @@ export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayB
 /** The one Radarr backdrop file MediaHub ever fetches. A module constant, like POSTER_FILENAME. */
 const BACKDROP_FILENAME = "fanart.jpg";
 
-/** Fetches Radarr's backdrop (fanart) for one movie as JPEG bytes. Only the fixed fanart file is requested. */
-export async function getMovieBackdrop(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+async function fetchMovieBackdrop(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = radarrClient();
   return fetchPosterBytes(
     "Radarr backdrop",
@@ -192,4 +191,14 @@ export async function getMovieBackdrop(movieId: number): Promise<Uint8Array<Arra
       }),
     MAX_BACKDROP_BYTES,
   );
+}
+
+/** Radarr's cached 250px poster for one movie, as JPEG bytes, through the disk image cache. */
+export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+  return cachedArrImage("radarr", "poster", movieId, () => fetchMoviePoster(movieId));
+}
+
+/** Radarr's backdrop (fanart) for one movie, as JPEG bytes, through the disk image cache. */
+export async function getMovieBackdrop(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
+  return cachedArrImage("radarr", "backdrop", movieId, () => fetchMovieBackdrop(movieId));
 }
