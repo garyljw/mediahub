@@ -10,8 +10,6 @@ import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 
 export type ItemPageProps = {
-  /** The link above the hero back to the list, e.g. { href: "/movies", label: "Movies" }. */
-  back: { href: string; label: string };
   title: string;
   year: number | null;
   /** The grey line under the title, e.g. certification, runtime and genres. Null leaves it out. */
@@ -40,7 +38,6 @@ export type ItemPageProps = {
 };
 
 export function ItemPageLayout({
-  back,
   title,
   year,
   meta,
@@ -60,8 +57,9 @@ export function ItemPageLayout({
 }: ItemPageProps) {
   return (
     <div className="space-y-6">
-      <Link href={back.href} className="text-sm text-muted-foreground hover:underline">
-        ← {back.label}
+      {/* Home is the one library page, so every item page goes back there. */}
+      <Link href="/" className="text-sm text-muted-foreground hover:underline">
+        ← Home
       </Link>
 
       <section className="relative overflow-hidden rounded-xl border bg-card">

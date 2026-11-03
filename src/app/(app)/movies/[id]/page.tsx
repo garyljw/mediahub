@@ -63,7 +63,6 @@ function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean 
 
   return (
     <ItemPageLayout
-      back={{ href: "/movies", label: "Movies" }}
       title={detail.title}
       year={detail.year}
       meta={meta}

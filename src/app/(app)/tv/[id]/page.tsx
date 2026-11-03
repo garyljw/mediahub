@@ -221,8 +221,7 @@ function SeriesView({ page, isAdmin }: { page: SeriesDetailPage; isAdmin: boolea
   return (
     <SeriesActivityProvider key={detail.id} seriesId={detail.id}>
       <ItemPageLayout
-        back={{ href: "/tv", label: "TV" }}
-        title={detail.title}
+          title={detail.title}
         year={detail.year}
         meta={meta}
         extraLines={rating === null ? [] : [rating]}
