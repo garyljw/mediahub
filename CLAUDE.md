@@ -32,9 +32,17 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 ## Workflow (Opus or Sonnet plans, Haiku codes)
 1. The planner writes a scoped task brief with acceptance criteria. Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
    - If a task needs Opus planning and this session isn't on Opus, tell Gary to run `/model opus` before planning starts. Don't plan in a subagent: planning needs this conversation.
-   - A session that isn't on Opus runs the step 3 reviews in an Opus agent (`model: "opus"`, `effort: "high"`; that is the agent's reasoning effort, and `/code-review` still runs at `medium`), and checks that the agent's report shows each review actually ran.
+   - Any agent that runs a step 3 review is started with `model: "opus"`, because a subagent's default model may be cheaper than the session's.
+   - A session that isn't on Opus runs the step 3 reviews in such an agent (`effort: "high"`; that is the agent's reasoning effort, and `/code-review` still runs at the level step 3 gives), and checks that the agent's report shows each review actually ran.
 2. A Haiku agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough.
-3. Opus runs `/code-review` at `medium` on every change. It also runs `/security-review` on any change that creates, edits or loosens a security boundary:
+3. Opus runs `/code-review` at `medium`. It uses `low` only when every changed file is one of these:
+   - a test or fixture outside `src/server/**` and `src/app/**`;
+   - a file under `src/components/**` that, after the change, imports nothing but types from `src/server`, calls no route handler or server action, and has no `dangerouslySetInnerHTML`;
+   - Markdown that isn't a rules file. A change made only of such Markdown skips review altogether (see "Skip both reviews" below).
+
+   Type the level every time, because the skill otherwise reuses the last one.
+
+   Opus also runs `/security-review` on any change that creates, edits or loosens a security boundary:
    - login, sessions, user management or the Better Auth config;
    - adding a server action or route handler, or changing what an existing one accepts, writes or returns;
    - anything that changes what a role may do;
