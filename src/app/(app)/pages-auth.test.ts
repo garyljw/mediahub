@@ -87,6 +87,7 @@ const PAGE_ROLES: Record<string, string[]> = {
   "history/page.tsx": BOTH,
   "settings/page.tsx": ["admin"],
   "settings/connections/page.tsx": ["admin"],
+  "settings/add-defaults/page.tsx": ["admin"],
 };
 
 describe("(app) pages", () => {

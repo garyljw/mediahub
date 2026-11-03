@@ -3,6 +3,7 @@ import { listMovies } from "@/server/arr/movies";
 import { listRootFolders } from "@/server/arr/movie-add";
 import type { RootFolderOption } from "@/server/arr/root-folders";
 import { ArrRequestError } from "@/server/arr/request";
+import { getMovieAddDefaults } from "@/server/settings/add-defaults";
 import { MoviesTable } from "@/components/movies/movies-table";
 import { MovieAddDialog } from "@/components/movies/movie-add-dialog";
 
@@ -52,7 +53,7 @@ export default async function MoviesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Movies</h1>
-        <MovieAddDialog profiles={library.profiles} rootFolders={rootFolders} />
+        <MovieAddDialog profiles={library.profiles} rootFolders={rootFolders} defaults={getMovieAddDefaults()} />
       </div>
       <MoviesTable rows={library.rows} profiles={library.profiles} isAdmin={user.role === "admin"} />
     </div>

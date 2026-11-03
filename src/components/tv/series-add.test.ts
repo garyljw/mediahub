@@ -25,6 +25,36 @@ describe("defaultSeriesOptions", () => {
     expect(defaultSeriesOptions([], [])).toMatchObject({ profileId: null, rootFolderId: null });
     expect(defaultSeriesOptions(profiles, null)).toMatchObject({ profileId: 4, rootFolderId: null });
   });
+
+  it("uses the saved profile, root folder and monitor when they are in the lists", () => {
+    expect(defaultSeriesOptions(profiles, folders, { profileId: 2, rootFolderId: 8, monitor: "missing" })).toMatchObject({
+      profileId: 2,
+      rootFolderId: 8,
+      monitor: "missing",
+      seriesType: "standard",
+      searchForMissingEpisodes: true,
+    });
+  });
+
+  it("falls back to the first profile and folder when the saved ids are missing from the lists", () => {
+    expect(defaultSeriesOptions(profiles, folders, { profileId: 99, rootFolderId: 99, monitor: null })).toMatchObject({
+      profileId: 4,
+      rootFolderId: 7,
+    });
+  });
+
+  it("defaults the monitor to all when none is saved", () => {
+    expect(defaultSeriesOptions(profiles, folders, { profileId: null, rootFolderId: null, monitor: null }).monitor).toBe("all");
+    expect(defaultSeriesOptions(profiles, folders).monitor).toBe("all");
+  });
+
+  it("selects no folder when the folder list is null, even with a saved folder", () => {
+    expect(defaultSeriesOptions(profiles, null, { profileId: 2, rootFolderId: 8, monitor: "none" })).toMatchObject({
+      profileId: 2,
+      rootFolderId: null,
+      monitor: "none",
+    });
+  });
 });
 
 describe("buildSeriesAddRequest", () => {

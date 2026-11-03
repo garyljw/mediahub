@@ -3,6 +3,7 @@ import { listSeries } from "@/server/arr/series";
 import { listSeriesRootFolders } from "@/server/arr/series-add";
 import type { RootFolderOption } from "@/server/arr/root-folders";
 import { ArrRequestError } from "@/server/arr/request";
+import { getSeriesAddDefaults } from "@/server/settings/add-defaults";
 import { SeriesTable } from "@/components/tv/series-table";
 import { SeriesAddDialog } from "@/components/tv/series-add-dialog";
 
@@ -52,7 +53,7 @@ export default async function TVPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">TV</h1>
-        <SeriesAddDialog profiles={library.profiles} rootFolders={rootFolders} />
+        <SeriesAddDialog profiles={library.profiles} rootFolders={rootFolders} defaults={getSeriesAddDefaults()} />
       </div>
       <SeriesTable rows={library.rows} profiles={library.profiles} isAdmin={user.role === "admin"} />
     </div>
