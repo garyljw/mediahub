@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type MouseEvent } from "react";
 import { ListChecks, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MonitoredIcon } from "@/components/tv/series-monitored";
+import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { ReleaseDialog } from "@/components/library/release-dialog";
 import { episodeCode, grabbedMessage, type ReleaseSearchResult } from "@/components/library/release";
 import type { ActionResult } from "@/app/(app)/tv/[id]/actions";

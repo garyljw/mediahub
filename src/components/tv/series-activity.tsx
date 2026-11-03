@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
 import { ACTIVITY_CLASS, ACTIVITY_ICON, ActivityCell, ActivityHead } from "@/components/library/activity-cell";
 import { formatCount } from "@/components/library/format";
 import { useActivity, type ActivityResult } from "@/components/library/use-activity";
@@ -50,5 +51,36 @@ export function SeasonActivitySummary({ episodeIds, label }: { episodeIds: numbe
       <Icon aria-hidden className="size-3.5 shrink-0" />
       {formatCount(summary.count)} in queue
     </span>
+  );
+}
+
+/**
+ * The series hero's queue line, counting every episode of the series. Renders nothing while none of them is queued,
+ * and a warning when the last poll failed. Takes its colour and icon from the worst queued episode, like the season line.
+ */
+export function SeriesActivitySummary({ episodeIds, title }: { episodeIds: number[]; title: string }) {
+  const { byId, failed } = useContext(SeriesActivityContext);
+  const summary = seasonActivitySummary(byId, episodeIds);
+
+  if (summary === null) {
+    if (!failed) return null;
+    return (
+      <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+        <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+        Couldn&apos;t update activity from Sonarr.
+      </p>
+    );
+  }
+
+  const Icon = ACTIVITY_ICON[summary.state];
+  const episodes = summary.count === 1 ? "episode" : "episodes";
+  return (
+    <p
+      title={`${title}: ${formatCount(summary.count)} ${episodes} in the Sonarr queue`}
+      className={cn("inline-flex items-center gap-1.5 text-sm tabular-nums", ACTIVITY_CLASS[summary.severity])}
+    >
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      <span>{`${formatCount(summary.count)} ${episodes} in the queue`}</span>
+    </p>
   );
 }

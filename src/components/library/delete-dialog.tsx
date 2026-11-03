@@ -23,15 +23,14 @@ export type DeleteOutcome = { ok: true; deleted: number } | { ok: false; error: 
 
 /**
  * Deletes the given movies or series from their Arr (admin only). `items` is the snapshot taken when the dialog
- * opened, so the titles shown and the ids sent are the same set. Mounted only while open. `appName` and
- * `exclusionLabel` are the words that differ between Radarr and Sonarr.
+ * opened, so the titles shown and the ids sent are the same set. Mounted only while open. `appName` is the word
+ * that differs between Radarr and Sonarr.
  */
 export function LibraryDeleteDialog({
   items,
   noun,
   max,
   appName,
-  exclusionLabel,
   submit,
   onClose,
   onDeleted,
@@ -42,8 +41,6 @@ export function LibraryDeleteDialog({
   max: number;
   /** "Radarr" or "Sonarr", named in the line that says what is removed. */
   appName: string;
-  /** The label of the checkbox that adds an import exclusion. */
-  exclusionLabel: string;
   submit: (request: DeleteRequest) => Promise<DeleteOutcome>;
   onClose: () => void;
   onDeleted: (count: number) => void;
@@ -153,7 +150,7 @@ export function LibraryDeleteDialog({
               disabled={pending}
               className="mt-0.5 size-4 accent-primary"
             />
-            <span>{exclusionLabel}</span>
+            <span>Add to import list exclusions</span>
           </label>
 
           {tooMany && (

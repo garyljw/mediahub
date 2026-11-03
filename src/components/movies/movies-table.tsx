@@ -468,7 +468,6 @@ export function MoviesTable({
           noun={MOVIE}
           max={MAX_BULK_MOVIES}
           appName="Radarr"
-          exclusionLabel="Prevent Radarr from re-adding (add to import exclusions)"
           submit={({ ids, deleteFiles, addExclusion, confirmCount }) =>
             removeMovies({ movieIds: ids, deleteFiles, addImportExclusion: addExclusion, confirmCount })
           }
