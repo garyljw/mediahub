@@ -76,7 +76,7 @@ export default async function AddDefaultsPage() {
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Add defaults</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        The quality profile and root folder that new movies and series start with. Anyone adding can still change them.
+        The quality profile and root folder that new movies and series are added with. Requesters always use these, and admins start with the profile.
       </p>
       <div className="mt-6 space-y-6">
         <AppSection app="radarr">

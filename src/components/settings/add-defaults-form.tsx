@@ -146,7 +146,7 @@ export function AddDefaultsForm({
         <p className="text-sm text-muted-foreground">No saved default yet, so the first options are shown. Save to keep them.</p>
       )}
       <p className="text-xs text-muted-foreground">
-        These start selected in the Add {app === "radarr" ? "movie" : "series"} dialog. Anyone adding can still change them.
+        Requesters always add with these. Admins start with this profile and can pick another when adding.
       </p>
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={pending || !canSave}>

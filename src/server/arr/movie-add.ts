@@ -3,6 +3,7 @@ import { radarrClient } from "./client";
 import { LOOKUP_IMAGE_TTL_MS, cachedImage } from "@/server/image-cache";
 import { fetchFixedJpeg } from "./poster";
 import { ArrRequestError, arrRequest, getList } from "./request";
+import { positiveIdOrNull } from "./detail-fields";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
 import type { components as RadarrComponents } from "./generated/radarr";
 
@@ -158,9 +159,13 @@ export function movieAddBody(add: MovieAdd, title: string, year: number | null):
 /**
  * Adds one movie to Radarr. Looks the id up again so the title and year come from Radarr, not from
  * the browser. Refuses a movie that is already in the library. `onSend` runs just before the add request
- * goes out, so the caller knows that a later timeout may mean Radarr added the movie.
+ * goes out, so the caller knows that a later timeout may mean Radarr added the movie. `id` is the new
+ * Radarr movie id from the reply, or null when the reply has none.
  */
-export async function addMovie(add: MovieAdd, onSend: () => void = () => {}): Promise<{ title: string; year: number | null }> {
+export async function addMovie(
+  add: MovieAdd,
+  onSend: () => void = () => {},
+): Promise<{ id: number | null; title: string; year: number | null }> {
   const client = radarrClient();
 
   let found: MovieResource | undefined;
@@ -184,9 +189,9 @@ export async function addMovie(add: MovieAdd, onSend: () => void = () => {}): Pr
 
   const body = movieAddBody(add, title, year);
   onSend();
-  await arrRequest("Radarr movie add", (signal) => client.POST("/api/v3/movie", { body, signal }));
+  const created = await arrRequest("Radarr movie add", (signal) => client.POST("/api/v3/movie", { body, signal }));
 
-  return { title, year };
+  return { id: positiveIdOrNull(created?.id), title, year };
 }
 
 /**

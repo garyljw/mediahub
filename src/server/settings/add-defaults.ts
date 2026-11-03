@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 import { setting } from "@/server/db/schema";
 import { SERIES_MONITOR_OPTIONS, type SeriesMonitor } from "@/components/tv/series-add";
 
-// The defaults that pre-fill the Add movie and Add series dialogs, set by an admin in Settings -> Add defaults.
+// The defaults the Add page uses for every add (requesters) or starts from (admins), set in Settings -> Add defaults.
 // Stored as plain values in the setting table. Reading never throws: a missing or unparseable value is null.
 
 export type MovieAddDefaults = { profileId: number | null; rootFolderId: number | null };
