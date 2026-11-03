@@ -207,8 +207,8 @@ describe("servePosterResponse", () => {
 
   it("rethrows errors that are not ArrRequestError", async () => {
     const fetchPoster = vi.fn(async () => {
-      throw new Error("Invalid environment configuration: SONARR_URL");
+      throw new Error("Sonarr isn't set up");
     });
-    await expect(servePosterResponse("42", fetchPoster)).rejects.toThrow("Invalid environment configuration");
+    await expect(servePosterResponse("42", fetchPoster)).rejects.toThrow("isn't set up");
   });
 });

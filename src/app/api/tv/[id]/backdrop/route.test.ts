@@ -103,7 +103,7 @@ describe("GET /api/tv/[id]/backdrop", () => {
 
   it("rethrows errors that are not ArrRequestError", async () => {
     requireRoleMock.mockResolvedValue(ADMIN);
-    backdropMock.mockRejectedValue(new Error("Invalid environment configuration: RADARR_URL"));
-    await expect(call("42")).rejects.toThrow("Invalid environment configuration");
+    backdropMock.mockRejectedValue(new Error("Radarr isn't set up"));
+    await expect(call("42")).rejects.toThrow("isn't set up");
   });
 });

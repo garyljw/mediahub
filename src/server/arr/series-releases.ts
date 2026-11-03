@@ -46,7 +46,7 @@ export async function searchSeriesReleases(target: SeriesReleaseTarget): Promise
  * nothing else.
  */
 export async function grabSeriesRelease(token: string): Promise<{ title: string }> {
-  // Build the client first, so a config error does not use up the token.
+  // Build the client first, so an unconfigured app does not use up the token.
   const client = sonarrClient();
   const taken = releaseCache.take(token, "sonarr");
   if (!taken) throw new ReleaseGrabError("expired");

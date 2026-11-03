@@ -123,7 +123,7 @@ describe("GET /api/tv/[id]/activity", () => {
 
   it("rethrows errors that are not ArrRequestError", async () => {
     requireRoleMock.mockResolvedValue(ADMIN);
-    activityMock.mockRejectedValue(new Error("Invalid environment configuration: SONARR_URL"));
-    await expect(GET(new Request("http://localhost/"), context("10"))).rejects.toThrow("Invalid environment configuration");
+    activityMock.mockRejectedValue(new Error("Sonarr isn't set up"));
+    await expect(GET(new Request("http://localhost/"), context("10"))).rejects.toThrow("isn't set up");
   });
 });

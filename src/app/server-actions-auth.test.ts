@@ -206,6 +206,8 @@ describe("server actions in src/", () => {
     expect(actions).toContain("app/(app)/queue/actions.ts#removeQueueItem");
     expect(actions).toContain("app/(app)/queue/actions.ts#loadForceImport");
     expect(actions).toContain("app/(app)/queue/actions.ts#forceImportQueueItem");
+    expect(actions).toContain("app/(app)/settings/connections/actions.ts#testConnection");
+    expect(actions).toContain("app/(app)/settings/connections/actions.ts#saveConnectionSettings");
   });
 
   it("every action starts with await requireRole(...), or is in PUBLIC_ACTIONS", () => {

@@ -1,6 +1,7 @@
 import "server-only";
 import createClient from "openapi-fetch";
-import { env } from "@/server/env";
+import { getConnection, type ArrApp, type Connection } from "@/server/settings/connections";
+import { ArrRequestError } from "./request";
 import type { paths as RadarrPaths } from "./generated/radarr";
 import type { paths as SonarrPaths } from "./generated/sonarr";
 
@@ -11,33 +12,57 @@ import type { paths as SonarrPaths } from "./generated/sonarr";
 // the redirect target, even cross-origin.
 const callFetch = (request: Request) => globalThis.fetch(request);
 
-let radarr: ReturnType<typeof createClient<RadarrPaths>> | undefined;
-let sonarr: ReturnType<typeof createClient<SonarrPaths>> | undefined;
+let radarr: ReturnType<typeof createRadarrClient> | undefined;
+let sonarr: ReturnType<typeof createSonarrClient> | undefined;
 
-/** Typed Radarr client. The API key is sent only in the X-Api-Key header. */
+/** A client for the given connection. Not cached: the Settings test uses this for a one-off check. */
+export function createRadarrClient({ url, apiKey }: Connection) {
+  return createClient<RadarrPaths>({
+    baseUrl: url,
+    headers: { "X-Api-Key": apiKey },
+    redirect: "error",
+    fetch: callFetch,
+  });
+}
+
+/** A client for the given connection. Not cached: the Settings test uses this for a one-off check. */
+export function createSonarrClient({ url, apiKey }: Connection) {
+  return createClient<SonarrPaths>({
+    baseUrl: url,
+    headers: { "X-Api-Key": apiKey },
+    redirect: "error",
+    fetch: callFetch,
+  });
+}
+
+// Callers are async functions, so this throw reaches them as a rejected promise.
+function unconfigured(app: ArrApp): ArrRequestError {
+  const name = app === "radarr" ? "Radarr" : "Sonarr";
+  return new ArrRequestError(`${name} isn't set up`, "unconfigured");
+}
+
+/** Typed Radarr client from the saved connection. The API key is sent only in the X-Api-Key header. */
 export function radarrClient() {
   if (!radarr) {
-    const { RADARR_URL, RADARR_API_KEY } = env();
-    radarr = createClient<RadarrPaths>({
-      baseUrl: RADARR_URL,
-      headers: { "X-Api-Key": RADARR_API_KEY },
-      redirect: "error",
-      fetch: callFetch,
-    });
+    const connection = getConnection("radarr");
+    if (!connection) throw unconfigured("radarr");
+    radarr = createRadarrClient(connection);
   }
   return radarr;
 }
 
-/** Typed Sonarr client. The API key is sent only in the X-Api-Key header. */
+/** Typed Sonarr client from the saved connection. The API key is sent only in the X-Api-Key header. */
 export function sonarrClient() {
   if (!sonarr) {
-    const { SONARR_URL, SONARR_API_KEY } = env();
-    sonarr = createClient<SonarrPaths>({
-      baseUrl: SONARR_URL,
-      headers: { "X-Api-Key": SONARR_API_KEY },
-      redirect: "error",
-      fetch: callFetch,
-    });
+    const connection = getConnection("sonarr");
+    if (!connection) throw unconfigured("sonarr");
+    sonarr = createSonarrClient(connection);
   }
   return sonarr;
+}
+
+/** Drops the cached clients so the next call reads the saved connection again. Call after saving one. */
+export function resetArrClients(): void {
+  radarr = undefined;
+  sonarr = undefined;
 }

@@ -102,7 +102,7 @@ describe("GET /api/movies/[id]/poster", () => {
 
   it("rethrows errors that are not ArrRequestError", async () => {
     requireRoleMock.mockResolvedValue(ADMIN);
-    posterMock.mockRejectedValue(new Error("Invalid environment configuration: RADARR_URL"));
-    await expect(call("42")).rejects.toThrow("Invalid environment configuration");
+    posterMock.mockRejectedValue(new Error("Radarr isn't set up"));
+    await expect(call("42")).rejects.toThrow("isn't set up");
   });
 });

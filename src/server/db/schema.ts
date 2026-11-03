@@ -87,4 +87,12 @@ export const verification = sqliteTable(
   (t) => [index("verification_identifier_idx").on(t.identifier)],
 );
 
-export const schema = { user, session, account, verification };
+// Key/value settings the admin edits in the app (e.g. Radarr/Sonarr connections). Values are
+// stored as text; secrets in here are write-only from the browser's point of view.
+export const setting = sqliteTable("setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+export const schema = { user, session, account, verification, setting };

@@ -257,7 +257,7 @@ export function failGrab(error: unknown, taken: Pick<TakenRelease, "restore">): 
  * token. The guid and indexer id come from the server's cache, and the body sent to Radarr has nothing else.
  */
 export async function grabRelease(token: string): Promise<{ title: string }> {
-  // Build the client first, so a config error does not use up the token.
+  // Build the client first, so an unconfigured app does not use up the token.
   const client = radarrClient();
   const taken = releaseCache.take(token, "radarr");
   if (!taken) throw new ReleaseGrabError("expired");

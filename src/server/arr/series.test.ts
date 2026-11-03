@@ -12,26 +12,21 @@ type QualityProfileResource = SonarrComponents["schemas"]["QualityProfileResourc
 const series = seriesFixture as SeriesResource[];
 const profiles = profileFixture as QualityProfileResource[];
 
-const { FAKE_KEY, fakeEnv } = vi.hoisted(() => {
+const { FAKE_KEY, fakeConnections } = vi.hoisted(() => {
   const key = "fake-api-key-0123456789abcdefghi"; // 32 chars, not a real secret
   return {
     FAKE_KEY: key,
-    fakeEnv: {
-      RADARR_URL: "http://radarr.test:7878",
-      RADARR_API_KEY: key,
-      SONARR_URL: "http://sonarr.test:8989",
-      SONARR_API_KEY: key,
+    fakeConnections: {
+      radarr: { url: "http://radarr.test:7878", apiKey: key },
+      sonarr: { url: "http://sonarr.test:8989", apiKey: key },
     },
   };
 });
 
-const envMock = vi.hoisted(() => ({ fail: false }));
+const connectionMock = vi.hoisted(() => ({ unset: false }));
 
-vi.mock("@/server/env", () => ({
-  env: () => {
-    if (envMock.fail) throw new Error("Invalid environment configuration: SONARR_URL");
-    return fakeEnv;
-  },
+vi.mock("@/server/settings/connections", () => ({
+  getConnection: (app: "radarr" | "sonarr") => (connectionMock.unset ? null : fakeConnections[app]),
 }));
 
 import {
@@ -334,17 +329,25 @@ describe("listSeries", () => {
   });
 });
 
-describe("env errors", () => {
+describe("unconfigured connection", () => {
   afterEach(() => {
-    envMock.fail = false;
+    connectionMock.unset = false;
   });
 
-  it("listSeries surfaces config errors instead of reporting a network error", async () => {
+  it("listSeries rejects with an unconfigured error and sends no request", async () => {
     vi.resetModules(); // drop memoized clients
-    envMock.fail = true;
+    connectionMock.unset = true;
     const mod = await import("./series");
 
-    await expect(mod.listSeries()).rejects.toThrow("Invalid environment configuration");
+    const error = await mod.listSeries().then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e as Error & { kind?: string },
+    );
+
+    expect(error).toMatchObject({ name: "ArrRequestError", kind: "unconfigured" });
+    expect(error.message).toBe("Sonarr isn't set up");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

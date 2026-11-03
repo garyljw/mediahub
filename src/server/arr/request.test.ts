@@ -108,6 +108,13 @@ describe("writeFailureMessage", () => {
     );
   });
 
+  it("says the app isn't set up yet when no connection is saved, so nothing was sent", () => {
+    const error = new ArrRequestError("Radarr isn't set up", "unconfigured");
+    expect(writeFailureMessage(error, "Radarr", OUTCOME)).toBe(
+      "Radarr isn't set up yet. An admin can add it in Settings.",
+    );
+  });
+
   it("treats an error with no status (a network failure or broken reply) as not confirmed", () => {
     const error = new ArrRequestError("x", "network");
     expect(writeFailureMessage(error, "Radarr", OUTCOME)).toBe(
