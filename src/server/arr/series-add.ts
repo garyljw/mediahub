@@ -1,6 +1,7 @@
 import "server-only";
 import type { SeriesMonitor, SeriesTypeOption } from "@/components/tv/series-add";
 import { sonarrClient } from "./client";
+import { LOOKUP_IMAGE_TTL_MS, cachedImage } from "@/server/image-cache";
 import { fetchFixedJpeg } from "./poster";
 import { ArrRequestError, arrRequest, getList } from "./request";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
@@ -207,5 +208,5 @@ export async function addSeries(add: SeriesAdd, onSend: () => void = () => {}): 
  */
 export async function getTvdbPoster(path: string): Promise<Uint8Array<ArrayBuffer>> {
   if (!TVDB_POSTER_PATH.test(path)) throw new ArrRequestError("TVDB poster request failed: invalid name", "invalid");
-  return fetchFixedJpeg("TVDB poster", `${TVDB_POSTER_BASE}${path}`);
+  return cachedImage(`tvdb|${path}`, LOOKUP_IMAGE_TTL_MS, () => fetchFixedJpeg("TVDB poster", `${TVDB_POSTER_BASE}${path}`));
 }

@@ -6,6 +6,11 @@ import lookupFixture from "./__fixtures__/radarr-movie-lookup.json";
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 
 // movie-add.ts imports the client, which reads the saved connections. Only the pure functions are tested here.
+vi.mock("@/server/image-cache", () => ({
+  ARR_IMAGE_TTL_MS: 0,
+  LOOKUP_IMAGE_TTL_MS: 0,
+  cachedImage: (_key: string, _ttl: number, fetchFresh: () => Promise<unknown>) => fetchFresh(),
+}));
 vi.mock("@/server/settings/connections", () => ({ getConnection: () => null }));
 
 import { ArrRequestError } from "./request";

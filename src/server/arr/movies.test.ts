@@ -25,6 +25,9 @@ const { FAKE_KEY, fakeConnections } = vi.hoisted(() => {
 
 const connectionMock = vi.hoisted(() => ({ unset: false }));
 
+vi.mock("@/server/image-cache", () => ({
+  cachedArrImage: (_app: string, _kind: string, _id: number, fetchFresh: () => Promise<unknown>) => fetchFresh(),
+}));
 vi.mock("@/server/settings/connections", () => ({
   getConnection: (app: "radarr" | "sonarr") => (connectionMock.unset ? null : fakeConnections[app]),
 }));

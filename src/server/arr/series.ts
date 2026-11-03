@@ -1,5 +1,6 @@
 import "server-only";
 import { sonarrClient } from "./client";
+import { cachedArrImage } from "@/server/image-cache";
 import { queueSeriesWrite } from "./series-writes";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
 import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
@@ -193,8 +194,7 @@ export async function refreshSeries(seriesIds: number[]): Promise<void> {
 /** The one Sonarr cover file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const POSTER_FILENAME = "poster-250.jpg";
 
-/** Fetches Sonarr's cached 250px poster for one series as JPEG bytes. Only the fixed poster file is requested. */
-export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
+async function fetchSeriesPoster(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = sonarrClient();
   return fetchPosterBytes("Sonarr poster", (signal) =>
     client.GET("/api/v3/mediacover/{seriesId}/{filename}", {
@@ -208,8 +208,7 @@ export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<Arra
 /** The one Sonarr backdrop file MediaHub ever fetches. A module constant, so callers never choose the filename. */
 const BACKDROP_FILENAME = "fanart.jpg";
 
-/** Fetches Sonarr's backdrop (fanart) for one series as JPEG bytes. Only the fixed fanart file is requested. */
-export async function getSeriesBackdrop(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
+async function fetchSeriesBackdrop(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
   const client = sonarrClient();
   return fetchPosterBytes(
     "Sonarr backdrop",
@@ -221,4 +220,14 @@ export async function getSeriesBackdrop(seriesId: number): Promise<Uint8Array<Ar
       }),
     MAX_BACKDROP_BYTES,
   );
+}
+
+/** Sonarr's cached 250px poster for one series, as JPEG bytes, through the disk image cache. */
+export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
+  return cachedArrImage("sonarr", "poster", seriesId, () => fetchSeriesPoster(seriesId));
+}
+
+/** Sonarr's backdrop (fanart) for one series, as JPEG bytes, through the disk image cache. */
+export async function getSeriesBackdrop(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
+  return cachedArrImage("sonarr", "backdrop", seriesId, () => fetchSeriesBackdrop(seriesId));
 }

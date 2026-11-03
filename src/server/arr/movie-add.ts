@@ -1,5 +1,6 @@
 import "server-only";
 import { radarrClient } from "./client";
+import { LOOKUP_IMAGE_TTL_MS, cachedImage } from "@/server/image-cache";
 import { fetchFixedJpeg } from "./poster";
 import { ArrRequestError, arrRequest, getList } from "./request";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
@@ -194,7 +195,7 @@ export async function addMovie(add: MovieAdd, onSend: () => void = () => {}): Pr
  */
 async function getTmdbImage(label: string, base: string, file: string): Promise<Uint8Array<ArrayBuffer>> {
   if (!TMDB_POSTER_FILE.test(file)) throw new ArrRequestError(`${label} request failed: invalid name`, "invalid");
-  return fetchFixedJpeg(label, `${base}${file}`);
+  return cachedImage(`tmdb|${label}|${file}`, LOOKUP_IMAGE_TTL_MS, () => fetchFixedJpeg(label, `${base}${file}`));
 }
 
 /** One TMDB poster thumbnail (w342), for the Add movie search results. */
