@@ -120,3 +120,24 @@ export function toEpisodeWatched(episodes: EpisodeRef[], plexEpisodes: PlexEpiso
   }
   return result;
 }
+
+/**
+ * Pure: one season's watched state from its episodes' states. Only episodes Plex has a state for count.
+ * Watched when every one is watched, partly watched when any is watched or started, unwatched otherwise.
+ * Null when none of the episodes has a state.
+ */
+export function seasonWatchedState(states: Iterable<WatchedState | undefined>): WatchedState | null {
+  let counted = 0;
+  let watched = 0;
+  let started = false;
+  for (const state of states) {
+    if (state === undefined) continue;
+    counted++;
+    if (state === "watched") watched++;
+    if (state !== "unwatched") started = true;
+  }
+  if (counted === 0) return null;
+  if (watched === counted) return "watched";
+  if (started) return "partial";
+  return "unwatched";
+}
