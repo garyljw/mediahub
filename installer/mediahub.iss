@@ -109,17 +109,10 @@ end;
 
 // The account the installed service runs as, e.g. "NT SERVICE\MediaHub" or "LocalSystem". Empty on failure.
 function ServiceAccount(): String;
-var
-  Rc, I: Integer;
-  Captured: TExecOutput;
-  Ok: Boolean;
 begin
-  Result := '';
-  Ok := ExecAndCaptureOutput(SysTool('WindowsPowerShell\v1.0\powershell.exe'), '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Service | Where-Object Name -eq MediaHub | ForEach-Object StartName"', '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
-  if not Ok or (Rc <> 0) then Exit;
-  // The account is the last non-empty line, so a warning PowerShell prints first is ignored.
-  for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
-    if Trim(Captured.StdOut[I]) <> '' then Result := Trim(Captured.StdOut[I]);
+  // Read from the service's registry key rather than through PowerShell: no process, no modules to load.
+  if not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\' + ServiceName, 'ObjectName', Result) then Result := '';
+  Result := Trim(Result);
 end;
 
 // Reads KEY=value from mediahub.env. Empty when the file or key is missing. Comment lines are skipped.
@@ -188,9 +181,12 @@ var
   Ok: Boolean;
   Cmd: String;
 begin
-  Cmd := '-NoProfile -NonInteractive -Command "if (Get-NetTCPConnection -State Listen -LocalPort ' + IntToStr(Port) + ' -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"';
+  // .NET only, no PowerShell modules (see check-data-owners.ps1). Exit code 5 means in use, so a PowerShell
+  // failure (exit code 1) is not mistaken for a busy port.
+  Cmd := '-NoProfile -NonInteractive -Command "foreach ($l in [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) { if ($l.Port -eq ' + IntToStr(Port) + ') { exit 5 } }; exit 0"';
   Ok := Exec(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
-  Result := Ok and (Rc = 1);
+  Log('Port check for ' + IntToStr(Port) + ': exit code ' + IntToStr(Rc));
+  Result := Ok and (Rc = 5);
 end;
 
 // Time zone from Windows, via the bundled node.exe. Falls back to Europe/London.
