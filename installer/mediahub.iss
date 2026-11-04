@@ -68,7 +68,7 @@ begin
   Result := DataDir() + '\mediahub.env';
 end;
 
-// System tools from the native System32 folder (not the 32-bit redirected one).
+// System tools from System32. Setup runs in 64-bit install mode, so {sys} and Exec use the 64-bit System32.
 function SysTool(const Name: String): String;
 begin
   Result := ExpandConstant('{sys}') + '\' + Name;
@@ -78,7 +78,7 @@ end;
 function RunStep(const Description, Filename, Params: String; var Rc: Integer): Boolean;
 begin
   Log(Description + ': ' + Filename + ' ' + Params);
-  Result := ExecWithNativeSysDir(Filename, Params, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Result := Exec(Filename, Params, '', SW_HIDE, ewWaitUntilTerminated, Rc);
   Log(Description + ': exit code ' + IntToStr(Rc));
   Result := Result and (Rc = 0);
 end;
@@ -88,7 +88,7 @@ var
   Rc: Integer;
   Ok: Boolean;
 begin
-  Ok := ExecWithNativeSysDir(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Ok := Exec(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc);
   Result := Ok and (Rc = 0);
 end;
 
@@ -100,7 +100,7 @@ var
   Ok: Boolean;
 begin
   Result := False;
-  Ok := ExecAndCaptureOutputWithNativeSysDir(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
+  Ok := ExecAndCaptureOutput(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
   if not Ok then Exit;
   for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
     // The state line reads e.g. "STATE : 1  STOPPED". Only that line counts, and both the code and the name must match.
@@ -115,7 +115,7 @@ var
   Ok: Boolean;
 begin
   Result := '';
-  Ok := ExecAndCaptureOutputWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Service | Where-Object Name -eq MediaHub | ForEach-Object StartName"', '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
+  Ok := ExecAndCaptureOutput(SysTool('WindowsPowerShell\v1.0\powershell.exe'), '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Service | Where-Object Name -eq MediaHub | ForEach-Object StartName"', '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
   if not Ok or (Rc <> 0) then Exit;
   // The account is the last non-empty line, so a warning PowerShell prints first is ignored.
   for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
@@ -189,7 +189,7 @@ var
   Cmd: String;
 begin
   Cmd := '-NoProfile -NonInteractive -Command "if (Get-NetTCPConnection -State Listen -LocalPort ' + IntToStr(Port) + ' -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"';
-  Ok := ExecWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Ok := Exec(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
   Result := Ok and (Rc = 1);
 end;
 
@@ -241,7 +241,7 @@ begin
   Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\check-data-owners.ps1') + '" -Path "' + DataDir() + '"';
   if Account <> '' then Params := Params + ' -ServiceAccount "' + Account + '"';
   Log('Check data folder owners: ' + Params);
-  if not ExecAndCaptureOutputWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured) then
+  if not ExecAndCaptureOutput(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured) then
     Rc := -1;
   Log('Check data folder owners: exit code ' + IntToStr(Rc));
   if Rc = 0 then Exit;
