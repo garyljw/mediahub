@@ -244,6 +244,9 @@ begin
   if not ExecAndCaptureOutput(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured) then
     Rc := -1;
   Log('Check data folder owners: exit code ' + IntToStr(Rc));
+  // PowerShell errors name paths and accounts only; the script never reads file contents.
+  for I := 0 to GetArrayLength(Captured.StdErr) - 1 do
+    if Trim(Captured.StdErr[I]) <> '' then Log('Check data folder owners: ' + Captured.StdErr[I]);
   if Rc = 0 then Exit;
   Detail := '';
   for I := 0 to GetArrayLength(Captured.StdOut) - 1 do

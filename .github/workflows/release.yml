@@ -308,6 +308,11 @@ jobs:
           Set-Content -LiteralPath $envPath -Value 'BETTER_AUTH_URL=http://127.0.0.1:7979'
           & icacls.exe $envPath /setowner $squatter | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "icacls /setowner failed with $LASTEXITCODE." }
+          # The owner check on its own first, in the same Windows PowerShell the installer uses, so its output shows here.
+          $check = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File installer\check-data-owners.ps1 -Path $dataDir 2>&1
+          $checkCode = $LASTEXITCODE
+          Write-Host "Owner check exit code $checkCode`: $check"
+          if ($checkCode -ne 3) { throw 'The owner check did not refuse the planted file (expected exit code 3).' }
           $p = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs 'squat.log')") -Wait -PassThru
           if ($p.ExitCode -eq 0) { throw 'The installer accepted a data folder with a file owned by a standard user.' }
           if (Get-MediaHubService) { throw 'The installer created the service despite the planted data folder.' }
