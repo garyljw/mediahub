@@ -1,7 +1,15 @@
 import "server-only";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import resourcesFixture from "./__fixtures__/resources.json";
-import { authAppUrl, checkPin, createPin, getOwnedServers, getPlexAccount, PlexRequestError } from "./client";
+import {
+  authAppUrl,
+  checkPin,
+  createPin,
+  getOwnedServers,
+  getPlexAccount,
+  getServerConnections,
+  PlexRequestError,
+} from "./client";
 
 vi.mock("@/server/env", () => ({ env: () => ({ BETTER_AUTH_URL: "http://mediahub.test:3000" }) }));
 vi.mock("./client-id", () => ({ getPlexClientId: () => CLIENT_ID }));
@@ -240,5 +248,72 @@ describe("failures", () => {
     stubPlex(() => json({ id: "x", authToken: TOKEN }));
     const error = await getPlexAccount(TOKEN).catch((e: unknown) => e);
     expect((error as Error).message).not.toContain(TOKEN);
+  });
+});
+
+describe("data-connection calls", () => {
+  const DATA_CLIENT_ID = "mediahub-data-fake-client-id";
+
+  it("makes the calls as the data client id when given one, and sign-in calls keep the sign-in id", async () => {
+    const mock = stubPlex((url) => {
+      if (url.pathname === "/api/v2/pins") return json({ id: 7, code: "fake-code" });
+      if (url.pathname.startsWith("/api/v2/pins/")) return json({ id: 7, authToken: null });
+      return json({ id: 1, username: "fake-user" });
+    });
+    await createPin({ clientId: DATA_CLIENT_ID });
+    await checkPin(7, { clientId: DATA_CLIENT_ID });
+    await getPlexAccount(TOKEN, { clientId: DATA_CLIENT_ID });
+    await getPlexAccount(TOKEN);
+
+    expect(requestedHeaders(mock, 0)["X-Plex-Client-Identifier"]).toBe(DATA_CLIENT_ID);
+    expect(requestedHeaders(mock, 1)["X-Plex-Client-Identifier"]).toBe(DATA_CLIENT_ID);
+    expect(requestedHeaders(mock, 2)["X-Plex-Client-Identifier"]).toBe(DATA_CLIENT_ID);
+    expect(requestedHeaders(mock, 3)["X-Plex-Client-Identifier"]).toBe(CLIENT_ID);
+  });
+
+  it("authAppUrl takes a client id and product for the data device, and no forwardUrl", () => {
+    const url = authAppUrl({ code: "fake-pin-code", clientId: DATA_CLIENT_ID, product: "MediaHub watched status" });
+    const params = new URLSearchParams(url.split("#?")[1]);
+    expect(params.get("clientID")).toBe(DATA_CLIENT_ID);
+    expect(params.get("context[device][product]")).toBe("MediaHub watched status");
+    expect(params.has("forwardUrl")).toBe(false);
+  });
+
+  it("getServerConnections returns the owned server's addresses, validated", async () => {
+    stubPlex(() =>
+      json([
+        {
+          name: "Fake Home Server",
+          provides: "server",
+          owned: true,
+          clientIdentifier: "fake-server-1",
+          connections: [
+            { protocol: "https", address: "192.168.10.5", port: 32400, uri: "https://192-168-10-5.x.plex.direct:32400", local: true, relay: false, IPv6: false },
+          ],
+        },
+      ]),
+    );
+    await expect(getServerConnections(TOKEN, "fake-server-1", { clientId: DATA_CLIENT_ID })).resolves.toEqual([
+      { protocol: "https", address: "192.168.10.5", port: 32400, uri: "https://192-168-10-5.x.plex.direct:32400", local: true, relay: false, IPv6: false },
+    ]);
+  });
+
+  it("getServerConnections returns null when the account doesn't own that server", async () => {
+    stubPlex(() => json([{ name: "Fake Friend", provides: "server", owned: false, clientIdentifier: "fake-server-1", connections: [] }]));
+    await expect(getServerConnections(TOKEN, "fake-server-1")).resolves.toBeNull();
+  });
+
+  it("getServerConnections rejects a connection with the wrong shape", async () => {
+    stubPlex(() =>
+      json([{ name: "Fake", provides: "server", owned: true, clientIdentifier: "fake-server-1", connections: [{ protocol: "https" }] }]),
+    );
+    await expect(getServerConnections(TOKEN, "fake-server-1")).rejects.toMatchObject({ kind: "invalid" });
+  });
+
+  it("sign-in resources parsing still works when the connections list is malformed", async () => {
+    stubPlex(() =>
+      json([{ name: "Fake Home Server", provides: "server", owned: true, clientIdentifier: "fake-server-1", connections: [{ protocol: "https" }] }]),
+    );
+    await expect(getOwnedServers(TOKEN)).resolves.toEqual([{ clientIdentifier: "fake-server-1", name: "Fake Home Server" }]);
   });
 });

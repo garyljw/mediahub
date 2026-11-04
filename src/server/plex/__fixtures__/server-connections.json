@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Fake Home Server",
+    "product": "Plex Media Server",
+    "clientIdentifier": "fakemachineid0123456789abcdef0123456789",
+    "provides": "server",
+    "owned": true,
+    "connections": [
+      {
+        "protocol": "https",
+        "address": "192.168.10.5",
+        "port": 32400,
+        "uri": "https://192-168-10-5.fakehash0123456789abcdef.plex.direct:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      },
+      {
+        "protocol": "https",
+        "address": "2001:db8::5",
+        "port": 32400,
+        "uri": "https://2001-db8--5.fakehash0123456789abcdef.plex.direct:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": true
+      },
+      {
+        "protocol": "https",
+        "address": "198.51.100.20",
+        "port": 32400,
+        "uri": "https://198-51-100-20.fakehash0123456789abcdef.plex.direct:32400",
+        "local": false,
+        "relay": false,
+        "IPv6": false
+      },
+      {
+        "protocol": "https",
+        "address": "203.0.113.9",
+        "port": 443,
+        "uri": "https://203-0-113-9.fakehash0123456789abcdef.plex.direct:443",
+        "local": true,
+        "relay": true,
+        "IPv6": false
+      }
+    ]
+  }
+]

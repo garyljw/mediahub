@@ -2,6 +2,7 @@ import "server-only";
 import { inArray } from "drizzle-orm";
 import { db } from "@/server/db";
 import { setting } from "@/server/db/schema";
+import { clearPlexDataConnection } from "./data-connection";
 
 // Which Plex server and account MediaHub's admin must come from. Set once by the first successful
 // /setup. Only the Plex account that owns this server, and matches the owner account id, can be admin.
@@ -58,7 +59,11 @@ export function claimPlexAdminConfig(config: PlexAdminConfig): boolean {
   });
 }
 
-/** Break-glass only: removes the admin configuration so setup can run again (see scripts/reset-plex-admin.ts). */
+/**
+ * Break-glass only: removes the admin configuration so setup can run again (see scripts/reset-plex-admin.ts).
+ * The Plex data connection is cleared too: its token may belong to the account that was just removed.
+ */
 export function clearPlexAdminConfig(): void {
   db().delete(setting).where(inArray(setting.key, ALL_KEYS)).run();
+  clearPlexDataConnection();
 }
