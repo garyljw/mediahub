@@ -650,7 +650,7 @@ describe("deleteSeriesItem", () => {
   const validDelete = { seriesId: 4, deleteFiles: false, addImportListExclusion: false };
 
   it("checks for the admin role only", async () => {
-    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("NEXT_REDIRECT /tv");
+    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("NEXT_REDIRECT /");
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
@@ -680,13 +680,13 @@ describe("deleteSeriesItem", () => {
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
-  it("sends exactly one series id with both booleans, and redirects to the TV list", async () => {
+  it("sends exactly one series id with both booleans, and redirects to Home", async () => {
     await expect(
       deleteSeriesItem({ seriesId: 4, deleteFiles: true, addImportListExclusion: true }),
-    ).rejects.toThrow("NEXT_REDIRECT /tv");
+    ).rejects.toThrow("NEXT_REDIRECT /");
 
     expect(mocks.deleteSeries).toHaveBeenCalledWith({ seriesIds: [4], deleteFiles: true, addImportListExclusion: true });
-    expect(mocks.redirect).toHaveBeenCalledWith("/tv", "replace");
+    expect(mocks.redirect).toHaveBeenCalledWith("/", "replace");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 

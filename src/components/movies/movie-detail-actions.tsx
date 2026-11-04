@@ -18,7 +18,7 @@ const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try agai
 
 /**
  * The action bar on a movie's page. Search is for everyone. The rest is admin only, and the page only renders it for
- * admins. Refresh, search and the release pick reuse the Movies table's actions. Delete uses the page's own action,
+ * admins. Refresh, search and the release pick reuse the shared movie actions. Delete uses the page's own action,
  * which sends the browser back to the list.
  */
 export function MovieDetailActions({

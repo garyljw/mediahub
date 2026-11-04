@@ -1,4 +1,4 @@
-// Display formatting for the Movies table. Pure, so it can be tested without a DOM.
+// Display formatting for the library. Pure, so it can be tested without a DOM.
 
 // These run during the server render and again in the browser, and the two must produce identical
 // text. Intl output depends on each runtime's ICU data (Node said "Sept", Safari said "Sep"), so dates

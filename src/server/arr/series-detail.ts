@@ -205,7 +205,7 @@ export function toSeriesDetail(
     network: series.network || null,
     overview: series.overview ?? "",
     monitored: series.monitored ?? false,
-    // The same fallback label as toSeriesRows, so the table and the detail page agree.
+    // The same fallback label as toSeriesRows, so the list and the detail page agree.
     qualityProfile: profileNames.get(qualityProfileId) ?? `Unknown profile (#${qualityProfileId})`,
     qualityProfileId,
     seriesType: isSeriesType(series.seriesType) ? series.seriesType : null,

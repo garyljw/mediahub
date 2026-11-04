@@ -15,7 +15,7 @@ import { CONFIRM_WORD, canConfirmDelete, confirmLabel, deleteTitle, listedItems,
 import { formatCount } from "./format";
 import type { Noun } from "./nouns";
 
-/** What the table sends to its server delete action. `ids` is the snapshot's ids; the server compares `confirmCount` with them. */
+/** What the page sends to its server delete action. `ids` is the snapshot's ids; the server compares `confirmCount` with them. */
 export type DeleteRequest = { ids: number[]; deleteFiles: boolean; addExclusion: boolean; confirmCount: number };
 
 /** What a server delete action answers. */

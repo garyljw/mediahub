@@ -1,7 +1,7 @@
 import type { SeriesStatus } from "@/server/arr/series";
 import type { EpisodeStatus } from "@/server/arr/series-detail";
 
-// Status badges for TV. Shared by the TV table and the series detail page, so both label and colour a status the same way.
+// Status badges for TV. Shared by the series detail page and the merged library rows, so both label and colour a status the same way.
 export const STATUS_LABEL: Record<SeriesStatus, string> = {
   continuing: "Continuing",
   ended: "Ended",

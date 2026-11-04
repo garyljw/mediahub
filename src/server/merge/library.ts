@@ -22,7 +22,7 @@ function movieItem(row: MovieRow): HomeItem {
 }
 
 /**
- * The same "have / want" episode figure as the TV table. Green when nothing is missing, amber when episodes are
+ * The same "have / want" episode figure as the series page. Green when nothing is missing, amber when episodes are
  * missing, muted when Sonarr expects none.
  */
 function seriesBadge(row: SeriesRow): HomeItem["badge"] {

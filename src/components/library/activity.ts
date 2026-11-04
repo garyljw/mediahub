@@ -55,7 +55,7 @@ export function activityLabel(activity: QueueActivity): string {
   return label;
 }
 
-/** Index the poll result by row id (movie id, series id or episode id) for the table rows. */
+/** Index the poll result by row id (movie id, series id or episode id) for Home and the item pages. */
 export function activityById(items: QueueActivity[]): Map<number, QueueActivity> {
   return new Map(items.map((activity) => [activity.id, activity]));
 }

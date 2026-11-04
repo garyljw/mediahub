@@ -71,7 +71,7 @@ describe("toSeriesRows", () => {
     expect(rows).toHaveLength(7);
   });
 
-  it("keeps upstream order (sorting is the table's job) and falls back to the title for sortTitle", () => {
+  it("keeps upstream order (sorting is the caller's job) and falls back to the title for sortTitle", () => {
     const expectedIds = series.filter((s) => typeof s.id === "number" && s.title).map((s) => s.id);
     expect(rows.map((r) => r.id)).toEqual(expectedIds);
     expect(rows.find((r) => r.id === 3)?.sortTitle).toBe("coming soon show");
@@ -121,7 +121,7 @@ describe("toSeriesRows", () => {
     });
   });
 
-  it("maps a 'deleted' status to ended, because the table has no state for it", () => {
+  it("maps a 'deleted' status to ended, because the UI has no state for it", () => {
     expect(rows.find((r) => r.id === 4)?.status).toBe("ended");
   });
 

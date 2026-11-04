@@ -251,7 +251,7 @@ describe("toSeriesDetail", () => {
     expect(detail({ title: undefined })).toBeNull();
   });
 
-  it("labels an unknown quality profile the same way the table does", () => {
+  it("labels an unknown quality profile the same way the list does", () => {
     expect(detail({ qualityProfileId: 99 })?.qualityProfile).toBe("Unknown profile (#99)");
   });
 

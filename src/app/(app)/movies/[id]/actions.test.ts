@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe("deleteMovie authorization", () => {
   it("checks for the admin role only", async () => {
-    await expect(deleteMovie(valid)).rejects.toThrow("NEXT_REDIRECT /movies");
+    await expect(deleteMovie(valid)).rejects.toThrow("NEXT_REDIRECT /");
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
@@ -109,13 +109,13 @@ describe("deleteMovie input", () => {
 });
 
 describe("deleteMovie success", () => {
-  it("sends exactly one movie id with both booleans, and redirects to the Movies list", async () => {
+  it("sends exactly one movie id with both booleans, and redirects to Home", async () => {
     await expect(deleteMovie({ movieId: 7, deleteFiles: true, addImportExclusion: true })).rejects.toThrow(
-      "NEXT_REDIRECT /movies",
+      "NEXT_REDIRECT /",
     );
 
     expect(mocks.deleteMovies).toHaveBeenCalledWith({ movieIds: [7], deleteFiles: true, addImportExclusion: true });
-    expect(mocks.redirect).toHaveBeenCalledWith("/movies", "replace");
+    expect(mocks.redirect).toHaveBeenCalledWith("/", "replace");
   });
 
   it("does not refresh on success, because it redirects instead", async () => {

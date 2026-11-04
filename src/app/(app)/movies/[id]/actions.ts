@@ -80,8 +80,8 @@ const MovieItemDeleteInput = z.strictObject({
 });
 
 /**
- * Deletes this movie from Radarr (admin only), for the movie page. Same role check as the table's delete, and
- * the catch always returns or throws. On success it sends the browser back to the Movies list. The redirect sits
+ * Deletes this movie from Radarr (admin only), for the movie page. The role check runs first, and
+ * the catch always returns or throws. On success it sends the browser back to Home. The redirect sits
  * outside the try, because redirect throws.
  */
 export async function deleteMovie(input: unknown): Promise<DeleteResult> {
@@ -112,5 +112,5 @@ export async function deleteMovie(input: unknown): Promise<DeleteResult> {
   }
 
   // replace, not push, so Back doesn't return to the deleted item's page.
-  redirect("/movies", RedirectType.replace);
+  redirect("/", RedirectType.replace);
 }

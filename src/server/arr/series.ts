@@ -14,7 +14,7 @@ type SeriesEditorResource = SonarrComponents["schemas"]["SeriesEditorResource"];
 
 export type SeriesStatus = "continuing" | "ended" | "upcoming";
 
-/** One series, reduced to the fields the TV table shows. */
+/** One series, reduced to the fields the library shows. */
 export type SeriesRow = {
   id: number;
   title: string;
@@ -36,7 +36,7 @@ export type SeriesRow = {
 };
 
 /**
- * Sonarr also sends "deleted" (a series it has marked for removal) and can omit the field. The table has no
+ * Sonarr also sends "deleted" (a series it has marked for removal) and can omit the field. The UI has no
  * state for either, so both show as "ended": neither is still airing, and neither should look upcoming or
  * continuing. The status filter uses the same three values.
  */
@@ -46,8 +46,8 @@ export function seriesStatus(series: SeriesResource): SeriesStatus {
 }
 
 /**
- * Pure: maps upstream series to table rows, in upstream order. Skips series without an id or title. Sorting is
- * the table's job (series-filters.ts), so it lives in one place.
+ * Pure: maps upstream series to rows, in upstream order. Skips series without an id or title. Sorting is done
+ * by the caller.
  */
 export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileResource[]): SeriesRow[] {
   const profileNames = new Map(usableProfiles(profiles).map((p) => [p.id, p.name]));
@@ -66,7 +66,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       status: seriesStatus(entry),
       monitored: entry.monitored ?? false,
       qualityProfileId,
-      // The filter dropdown reuses this label for orphaned ids, so the two always match.
+      // The profile filter reuses this label for orphaned ids, so the two always match.
       qualityProfile: profileNames.get(qualityProfileId) ?? `Unknown profile (#${qualityProfileId})`,
       network: entry.network || null,
       episodeFileCount: stats?.episodeFileCount ?? 0,

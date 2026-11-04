@@ -299,8 +299,8 @@ const SeriesItemDeleteInput = z.strictObject({
 export type DeleteResult = { ok: false; error: string };
 
 /**
- * Deletes this series from Sonarr (admin only), for the series page. Same role check as the table's delete, and
- * the catch always returns or throws. On success it sends the browser back to the TV list. The redirect sits
+ * Deletes this series from Sonarr (admin only), for the series page. The role check runs first, and
+ * the catch always returns or throws. On success it sends the browser back to Home. The redirect sits
  * outside the try, because redirect throws.
  */
 export async function deleteSeriesItem(input: unknown): Promise<DeleteResult> {
@@ -331,7 +331,7 @@ export async function deleteSeriesItem(input: unknown): Promise<DeleteResult> {
   }
 
   // replace, not push, so Back doesn't return to the deleted item's page.
-  redirect("/tv", RedirectType.replace);
+  redirect("/", RedirectType.replace);
 }
 
 

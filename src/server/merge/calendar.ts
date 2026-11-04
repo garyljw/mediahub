@@ -160,7 +160,7 @@ function episodeEntry(
 /**
  * Pure: merges Radarr movie releases and Sonarr episodes into one list for the calendar, for the range from..to
  * (both "YYYY-MM-DD", inclusive). Skips malformed items. Sorted by date, then movies before episodes, then sort
- * title (as the library tables sort), then detail.
+ * title (with the same collator as Home), then detail.
  */
 export function toCalendarEntries(
   movies: MovieResource[],
@@ -181,7 +181,7 @@ export function toCalendarEntries(
     if (item !== null) items.push(item);
   }
 
-  // The tables' collator, so titles order the same way here ("2 Guns" before "10 Cloverfield Lane"), and E99
+  // The shared title collator, so titles order the same way here ("2 Guns" before "10 Cloverfield Lane"), and E99
   // before E100. This runs only on the server, so Intl can't cause a hydration mismatch.
   items.sort((a, b) => {
     if (a.entry.date !== b.entry.date) return a.entry.date < b.entry.date ? -1 : 1;

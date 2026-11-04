@@ -92,7 +92,7 @@ describe("toMovieDetail", () => {
     expect(result).toMatchObject({ status: "missing", fileQuality: null, sizeOnDisk: 0 });
   });
 
-  it("labels an unknown quality profile the same way the table does", () => {
+  it("labels an unknown quality profile the same way the list does", () => {
     expect(detail(unknownProfile)?.qualityProfile).toBe("Unknown profile (#99)");
   });
 
@@ -182,7 +182,7 @@ describe("toMovieDetail", () => {
     expect(detail({ ...downloaded, tmdbId: undefined })).toMatchObject({ tmdbId: null });
   });
 
-  it("uses the same poster rule as the table", () => {
+  it("uses the same poster rule as the list", () => {
     expect(detail({ ...downloaded, images: [] })?.hasPoster).toBe(false);
     expect(detail({ ...downloaded, images: [{ coverType: "fanart" }] })?.hasPoster).toBe(false);
   });

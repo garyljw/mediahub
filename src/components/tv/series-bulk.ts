@@ -1,7 +1,4 @@
-// Pure limits for the bulk actions on the TV table. Must not import from src/server at runtime.
+// Pure id limit for the series actions. Must not import from src/server at runtime.
 
-/**
- * Most series one bulk delete or refresh may cover (src/app/(app)/tv/actions.ts uses this same value). The series
- * page's delete and refresh use it too.
- */
+/** Most series one delete or refresh call may cover. The series page sends one. */
 export const MAX_BULK_SERIES = 2000;

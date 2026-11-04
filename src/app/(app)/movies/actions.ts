@@ -4,7 +4,6 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
 import {
-  deleteMovies,
   listQualityProfiles,
   refreshMovies,
   searchMovieReleases,
@@ -22,64 +21,8 @@ import { resolveAddTarget } from "@/server/settings/add-target";
 import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases } from "@/server/arr/releases";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
-import { MAX_BULK_MOVIES } from "@/components/movies/movie-bulk";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
 import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
-
-export type DeleteResult = { ok: true; deleted: number } | { ok: false; error: string };
-
-// strictObject rejects unknown keys (e.g. a stray moveFiles). deleteFiles and addImportExclusion are
-// required, so a missing choice can never be read as "no". confirmCount must equal the de-duplicated id
-// count: a sanity check that catches a UI bug sending more or fewer movies than the dialog showed. It
-// compares counts only, not which movies; that's fine because only an admin can get this far.
-const MovieDeleteInput = z.strictObject({
-  movieIds: z.array(z.number().int().positive()).min(1).max(MAX_BULK_MOVIES),
-  deleteFiles: z.boolean(),
-  addImportExclusion: z.boolean(),
-  confirmCount: z.number().int().positive(),
-});
-
-/**
- * Bulk delete of Radarr movies (admin only). Same shape as the other actions: the role check runs first,
- * inside try, and the catch always returns or throws. src/app/server-actions-auth.test.ts enforces this.
- */
-export async function removeMovies(input: unknown): Promise<DeleteResult> {
-  try {
-    await requireRole("admin");
-  } catch (error) {
-    if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to delete movies." };
-    throw error;
-  }
-
-  const parsed = MovieDeleteInput.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid delete." };
-
-  const { deleteFiles, addImportExclusion, confirmCount } = parsed.data;
-  // A Set drops duplicate ids, so Radarr gets each movie once. The count check runs on the unique ids.
-  const movieIds = [...new Set(parsed.data.movieIds)];
-  if (confirmCount !== movieIds.length) return { ok: false, error: "Invalid delete." };
-
-  try {
-    await deleteMovies({ movieIds, deleteFiles, addImportExclusion });
-  } catch (error) {
-    if (!(error instanceof ArrRequestError)) throw error;
-    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
-    console.error(`Movie delete: ${error.message}`);
-    // Radarr may have deleted some or all of them anyway (certainly possible after a timeout), so
-    // re-read the table rather than keep showing rows that might be gone.
-    refresh();
-    if (error.kind === "timeout") {
-      return { ok: false, error: "Radarr is taking a long time and may still be deleting. The table has been refreshed; check it before trying again." };
-    }
-    // Any failure after the request was sent (a proxy 504, a dropped connection, an odd reply) is
-    // ambiguous too, so don't claim nothing was deleted.
-    return { ok: false, error: "Radarr didn't confirm the delete, so some movies may already be gone. The table has been refreshed; check it before trying again." };
-  }
-
-  // Nothing is cached, so refresh() is enough for the table to drop the deleted rows.
-  refresh();
-  return { ok: true, deleted: movieIds.length };
-}
 
 export type SearchResult = { ok: true; results: LookupResult[] } | { ok: false; error: string };
 
@@ -202,7 +145,7 @@ async function addLibraryMovieAs(isAdmin: boolean, input: unknown): Promise<AddR
         addSent = true;
       },
     );
-    // The Movies page reads Radarr on every request, so refresh() is enough for the new row to appear.
+    // The library reads Radarr on every request, so refresh() is enough for the new row to appear.
     refresh();
     return { ok: true, id: added.id, title: added.title, year: added.year };
   } catch (error) {
