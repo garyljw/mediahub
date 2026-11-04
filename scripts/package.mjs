@@ -33,6 +33,15 @@ function findForbidden(dir, rel = "", found = []) {
   return found;
 }
 
+// The release workflow passes the installer's version (X.Y.Z, X.Y.Z-rc.N or X.Y.Z-dev.N), which the updater and the
+// Settings page read from build-info.json. Its X.Y.Z must match package.json. Without --version, package.json's.
+const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+const { values: args } = parseArgs({ options: { version: { type: "string" } } });
+const version = args.version ?? pkg.version;
+const versionMatch = /^(\d+\.\d+\.\d+)(?:-(?:rc|dev)\.\d+)?$/.exec(version);
+if (!versionMatch || versionMatch[1] !== pkg.version) {
+  fail(`--version must be ${pkg.version}, ${pkg.version}-rc.N or ${pkg.version}-dev.N.`);
+}
 const nodeLine = readFileSync(path.join(root, ".node-version"), "utf8").trim();
 const nodeTarget = `node${nodeLine.split(".")[0]}`;
 
@@ -96,15 +105,6 @@ for (const [entry, outfile] of bundles) {
 const updaterSource = readFileSync(path.join(out, "tools", "updater.mjs"), "utf8");
 if (updaterSource.includes("better-sqlite3")) fail("tools/updater.mjs references better-sqlite3. It must not import the database.");
 
-// The release workflow passes the installer's version (X.Y.Z, X.Y.Z-rc.N or X.Y.Z-dev.N), which the updater and the
-// Settings page read from build-info.json. Its X.Y.Z must match package.json. Without --version, package.json's.
-const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
-const { values: args } = parseArgs({ options: { version: { type: "string" } } });
-const version = args.version ?? pkg.version;
-const versionMatch = /^(\d+\.\d+\.\d+)(?:-(?:rc|dev)\.\d+)?$/.exec(version);
-if (!versionMatch || versionMatch[1] !== pkg.version) {
-  fail(`--version must be ${pkg.version}, ${pkg.version}-rc.N or ${pkg.version}-dev.N.`);
-}
 writeFileSync(
   path.join(out, "build-info.json"),
   `${JSON.stringify({ version, node: process.version }, null, 2)}\n`,

@@ -62,11 +62,12 @@ export function toUpdatesView(
 export function getUpdatesView(): UpdatesView {
   const config = env();
   const dir = config.MEDIAHUB_UPDATES_DIR;
-  if (!dir) return { available: false, runningVersion: appVersion() };
+  const version = appVersion();
+  if (!dir) return { available: false, runningVersion: version };
 
-  const status = readStatus(path.join(dir, "status.json"), appVersion());
+  const status = readStatus(path.join(dir, "status.json"), version);
   const queued = hasRequests(path.join(dir, "requests"));
-  return toUpdatesView(status, appVersion(), queued, config.DISPLAY_TIMEZONE);
+  return toUpdatesView(status, version, queued, config.DISPLAY_TIMEZONE);
 }
 
 /**

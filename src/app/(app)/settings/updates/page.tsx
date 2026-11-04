@@ -25,11 +25,11 @@ export default async function UpdatesPage() {
             <dd>
               {view.latestVersion
                 ? `Version ${view.latestVersion} is available.`
-                : view.lastResult === null
-                  ? "Not checked yet"
-                  : view.lastResult.kind === "up-to-date" || view.lastResult.kind === "installed"
-                    ? "MediaHub is up to date."
-                    : "Unknown (see the last result)"}
+                : view.lastResult?.kind === "up-to-date" || view.lastResult?.kind === "installed"
+                  ? "MediaHub is up to date."
+                  : view.lastChecked === null
+                    ? "Not checked yet"
+                    : "—"}
             </dd>
             <dt className="text-muted-foreground">Last checked</dt>
             <dd>{view.lastChecked ?? "Not checked yet"}</dd>

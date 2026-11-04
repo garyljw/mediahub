@@ -40,7 +40,7 @@ export function UpdateCheckButton({ queued, checking }: { queued: boolean; check
 
   return (
     <div className="space-y-2">
-      <Button type="button" onClick={onClick} disabled={pending || queued || checking}>
+      <Button type="button" onClick={onClick} disabled={pending || queued}>
         Check for updates now
       </Button>
       {error && (
