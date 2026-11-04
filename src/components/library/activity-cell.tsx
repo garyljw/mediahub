@@ -39,7 +39,7 @@ export function ActivityCell({ name, activity }: { name: string; activity: Queue
   // The label can be cut off in the cell, so the hover text always has it. Messages (admins only) follow it.
   const tooltip = [activityLabel(activity), ...activity.messages].join("\n");
   return (
-    <TableCell className={CELL} title={tooltip}>
+    <TableCell className={cn(CELL, "whitespace-normal min-w-48")} title={tooltip}>
       <span className={cn("flex min-w-0 items-center gap-1.5", ACTIVITY_CLASS[activity.severity])}>
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{activityLabel(activity)}</span>
@@ -57,7 +57,7 @@ export function ActivityCell({ name, activity }: { name: string; activity: Queue
         </div>
       )}
       {activity.messages.length > 0 && (
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{activity.messages[0]}</p>
+        <p className="mt-0.5 break-words text-xs text-muted-foreground">{activity.messages[0]}</p>
       )}
     </TableCell>
   );
