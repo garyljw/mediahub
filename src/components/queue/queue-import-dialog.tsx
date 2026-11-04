@@ -90,7 +90,7 @@ export function QueueImportDialog({ row, onClose }: { row: QueueRow; onClose: ()
         if (!open && !pending) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Force import?</DialogTitle>
           <DialogDescription>
@@ -145,7 +145,7 @@ export function QueueImportDialog({ row, onClose }: { row: QueueRow; onClose: ()
                           className="size-4 accent-primary"
                         />
                       </TableCell>
-                      <TableCell className={`${CELL} max-w-0`}>
+                      <TableCell className={`${CELL} min-w-48 whitespace-normal`}>
                         <p className="break-all text-sm">{file.name}</p>
                         {clashing.has(file.id) && (
                           <p className="mt-1 text-xs text-destructive">Same movie or episode as another ticked file.</p>
@@ -160,7 +160,7 @@ export function QueueImportDialog({ row, onClose }: { row: QueueRow; onClose: ()
                           </ul>
                         )}
                       </TableCell>
-                      <TableCell className={CELL}>
+                      <TableCell className={`${CELL} min-w-24 whitespace-normal wrap-anywhere`}>
                         {file.match ?? <span className="text-muted-foreground">No match</span>}
                       </TableCell>
                       <TableCell className={`${CELL} whitespace-nowrap`}>{file.quality ?? "—"}</TableCell>
