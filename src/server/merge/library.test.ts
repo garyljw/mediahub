@@ -124,6 +124,7 @@ describe("toHomeItems: Plex watched state", () => {
       [100006, "unwatched"],
       [100008, "partial"],
     ]),
+    showKeys: new Map(),
   };
   const withPlex = toHomeItems(movies, series, watched);
 
@@ -150,7 +151,7 @@ describe("toHomeItems: Plex watched state", () => {
 
   it("never matches a movie id against a series, or the reverse", () => {
     // Movie 4 and series 4 share an id number. Only the tmdb/tvdb ids are looked up, so neither picks up the other's state.
-    const onlyMovies: WatchedIndex = { movies: new Map(), series: new Map([[4, "watched"]]) };
+    const onlyMovies: WatchedIndex = { movies: new Map(), series: new Map([[4, "watched"]]), showKeys: new Map() };
     const result = toHomeItems(movies, series, onlyMovies);
     expect(result.find((item) => item.key === "movie:4")?.watched).toBeNull();
     expect(result.find((item) => item.key === "series:4")?.watched).toBeNull();

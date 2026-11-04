@@ -1,15 +1,17 @@
 import "server-only";
 import { describe, expect, it, vi } from "vitest";
-import { SectionItemsSchema, type PlexSectionItem } from "@/server/plex/server";
+import { EpisodeItemsSchema, SectionItemsSchema, type PlexSectionItem } from "@/server/plex/server";
 import movieSection from "./__fixtures__/plex-movie-section.json";
 import showSection from "./__fixtures__/plex-show-section.json";
-import { movieWatchedState, showWatchedState, toWatchedIndex } from "./watched";
+import episodeSection from "./__fixtures__/plex-show-episodes.json";
+import { episodeWatchedState, movieWatchedState, showWatchedState, toEpisodeWatched, toWatchedIndex, type EpisodeRef } from "./watched";
 
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => "mediahub-data-fake-client-id" }));
 
 // The fixtures go through the same schema the live client uses, so the field stripping is exercised too.
 const movieItems = SectionItemsSchema.parse(movieSection);
 const showItems = SectionItemsSchema.parse(showSection);
+const episodeItems = EpisodeItemsSchema.parse(episodeSection);
 
 const item = (overrides: Partial<PlexSectionItem> = {}): PlexSectionItem => ({
   guids: [],
@@ -17,20 +19,43 @@ const item = (overrides: Partial<PlexSectionItem> = {}): PlexSectionItem => ({
   viewOffset: 0,
   leafCount: 0,
   viewedLeafCount: 0,
+  ratingKey: null,
   ...overrides,
 });
 
 describe("the schema keeps only the watched-status fields", () => {
-  it("drops titles, rating keys and durations from each item", () => {
+  it("drops titles, media and durations from each item, and keeps the rating key", () => {
     expect(movieItems[0]).toEqual({
       guids: ["imdb://tt0000001", "tmdb://900001", "tvdb://0"],
       viewCount: 1,
       viewOffset: 0,
       leafCount: 0,
       viewedLeafCount: 0,
+      ratingKey: "1001",
     });
     expect(JSON.stringify(movieItems)).not.toContain("Fake Watched Film");
-    expect(JSON.stringify(movieItems)).not.toContain("ratingKey");
+    expect(JSON.stringify(movieItems)).not.toContain("duration");
+  });
+
+  it("drops titles, media and file paths from each episode, and keeps only the numbers and counts", () => {
+    expect(episodeItems[0]).toEqual({
+      guids: ["tvdb://200001", "tmdb://400001", "imdb://tt0000201"],
+      season: 1,
+      episode: 1,
+      viewCount: 1,
+      viewOffset: 0,
+    });
+    expect(JSON.stringify(episodeItems)).not.toContain("Fake Pilot");
+    expect(JSON.stringify(episodeItems)).not.toContain("Media");
+    expect(JSON.stringify(episodeItems)).not.toContain("fake/path");
+  });
+});
+
+describe("episodeWatchedState", () => {
+  it("is watched once viewed, partly watched once started, unwatched otherwise", () => {
+    expect(episodeWatchedState(episodeItems[0])).toBe("watched");
+    expect(episodeWatchedState(episodeItems[1])).toBe("partial");
+    expect(episodeWatchedState(episodeItems[2])).toBe("unwatched");
   });
 });
 
@@ -141,5 +166,87 @@ describe("toWatchedIndex: empty input", () => {
     const index = toWatchedIndex([], []);
     expect(index.movies.size).toBe(0);
     expect(index.series.size).toBe(0);
+    expect(index.showKeys.size).toBe(0);
+  });
+});
+
+describe("toWatchedIndex: show keys", () => {
+  it("lists the rating key of every show that has each tvdb id, across libraries", () => {
+    const shows = [
+      item({ guids: ["tvdb://300001"], leafCount: 4, viewedLeafCount: 1, ratingKey: "5001" }),
+      item({ guids: ["tvdb://300001"], leafCount: 4, viewedLeafCount: 4, ratingKey: "5002" }),
+    ];
+    const index = toWatchedIndex([], shows);
+    expect(index.showKeys.get(300001)).toEqual(["5001", "5002"]);
+    expect(index.series.get(300001)).toBe("watched");
+  });
+
+  it("does not list the same rating key twice", () => {
+    const twice = [
+      item({ guids: ["tvdb://300002"], leafCount: 4, viewedLeafCount: 1, ratingKey: "5003" }),
+      item({ guids: ["tvdb://300002"], leafCount: 4, viewedLeafCount: 1, ratingKey: "5003" }),
+    ];
+    expect(toWatchedIndex([], twice).showKeys.get(300002)).toEqual(["5003"]);
+  });
+
+  it("skips a show with no rating key, but keeps its watched state", () => {
+    const index = toWatchedIndex([], [item({ guids: ["tvdb://300003"], leafCount: 4, viewedLeafCount: 2, ratingKey: null })]);
+    expect(index.series.get(300003)).toBe("partial");
+    expect(index.showKeys.has(300003)).toBe(false);
+  });
+
+  it("records no key for a show with no episodes", () => {
+    const index = toWatchedIndex([], [item({ guids: ["tvdb://300004"], leafCount: 0, ratingKey: "5004" })]);
+    expect(index.showKeys.has(300004)).toBe(false);
+  });
+
+  it("reads the rating key from the show fixture", () => {
+    const { showKeys } = toWatchedIndex([], showItems);
+    expect(showKeys.get(100001)).toEqual(["2001"]);
+    expect(showKeys.has(100004)).toBe(false);
+  });
+});
+
+describe("toEpisodeWatched", () => {
+  // Sonarr episodes. Each comment says how the row should match the Plex fixture (plex-show-episodes.json).
+  const episodes: EpisodeRef[] = [
+    { id: 1, tvdbId: 200001, seasonNumber: 1, episodeNumber: 1 }, // matched by TVDB id: watched
+    { id: 2, tvdbId: 200002, seasonNumber: 1, episodeNumber: 2 }, // matched by TVDB id: partly watched
+    { id: 3, tvdbId: 200003, seasonNumber: 1, episodeNumber: 3 }, // matched by TVDB id: unwatched
+    { id: 4, tvdbId: null, seasonNumber: 1, episodeNumber: 4 }, // no TVDB id: matched by number to a guid-less Plex episode
+    { id: 5, tvdbId: 200777, seasonNumber: 1, episodeNumber: 4 }, // TVDB id not in Plex: falls back to the number
+    { id: 6, tvdbId: 200009, seasonNumber: 1, episodeNumber: 2 }, // not in Plex; 1x2 is a Plex episode WITH a TVDB guid
+    { id: 7, tvdbId: 200005, seasonNumber: 2, episodeNumber: 1 }, // two Plex copies: unwatched and watched
+    { id: 8, tvdbId: null, seasonNumber: 9, episodeNumber: 9 }, // nothing in Plex matches
+  ];
+
+  it("matches an episode by its TVDB id", () => {
+    const states = toEpisodeWatched(episodes, episodeItems);
+    expect(states.get(1)).toBe("watched");
+    expect(states.get(2)).toBe("partial");
+    expect(states.get(3)).toBe("unwatched");
+  });
+
+  it("matches a Plex episode with no TVDB guid by season and episode number", () => {
+    expect(toEpisodeWatched(episodes, episodeItems).get(4)).toBe("watched");
+  });
+
+  it("falls back to the number when the episode's TVDB id isn't in Plex", () => {
+    expect(toEpisodeWatched(episodes, episodeItems).get(5)).toBe("watched");
+  });
+
+  it("never matches a Plex episode that has a TVDB guid by number", () => {
+    expect(toEpisodeWatched(episodes, episodeItems).has(6)).toBe(false);
+  });
+
+  it("keeps the most watched copy when a TVDB id is listed twice, whichever comes first", () => {
+    expect(toEpisodeWatched(episodes, episodeItems).get(7)).toBe("watched");
+    expect(toEpisodeWatched(episodes, [...episodeItems].reverse()).get(7)).toBe("watched");
+  });
+
+  it("leaves an episode with no match out of the map, and ignores Plex episodes with no numbers", () => {
+    const states = toEpisodeWatched(episodes, episodeItems);
+    expect(states.has(8)).toBe(false);
+    expect([...states.keys()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 7]);
   });
 });

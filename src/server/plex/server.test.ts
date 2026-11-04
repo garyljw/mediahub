@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ httpsRequest: vi.fn() }));
 vi.mock("node:https", () => ({ request: mocks.httpsRequest }));
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => CLIENT_ID }));
 
-import { getLibrarySections, getSectionItems, getServerIdentity, pinnedLookup } from "./server";
+import { getLibrarySections, getSectionItems, getServerIdentity, getShowEpisodes, pinnedLookup } from "./server";
 import { PlexRequestError } from "./errors";
 
 const CLIENT_ID = "mediahub-data-fake-client-id";
@@ -261,9 +261,16 @@ describe("getSectionItems", () => {
   it("keeps only the watched-status fields, dropping every other key", async () => {
     fetchMock.mockResolvedValue(json(ITEMS));
     await expect(getSectionItems(PLAIN, TOKEN, "1")).resolves.toEqual([
-      { guids: ["imdb://tt0000001", "tmdb://900001"], viewCount: 2, viewOffset: 0, leafCount: 0, viewedLeafCount: 0 },
-      { guids: ["tvdb://100001"], viewCount: 0, viewOffset: 0, leafCount: 10, viewedLeafCount: 4 },
-      { guids: [], viewCount: 0, viewOffset: 0, leafCount: 0, viewedLeafCount: 0 },
+      {
+        guids: ["imdb://tt0000001", "tmdb://900001"],
+        viewCount: 2,
+        viewOffset: 0,
+        leafCount: 0,
+        viewedLeafCount: 0,
+        ratingKey: "101",
+      },
+      { guids: ["tvdb://100001"], viewCount: 0, viewOffset: 0, leafCount: 10, viewedLeafCount: 4, ratingKey: "102" },
+      { guids: [], viewCount: 0, viewOffset: 0, leafCount: 0, viewedLeafCount: 0, ratingKey: "103" },
     ]);
   });
 
@@ -316,5 +323,66 @@ describe("getSectionItems", () => {
     const padding = "x".repeat(1024 * 1024 + 1);
     fetchMock.mockResolvedValue(new Response(`{"MediaContainer":{"machineIdentifier":"abc","pad":"${padding}"}}`, { status: 200 }));
     await expect(getServerIdentity(PLAIN)).rejects.toMatchObject({ kind: "invalid" });
+  });
+});
+
+describe("getShowEpisodes", () => {
+  const EPISODES = {
+    MediaContainer: {
+      size: 2,
+      title: "Fake Show",
+      Metadata: [
+        {
+          ratingKey: "3001",
+          title: "Fake Pilot",
+          index: 1,
+          parentIndex: 1,
+          viewCount: 1,
+          Guid: [{ id: "tvdb://200001" }],
+          Media: [{ id: 5001 }],
+        },
+        { ratingKey: "3002", title: "Fake Second", index: 2, parentIndex: 1, Guid: [] },
+      ],
+    },
+  };
+
+  it("keeps only the episode fields, dropping every other key", async () => {
+    fetchMock.mockResolvedValue(json(EPISODES));
+    await expect(getShowEpisodes(PLAIN, TOKEN, "2001")).resolves.toEqual([
+      { guids: ["tvdb://200001"], season: 1, episode: 1, viewCount: 1, viewOffset: 0 },
+      { guids: [], season: 1, episode: 2, viewCount: 0, viewOffset: 0 },
+    ]);
+  });
+
+  it("asks for guids on the encoded show path, with the token in the header only", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0 } }));
+    await getShowEpisodes(PLAIN, TOKEN, "2001/../5");
+
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("http://192.168.10.5:32400/library/metadata/2001%2F..%2F5/allLeaves?includeGuids=1");
+    expect(String(url)).not.toContain(TOKEN);
+    expect((init.headers as Record<string, string>)["X-Plex-Token"]).toBe(TOKEN);
+  });
+
+  it("gives a null season for a number that is not whole", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { Metadata: [{ index: 2, parentIndex: 1.5 }] } }));
+    await expect(getShowEpisodes(PLAIN, TOKEN, "2001")).resolves.toEqual([
+      { guids: [], season: null, episode: 2, viewCount: 0, viewOffset: 0 },
+    ]);
+  });
+
+  it("treats a show with no episodes as an empty list", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0 } }));
+    await expect(getShowEpisodes(PLAIN, TOKEN, "2001")).resolves.toEqual([]);
+  });
+
+  it("rejects a plain http reply whose Content-Length is over the section cap", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(EPISODES), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Content-Length": String(17 * 1024 * 1024) },
+      }),
+    );
+    await expect(getShowEpisodes(PLAIN, TOKEN, "2001")).rejects.toMatchObject({ kind: "invalid" });
   });
 });
