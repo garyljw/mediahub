@@ -1,0 +1,67 @@
+{
+  "MediaContainer": {
+    "size": 6,
+    "allowSync": false,
+    "librarySectionID": 2,
+    "librarySectionTitle": "TV Shows",
+    "librarySectionUUID": "fake-section-uuid-shows",
+    "mediaTagPrefix": "/system/bundle/media/flags/",
+    "mediaTagVersion": 1700000000,
+    "Metadata": [
+      {
+        "ratingKey": "2001",
+        "key": "/library/metadata/2001",
+        "title": "Fake Finished Show",
+        "year": 2015,
+        "leafCount": 10,
+        "viewedLeafCount": 10,
+        "Guid": [{ "id": "tvdb://100001" }, { "id": "tmdb://800001" }]
+      },
+      {
+        "ratingKey": "2002",
+        "key": "/library/metadata/2002",
+        "title": "Fake Half Watched Show",
+        "year": 2017,
+        "leafCount": 10,
+        "viewedLeafCount": 3,
+        "Guid": [{ "id": "tvdb://100002" }]
+      },
+      {
+        "ratingKey": "2003",
+        "key": "/library/metadata/2003",
+        "title": "Fake Unwatched Show",
+        "year": 2019,
+        "leafCount": 8,
+        "viewedLeafCount": 0,
+        "Guid": [{ "id": "tvdb://100003" }]
+      },
+      {
+        "ratingKey": "2004",
+        "key": "/library/metadata/2004",
+        "title": "Fake Empty Show",
+        "year": 2024,
+        "leafCount": 0,
+        "viewedLeafCount": 0,
+        "Guid": [{ "id": "tvdb://100004" }]
+      },
+      {
+        "ratingKey": "2005",
+        "key": "/library/metadata/2005",
+        "title": "Fake Tmdb Only Show",
+        "year": 2020,
+        "leafCount": 4,
+        "viewedLeafCount": 4,
+        "Guid": [{ "id": "tmdb://800002" }]
+      },
+      {
+        "ratingKey": "2006",
+        "key": "/library/metadata/2006",
+        "title": "Fake Duplicate Show (Kids library)",
+        "year": 2019,
+        "leafCount": 8,
+        "viewedLeafCount": 5,
+        "Guid": [{ "id": "tvdb://100003" }]
+      }
+    ]
+  }
+}

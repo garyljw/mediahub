@@ -1,0 +1,74 @@
+{
+  "MediaContainer": {
+    "size": 7,
+    "allowSync": false,
+    "librarySectionID": 1,
+    "librarySectionTitle": "Films",
+    "librarySectionUUID": "fake-section-uuid-films",
+    "mediaTagPrefix": "/system/bundle/media/flags/",
+    "mediaTagVersion": 1700000000,
+    "Metadata": [
+      {
+        "ratingKey": "1001",
+        "key": "/library/metadata/1001",
+        "title": "Fake Watched Film",
+        "year": 2019,
+        "duration": 5400000,
+        "viewCount": 1,
+        "lastViewedAt": 1700000100,
+        "Guid": [{ "id": "imdb://tt0000001" }, { "id": "tmdb://900001" }, { "id": "tvdb://0" }]
+      },
+      {
+        "ratingKey": "1002",
+        "key": "/library/metadata/1002",
+        "title": "Fake Started Film",
+        "year": 2021,
+        "duration": 6000000,
+        "viewOffset": 120000,
+        "Guid": [{ "id": "tmdb://900002" }]
+      },
+      {
+        "ratingKey": "1003",
+        "key": "/library/metadata/1003",
+        "title": "Fake Untouched Film",
+        "year": 2023,
+        "duration": 4800000,
+        "Guid": [{ "id": "tmdb://900003" }]
+      },
+      {
+        "ratingKey": "1004",
+        "key": "/library/metadata/1004",
+        "title": "Fake Imdb Only Film",
+        "year": 2020,
+        "duration": 5000000,
+        "viewCount": 3,
+        "Guid": [{ "id": "imdb://tt0000004" }]
+      },
+      {
+        "ratingKey": "1005",
+        "key": "/library/metadata/1005",
+        "title": "Fake Film With No Guids",
+        "year": 2018,
+        "duration": 4000000,
+        "viewCount": 1
+      },
+      {
+        "ratingKey": "1006",
+        "key": "/library/metadata/1006",
+        "title": "Fake Film (4K copy)",
+        "year": 2021,
+        "duration": 6000000,
+        "Guid": [{ "id": "tmdb://900002" }]
+      },
+      {
+        "ratingKey": "1007",
+        "key": "/library/metadata/1007",
+        "title": "Fake Zero Id Film",
+        "year": 2022,
+        "duration": 5000000,
+        "viewCount": 1,
+        "Guid": [{ "id": "tmdb://0" }, { "id": "tmdb://abc" }]
+      }
+    ]
+  }
+}

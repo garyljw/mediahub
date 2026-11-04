@@ -7,12 +7,13 @@ import { EPISODE_STATUS_CLASS } from "@/components/tv/series-status";
 import moviesFixture from "./__fixtures__/home-movies.json";
 import seriesFixture from "./__fixtures__/home-series.json";
 import { toHomeItems } from "./library";
+import type { WatchedIndex } from "./watched";
 
 // The fixtures are already-reduced rows (the shape listMovies and listSeries return), so they are cast rather than inferred.
 const movies = moviesFixture as MovieRow[];
 const series = seriesFixture as SeriesRow[];
 
-const items = toHomeItems(movies, series);
+const items = toHomeItems(movies, series, null);
 const byKey = (key: string) => {
   const item = items.find((entry) => entry.key === key);
   if (!item) throw new Error(`no item ${key}`);
@@ -107,5 +108,58 @@ describe("toHomeItems: ordering", () => {
     expect(second.key).toBe("movie:4");
     expect(third.key).toBe("series:4");
     expect(second.sortTitle).toBe(third.sortTitle);
+  });
+});
+
+describe("toHomeItems: Plex watched state", () => {
+  const watched: WatchedIndex = {
+    movies: new Map([
+      [900001, "watched"],
+      [900002, "partial"],
+      [900003, "unwatched"],
+    ]),
+    series: new Map([
+      [100004, "watched"],
+      [100005, "partial"],
+      [100006, "unwatched"],
+      [100008, "partial"],
+    ]),
+  };
+  const withPlex = toHomeItems(movies, series, watched);
+
+  it("gives every item null when there is no index (Plex not connected or failed)", () => {
+    expect(items.every((item) => item.watched === null)).toBe(true);
+  });
+
+  it("gives each matched movie and series its state, by tmdb and tvdb id", () => {
+    const pick = (key: string) => withPlex.find((item) => item.key === key)?.watched;
+    expect(pick("movie:1")).toBe("watched");
+    expect(pick("movie:2")).toBe("partial");
+    expect(pick("movie:3")).toBe("unwatched");
+    expect(pick("series:5")).toBe("partial");
+    expect(pick("series:6")).toBe("unwatched");
+    expect(pick("series:8")).toBe("partial");
+  });
+
+  it("gives null to a title not in Plex, and to a row with no upstream id", () => {
+    const pick = (key: string) => withPlex.find((item) => item.key === key)?.watched;
+    expect(pick("movie:4")).toBeNull();
+    expect(pick("series:7")).toBeNull();
+    expect(pick("series:4")).toBe("watched");
+  });
+
+  it("never matches a movie id against a series, or the reverse", () => {
+    // Movie 4 and series 4 share an id number. Only the tmdb/tvdb ids are looked up, so neither picks up the other's state.
+    const onlyMovies: WatchedIndex = { movies: new Map(), series: new Map([[4, "watched"]]) };
+    const result = toHomeItems(movies, series, onlyMovies);
+    expect(result.find((item) => item.key === "movie:4")?.watched).toBeNull();
+    expect(result.find((item) => item.key === "series:4")?.watched).toBeNull();
+  });
+
+  it("keeps the id fields out of the items", () => {
+    for (const item of withPlex) {
+      expect(Object.keys(item)).not.toContain("tmdbId");
+      expect(Object.keys(item)).not.toContain("tvdbId");
+    }
   });
 });

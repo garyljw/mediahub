@@ -59,6 +59,7 @@ const ALLOWED_KEYS = [
   "sortTitle",
   "status",
   "title",
+  "tvdbId",
   "year",
 ].sort();
 
@@ -94,6 +95,7 @@ describe("toSeriesRows", () => {
       added: "2024-02-10T09:00:00Z",
       sortTitle: "harbour lights",
       hasPoster: true,
+      tvdbId: 100001,
     });
   });
 

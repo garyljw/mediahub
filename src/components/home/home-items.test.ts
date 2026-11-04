@@ -10,6 +10,7 @@ function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: 
     href: `/${overrides.kind}/${overrides.id}`,
     posterSrc: null,
     badge: { label: "Missing", className: "" },
+    watched: null,
     ...overrides,
   };
 }

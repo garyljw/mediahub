@@ -28,6 +28,8 @@ export type MovieRow = {
   sortTitle: string;
   /** True when Radarr has a poster for the movie. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
+  /** The TMDB id, used to match the movie to Plex. Server-only: never copied into the Home items. */
+  tmdbId: number | null;
 };
 
 function movieStatus(movie: MovieResource): MovieStatus {
@@ -63,6 +65,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       added: movie.added ?? null,
       sortTitle: (movie.sortTitle || movie.title).toLowerCase(),
       hasPoster: movie.images?.some((image) => image.coverType === "poster") ?? false,
+      tmdbId: typeof movie.tmdbId === "number" && Number.isSafeInteger(movie.tmdbId) && movie.tmdbId > 0 ? movie.tmdbId : null,
     });
   }
 
