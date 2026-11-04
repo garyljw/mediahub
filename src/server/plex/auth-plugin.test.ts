@@ -55,6 +55,8 @@ function buildAuth() {
       provider: "sqlite",
       schema: { user: schema.user, session: schema.session, account: schema.account, verification: schema.verification },
     }),
+    // Mirrors src/server/auth.ts, which disables self-service renames.
+    disabledPaths: ["/update-user"],
     emailAndPassword: { enabled: true, disableSignUp: true },
     user: {
       additionalFields: {
@@ -164,10 +166,15 @@ function setupComplete(setupCookie: string | undefined, serverId: string) {
   });
 }
 
-async function createUserWithPassword(email: string, role: "admin" | "requester", password = "fake-password-long-enough"): Promise<string> {
+async function createUserWithPassword(
+  email: string,
+  role: "admin" | "requester",
+  password = "fake-password-long-enough",
+  name = email.split("@")[0] ?? "user",
+): Promise<string> {
   const ctx = await auth.$context;
   const user = await ctx.internalAdapter.createUser(
-    { email, name: email.split("@")[0] ?? "user", role, emailVerified: true } as Parameters<typeof ctx.internalAdapter.createUser>[0],
+    { email, name, role, emailVerified: true } as Parameters<typeof ctx.internalAdapter.createUser>[0],
     { method: "email-password" },
   );
   await ctx.internalAdapter.linkAccount({
@@ -526,6 +533,12 @@ describe("POST /plex/setup/complete", () => {
   });
 });
 
+/** The "name=value" part of the session cookie a sign-in set, for sending back on a later request. */
+function sessionCookieHeader(response: Response): string {
+  const line = response.headers.getSetCookie().find((entry) => /(^|__Secure-)better-auth\.session_token=/.test(entry));
+  return line ? line.split(";")[0] : "";
+}
+
 describe("sign-in with email and password", () => {
   it("still lets the old admin use a password before Plex is set up", async () => {
     await createUserWithPassword("gary@example.test", "admin");
@@ -555,5 +568,71 @@ describe("sign-in with email and password", () => {
     const response = await send("/sign-in/email", { json: { email: "req@example.test", password: "fake-password-long-enough" } });
     expect(response.status).toBe(200);
     expect(hasSessionCookie(response)).toBe(true);
+  });
+  it("lets a requester sign in by name, ignoring case and extra spaces", async () => {
+    await createUserWithPassword("req@example.test", "requester", "fake-password-long-enough", "req");
+    const response = await send("/sign-in/email", { json: { email: "  REQ ", password: "fake-password-long-enough" } });
+    expect(response.status).toBe(200);
+    expect(hasSessionCookie(response)).toBe(true);
+  });
+
+  it("refuses a wrong password by name", async () => {
+    await createUserWithPassword("req@example.test", "requester", "fake-password-long-enough", "req");
+    const response = await send("/sign-in/email", { json: { email: "req", password: "fake-wrong-password-999" } });
+    expect(response.status).toBe(401);
+    expect(hasSessionCookie(response)).toBe(false);
+  });
+
+  it("refuses an admin by name with the correct password once Plex is set up, with the same reply as an unknown name", async () => {
+    await createUserWithPassword("gary@example.test", "admin", "fake-password-long-enough", "gary");
+    claimPlexAdminConfig(CONFIG);
+
+    const adminReply = await send("/sign-in/email", { json: { email: "Gary", password: "fake-password-long-enough" } });
+    const unknownReply = await send("/sign-in/email", { json: { email: "nobody", password: "fake-password-long-enough" } });
+
+    expect(adminReply.status).toBe(401);
+    expect(hasSessionCookie(adminReply)).toBe(false);
+    expect(await adminReply.json()).toEqual(await unknownReply.json());
+  });
+
+  it("refuses an unknown name with the same reply as an unknown email", async () => {
+    const byName = await send("/sign-in/email", { json: { email: "nobody", password: "fake-password-long-enough" } });
+    const byEmail = await send("/sign-in/email", { json: { email: "nobody@example.test", password: "fake-password-long-enough" } });
+
+    expect(byName.status).toBe(401);
+    expect(hasSessionCookie(byName)).toBe(false);
+    expect(await byName.json()).toEqual(await byEmail.json());
+  });
+
+  it("refuses an ambiguous name for both users, with no session", async () => {
+    await createUserWithPassword("amy.one@example.test", "requester", "fake-password-long-enough", "Amy  Pond");
+    await createUserWithPassword("amy.two@example.test", "requester", "fake-password-long-enough", " amy pond");
+
+    for (const email of ["Amy Pond", "  AMY   POND "]) {
+      const response = await send("/sign-in/email", { json: { email, password: "fake-password-long-enough" } });
+      expect(response.status).toBe(401);
+      expect(hasSessionCookie(response)).toBe(false);
+    }
+  });
+
+  it("still lets an admin sign in by name with the right password before Plex is set up", async () => {
+    await createUserWithPassword("gary@example.test", "admin", "fake-password-long-enough", "gary");
+    const response = await send("/sign-in/email", { json: { email: "GARY", password: "fake-password-long-enough" } });
+    expect(response.status).toBe(200);
+    expect(hasSessionCookie(response)).toBe(true);
+  });
+
+  it("does not let a signed-in requester rename themselves", async () => {
+    await createUserWithPassword("req@example.test", "requester", "fake-password-long-enough", "req");
+    const signIn = await send("/sign-in/email", { json: { email: "req@example.test", password: "fake-password-long-enough" } });
+    const cookie = sessionCookieHeader(signIn);
+    expect(cookie).not.toBe("");
+
+    const response = await send("/update-user", { cookie, json: { name: "x" } });
+    expect(response.status).toBe(404);
+
+    const ctx = await auth.$context;
+    const row = await ctx.internalAdapter.findUserByEmail("req@example.test");
+    expect(row?.user.name).toBe("req");
   });
 });

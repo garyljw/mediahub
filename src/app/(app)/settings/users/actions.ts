@@ -18,7 +18,7 @@ import {
 export type UsersResult = { ok: true } | { ok: false; message: string };
 
 const DENIED = "You don't have permission to manage users.";
-const INVALID_ADD = `Enter a name, a valid email and a password of ${MIN_PASSWORD_LENGTH} to ${MAX_PASSWORD_LENGTH} characters.`;
+const INVALID_ADD = `Enter a name without @, a valid email and a password of ${MIN_PASSWORD_LENGTH} to ${MAX_PASSWORD_LENGTH} characters.`;
 const INVALID_RESET = `Choose a user and enter a password of ${MIN_PASSWORD_LENGTH} to ${MAX_PASSWORD_LENGTH} characters.`;
 const INVALID_USER = "Choose a user first.";
 
@@ -29,7 +29,12 @@ const PasswordInput = z
   .max(MAX_PASSWORD_LENGTH);
 
 const AddInput = z.strictObject({
-  name: z.string().trim().min(1).max(100),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .refine((name) => !name.includes("@")),
   email: z.string().trim().toLowerCase().pipe(z.email()),
   password: PasswordInput,
 });
@@ -42,6 +47,12 @@ const ResetInput = z.strictObject({
 const UserIdInput = z.strictObject({
   userId: z.string().min(1).max(100),
 });
+
+const CREATE_REFUSALS = {
+  "email-taken": "A user with that email already exists.",
+  "name-taken": "A user with that name already exists. Names are used to sign in, so each must be different.",
+  "name-invalid": INVALID_ADD,
+} as const;
 
 const NOT_FOUND = "That user no longer exists.";
 const NOT_REQUESTER = "Admins are managed with Plex sign-in, not here.";
@@ -77,7 +88,7 @@ export async function addRequester(input: unknown): Promise<UsersResult> {
         : "Couldn't set the password. Delete the half-created user below and try again.",
     };
   }
-  if (!outcome.ok) return { ok: false, message: "A user with that email already exists." };
+  if (!outcome.ok) return { ok: false, message: CREATE_REFUSALS[outcome.reason] };
   revalidatePath("/settings/users");
   return { ok: true };
 }

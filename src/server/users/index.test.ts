@@ -72,7 +72,8 @@ async function makeAdmin(email: string): Promise<string> {
 
 /** Creates a requester through the module under test and returns the id. */
 async function makeRequester(email: string, password = PASSWORD): Promise<string> {
-  const outcome = await createRequester(ctx, { name: "Fake Requester", email, password });
+  // Names are sign-in names and can't contain @, so the email's local part is the name.
+  const outcome = await createRequester(ctx, { name: email.split("@")[0] ?? "fake", email, password });
   expect(outcome).toEqual({ ok: true });
   const row = await ctx.internalAdapter.findUserByEmail(email);
   return row!.user.id;
@@ -156,6 +157,35 @@ describe("createRequester", () => {
       createRequester(ctx, { name: "Fake", email: "fake.short@example.test", password: "a".repeat(length) }),
     ).rejects.toMatchObject({ name: "PasswordSetupError", removed: true });
     expect(db.select().from(schema.user).all()).toEqual([]);
+  });
+});
+
+describe("createRequester sign-in names", () => {
+  it("refuses a name containing @ and creates nothing", async () => {
+    expect(await createRequester(ctx, { name: "fake@example.test", email: "fake.at@example.test", password: PASSWORD })).toEqual({
+      ok: false,
+      reason: "name-invalid",
+    });
+    expect(await ctx.internalAdapter.findUserByEmail("fake.at@example.test")).toBeNull();
+  });
+
+  it("refuses a duplicate name, ignoring case and extra spaces, and creates nothing", async () => {
+    expect(await createRequester(ctx, { name: "Amy  Pond", email: "amy.one@example.test", password: PASSWORD })).toEqual({
+      ok: true,
+    });
+    expect(await createRequester(ctx, { name: " amy pond", email: "amy.two@example.test", password: NEW_PASSWORD })).toEqual({
+      ok: false,
+      reason: "name-taken",
+    });
+    expect(await ctx.internalAdapter.findUserByEmail("amy.two@example.test")).toBeNull();
+  });
+
+  it("accepts a unique name and stores it trimmed", async () => {
+    expect(await createRequester(ctx, { name: "  Rory Williams  ", email: "rory@example.test", password: PASSWORD })).toEqual({
+      ok: true,
+    });
+    const row = await ctx.internalAdapter.findUserByEmail("rory@example.test");
+    expect(row?.user.name).toBe("Rory Williams");
   });
 });
 

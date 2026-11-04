@@ -298,6 +298,7 @@ function AddRequesterForm() {
             Name
           </label>
           <Input id={nameId} value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" required />
+          <p className="text-xs text-muted-foreground">Used to sign in, with the password. Must be unique.</p>
         </div>
         <div className="grid gap-1.5">
           <label htmlFor={emailId} className="text-sm font-medium">

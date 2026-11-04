@@ -159,7 +159,13 @@ async function main() {
   // The role is always requester here: admin was refused above.
   try {
     const outcome = await createRequester(ctx, { name, email, password });
-    if (!outcome.ok) fail("a user with that email already exists.");
+    if (!outcome.ok) {
+      if (outcome.reason === "name-taken") {
+        fail(`a user named "${name}" already exists. Names are used to sign in, so pass a different --name${values.name ? "" : " (the default is the part of the email before @)"}.`);
+      }
+      if (outcome.reason === "name-invalid") fail("--name must not be empty and can't contain @.");
+      fail("a user with that email already exists.");
+    }
   } catch (error) {
     if (!(error instanceof PasswordSetupError)) throw error;
     if (error.removed) {
