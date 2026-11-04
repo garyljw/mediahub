@@ -1,6 +1,23 @@
 // Pure helpers for the Home grid: the merged item shape, filtering and ordering. Client-safe: no runtime imports from src/server.
 import { matchesTitleOrYear, TITLE_COLLATOR } from "@/components/library/list";
 
+/** A Plex watched state: unwatched, partly watched, or watched. The only Plex detail the browser ever receives. */
+export type WatchedState = "unwatched" | "partial" | "watched";
+
+/** The banner text for each watched state. Static strings, so server and browser render the same text. */
+export const WATCHED_LABEL: Record<WatchedState, string> = {
+  unwatched: "Unwatched",
+  partial: "Partly watched",
+  watched: "Watched",
+};
+
+/** The banner colour for each watched state. Amber gets black text for contrast. */
+export const WATCHED_CLASS: Record<WatchedState, string> = {
+  unwatched: "bg-emerald-600 text-white",
+  partial: "bg-amber-500 text-black",
+  watched: "bg-red-600 text-white",
+};
+
 /** One tile on the Home grid. `key` is needed because movie and series ids can collide. */
 export type HomeItem = {
   key: string;
@@ -14,6 +31,8 @@ export type HomeItem = {
   href: string;
   posterSrc: string | null;
   badge: { label: string; className: string };
+  /** The Plex watched state, or null when the item isn't in Plex (or Plex isn't connected). */
+  watched: WatchedState | null;
 };
 
 export type HomeKind = "all" | "movie" | "series";

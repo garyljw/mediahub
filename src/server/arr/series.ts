@@ -33,6 +33,8 @@ export type SeriesRow = {
   sortTitle: string;
   /** True when Sonarr has a poster for the series. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
+  /** The TVDB id, used to match the series to Plex. Server-only: never copied into the Home items. */
+  tvdbId: number | null;
 };
 
 /**
@@ -76,6 +78,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       added: entry.added ?? null,
       sortTitle: (entry.sortTitle || entry.title).toLowerCase(),
       hasPoster: entry.images?.some((image) => image.coverType === "poster") ?? false,
+      tvdbId: typeof entry.tvdbId === "number" && Number.isSafeInteger(entry.tvdbId) && entry.tvdbId > 0 ? entry.tvdbId : null,
     });
   }
 

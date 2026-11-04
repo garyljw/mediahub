@@ -56,6 +56,7 @@ const ALLOWED_KEYS = [
   "sortTitle",
   "status",
   "title",
+  "tmdbId",
   "year",
 ].sort();
 
@@ -89,6 +90,7 @@ describe("toMovieRows", () => {
       added: "2024-03-12T10:21:45Z",
       sortTitle: "starfall protocol",
       hasPoster: true,
+      tmdbId: 900001,
     });
   });
 
@@ -106,6 +108,7 @@ describe("toMovieRows", () => {
       added: "2024-05-01T08:00:00Z",
       sortTitle: "lantern road",
       hasPoster: false,
+      tmdbId: 900002,
     });
   });
 

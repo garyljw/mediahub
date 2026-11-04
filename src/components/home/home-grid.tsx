@@ -12,7 +12,7 @@ import { formatCount } from "@/components/library/format";
 import { useActivity } from "@/components/library/use-activity";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
-import { filterHomeItems, type HomeItem, type HomeKind } from "./home-items";
+import { filterHomeItems, WATCHED_CLASS, WATCHED_LABEL, type HomeItem, type HomeKind } from "./home-items";
 
 const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
   { kind: "all", label: "All" },
@@ -154,9 +154,20 @@ const HomeTile = memo(function HomeTile({ item, activity }: { item: HomeItem; ac
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={activity.progress}
-            className="absolute inset-x-0 bottom-0 h-1.5 bg-black/50"
+            // Sits above the watched banner, so both stay visible.
+            className={cn("absolute inset-x-0 h-1.5 bg-black/50", item.watched ? "bottom-5" : "bottom-0")}
           >
             <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+          </div>
+        )}
+        {item.watched && (
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-0 flex h-5 items-center justify-center text-[10px] font-semibold tracking-wide uppercase",
+              WATCHED_CLASS[item.watched],
+            )}
+          >
+            {WATCHED_LABEL[item.watched]}
           </div>
         )}
       </div>

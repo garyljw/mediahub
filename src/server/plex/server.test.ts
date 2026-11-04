@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ httpsRequest: vi.fn() }));
 vi.mock("node:https", () => ({ request: mocks.httpsRequest }));
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => CLIENT_ID }));
 
-import { getLibrarySections, getServerIdentity, pinnedLookup } from "./server";
+import { getLibrarySections, getSectionItems, getServerIdentity, pinnedLookup } from "./server";
 import { PlexRequestError } from "./errors";
 
 const CLIENT_ID = "mediahub-data-fake-client-id";
@@ -237,5 +237,84 @@ describe("pinnedLookup", () => {
     const callback = vi.fn();
     pinnedLookup("2001:db8::5")("2001-db8--5.fakehash.plex.direct", {}, callback);
     expect(callback).toHaveBeenCalledWith(null, "2001:db8::5", 6);
+  });
+});
+
+describe("getSectionItems", () => {
+  const ITEMS = {
+    MediaContainer: {
+      size: 3,
+      Metadata: [
+        {
+          ratingKey: "101",
+          title: "Fake Film",
+          duration: 5400000,
+          Guid: [{ id: "imdb://tt0000001" }, { id: "tmdb://900001" }],
+          viewCount: 2,
+        },
+        { ratingKey: "102", title: "Fake Show", Guid: [{ id: "tvdb://100001" }], leafCount: 10, viewedLeafCount: 4 },
+        { ratingKey: "103", title: "Untouched" },
+      ],
+    },
+  };
+
+  it("keeps only the watched-status fields, dropping every other key", async () => {
+    fetchMock.mockResolvedValue(json(ITEMS));
+    await expect(getSectionItems(PLAIN, TOKEN, "1")).resolves.toEqual([
+      { guids: ["imdb://tt0000001", "tmdb://900001"], viewCount: 2, viewOffset: 0, leafCount: 0, viewedLeafCount: 0 },
+      { guids: ["tvdb://100001"], viewCount: 0, viewOffset: 0, leafCount: 10, viewedLeafCount: 4 },
+      { guids: [], viewCount: 0, viewOffset: 0, leafCount: 0, viewedLeafCount: 0 },
+    ]);
+  });
+
+  it("asks for guids on the encoded section path, with the token in the header only", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0 } }));
+    await getSectionItems(PLAIN, TOKEN, "1/../2");
+
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe("http://192.168.10.5:32400/library/sections/1%2F..%2F2/all?includeGuids=1");
+    expect(String(url)).not.toContain(TOKEN);
+    expect((init.headers as Record<string, string>)["X-Plex-Token"]).toBe(TOKEN);
+  });
+
+  it("treats a section with no Metadata as an empty list", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0 } }));
+    await expect(getSectionItems(PLAIN, TOKEN, "1")).resolves.toEqual([]);
+  });
+
+  it("rejects a plain http reply whose Content-Length is over the section cap", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(ITEMS), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Content-Length": String(17 * 1024 * 1024) },
+      }),
+    );
+    await expect(getSectionItems(PLAIN, TOKEN, "1")).rejects.toMatchObject({ kind: "invalid" });
+  });
+
+  it("rejects a plain http body that is over the section cap even with no Content-Length", async () => {
+    const padding = "x".repeat(16 * 1024 * 1024);
+    fetchMock.mockResolvedValue(new Response(`{"MediaContainer":{"size":0,"pad":"${padding}"}}`, { status: 200 }));
+    await expect(getSectionItems(PLAIN, TOKEN, "1")).rejects.toMatchObject({ kind: "invalid" });
+  });
+
+  it("stops reading a plain http body once it passes the cap, without buffering the rest", async () => {
+    let pulls = 0;
+    const chunk = new Uint8Array(512 * 1024);
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    fetchMock.mockResolvedValue(new Response(endless, { status: 200 }));
+    await expect(getServerIdentity(PLAIN)).rejects.toMatchObject({ kind: "invalid" });
+    expect(pulls).toBeLessThan(10);
+  });
+
+  it("keeps the default 1 MB cap for other plain http requests", async () => {
+    const padding = "x".repeat(1024 * 1024 + 1);
+    fetchMock.mockResolvedValue(new Response(`{"MediaContainer":{"machineIdentifier":"abc","pad":"${padding}"}}`, { status: 200 }));
+    await expect(getServerIdentity(PLAIN)).rejects.toMatchObject({ kind: "invalid" });
   });
 });

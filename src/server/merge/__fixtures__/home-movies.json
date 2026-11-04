@@ -11,7 +11,8 @@
     "sizeOnDisk": 8000000000,
     "added": "2026-10-01T10:00:00Z",
     "sortTitle": "harbour lights",
-    "hasPoster": true
+    "hasPoster": true,
+    "tmdbId": 900001
   },
   {
     "id": 2,
@@ -25,7 +26,8 @@
     "sizeOnDisk": 0,
     "added": "2026-09-15T08:00:00Z",
     "sortTitle": "night circuit",
-    "hasPoster": false
+    "hasPoster": false,
+    "tmdbId": 900002
   },
   {
     "id": 3,
@@ -39,7 +41,8 @@
     "sizeOnDisk": 0,
     "added": null,
     "sortTitle": "future tense",
-    "hasPoster": true
+    "hasPoster": true,
+    "tmdbId": 900003
   },
   {
     "id": 4,
@@ -53,6 +56,7 @@
     "sizeOnDisk": 0,
     "added": "2026-10-20T12:00:00Z",
     "sortTitle": "glass orchard",
-    "hasPoster": true
+    "hasPoster": true,
+    "tmdbId": null
   }
 ]
