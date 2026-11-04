@@ -1,4 +1,5 @@
 import "server-only";
+import path from "node:path";
 import { z } from "zod";
 
 /** True when Intl accepts the zone name, e.g. "Europe/London". Node and the browser both know the IANA zones. */
@@ -17,6 +18,14 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(32).optional()),
   BETTER_AUTH_URL: z.url(),
   DATABASE_PATH: z.string().min(1).default("./data/mediahub.db"),
+  // Where the packaged app (dist/mediahub/mediahub.mjs) listens. `npm run dev` ignores these and uses 3000.
+  // MediaHub's own names, because the generic HOSTNAME is often already set to the machine or container name.
+  // Blank counts as unset, like BETTER_AUTH_SECRET, so an empty line never breaks every env() caller.
+  MEDIAHUB_HOST: z.preprocess((value) => (value === "" ? undefined : value), z.string().default("0.0.0.0")),
+  MEDIAHUB_PORT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(1).max(65535).default(7979),
+  ),
   DISPLAY_TIMEZONE: z
     .string()
     .default("Europe/London")
@@ -39,4 +48,19 @@ export function env(): Env {
   }
   cached = result.data;
   return cached;
+}
+
+/**
+ * For the packaged launcher only, called before migrations and before server.js loads.
+ * - The Next standalone server reads HOSTNAME and PORT when it loads, so MEDIAHUB_HOST and MEDIAHUB_PORT are
+ *   copied onto them, overriding whatever the host already set.
+ * - server.js changes the working directory to its own folder, so a relative DATABASE_PATH would point the
+ *   server at a different file than the one the launcher just migrated. It is made absolute here, against the
+ *   directory the launcher was started from.
+ */
+export function preparePackagedRuntime(): void {
+  const { MEDIAHUB_HOST, MEDIAHUB_PORT, DATABASE_PATH } = env();
+  process.env.HOSTNAME = MEDIAHUB_HOST;
+  process.env.PORT = String(MEDIAHUB_PORT);
+  process.env.DATABASE_PATH = path.resolve(DATABASE_PATH);
 }

@@ -40,7 +40,9 @@ export function setImageCacheDirForTests(dir: string | undefined): void {
 /** Next to the SQLite file, e.g. ./data/image-cache when DATABASE_PATH is ./data/mediahub.db. */
 function cacheDir(): string {
   if (dirOverride) return dirOverride;
-  return path.join(path.dirname(path.resolve(env().DATABASE_PATH)), "image-cache");
+  // turbopackIgnore stops Next's file tracing from treating this as a reference to ./data/image-cache and
+  // copying the real cached posters into the standalone build.
+  return path.join(/*turbopackIgnore: true*/ path.dirname(path.resolve(env().DATABASE_PATH)), "image-cache");
 }
 
 /** The file name is a hash of the key, so the key (which can contain an Arr URL) never becomes part of a path. */
@@ -65,7 +67,7 @@ export async function cachedImage(
 ): Promise<Uint8Array<ArrayBuffer>> {
   const dir = cacheDir();
   const name = fileNameFor(key);
-  const file = path.join(dir, name);
+  const file = path.join(/*turbopackIgnore: true*/ dir, name);
 
   let job = inFlight.get(name);
   if (!job) {
@@ -191,7 +193,7 @@ export async function pruneImageCache(dir: string, maxBytes: number): Promise<vo
   let total = 0;
 
   for (const name of names) {
-    const file = path.join(dir, name);
+    const file = path.join(/*turbopackIgnore: true*/ dir, name);
     if (name.endsWith(".tmp")) {
       const info = await stat(/*turbopackIgnore: true*/ file).catch(() => null);
       if (info && now - info.mtimeMs > TMP_MAX_AGE_MS) await removeQuietly(file);

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "package": "next build && node scripts/package.mjs",
+    "start": "node --env-file-if-exists=.env.local dist/mediahub/mediahub.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "prepare": "git config core.hooksPath .githooks || true",
@@ -36,10 +37,11 @@
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/better-sqlite3": "9.6.0",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "0.31.11",
+    "esbuild": "0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "openapi-typescript": "7.13.0",
@@ -53,7 +55,7 @@
     "better-sqlite3@13.0.3": true
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "overrides": {
     "@esbuild-kit/core-utils": {
