@@ -8,7 +8,7 @@ In order of severity:
 2. **It lets someone in.** A route handler, server action or page returns data or performs an action without `requireRole(...)` or a server-side session check. A requester can do something admin-only. Input reaches a typed client without Zod validation.
 3. **It proxies.** Something forwards arbitrary paths, methods or query strings to Radarr/Sonarr instead of calling one explicit typed client function.
 4. **It lies.** The UI shows state that disagrees with Radarr/Sonarr, merge logic drops or duplicates items, or a doc or comment says something the code doesn't do.
-5. **It won't run on the NAS.** It adds a service or a heavy dependency, breaks the build without env vars, or assumes a host other than `BETTER_AUTH_URL`.
+5. **It won't run on the target host.** It adds a service or a heavy dependency, breaks the build without env vars, or assumes a host other than `BETTER_AUTH_URL`.
 
 ## Skip these paths
 - `src/server/arr/generated/**` and `openapi/**` are generated from the upstream specs.

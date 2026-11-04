@@ -2,7 +2,7 @@
 
 # MediaHub
 
-One web UI for Radarr (movies) and Sonarr (TV), self-hosted on a Synology DS425+ (x86-64, 2 GB RAM) on the owner's LAN. Radarr/Sonarr run on a different LAN machine.
+One web UI for Radarr (movies) and Sonarr (TV). It runs as a Windows service on the PC that also runs Radarr/Sonarr, on the owner's LAN, installed by the Inno Setup installer from a GitHub release. A Docker image is planned as a second way to deploy.
 
 ## Stack
 Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · TanStack Query · Better Auth · SQLite via Drizzle · Zod · Vitest.

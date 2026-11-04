@@ -1,0 +1,79 @@
+name: Node reminder
+
+# Once a month, compares the newest Node patch for the .node-version major with the Node bundled in the
+# latest MediaHub release (build-info.json), and opens an issue if a newer patch is out.
+# It only reads releases and index.json, and writes issues. It never builds or publishes anything.
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare the bundled Node with the newest patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAJOR=$(cut -d. -f1 .node-version)
+          curl -fsSL https://nodejs.org/dist/index.json -o "$RUNNER_TEMP/index.json"
+          LATEST=$(jq -r --arg p "v${MAJOR}." '[.[] | select(.version | startswith($p))][0].version // empty' "$RUNNER_TEMP/index.json")
+          LATEST=${LATEST#v}
+          if [ -z "$LATEST" ]; then echo "No Node $MAJOR release in index.json."; exit 1; fi
+
+          TAG=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -z "$TAG" ]; then echo "No MediaHub release yet. Nothing to compare."; exit 0; fi
+
+          HAS_INFO=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | index("build-info.json") != null')
+          if [ "$HAS_INFO" != "true" ]; then echo "Release $TAG has no build-info.json. Nothing to compare."; exit 0; fi
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$TAG" --pattern build-info.json --dir "$RUNNER_TEMP/release" --clobber
+          BUNDLED=$(jq -r '.node' "$RUNNER_TEMP/release/build-info.json")
+          BUNDLED=${BUNDLED#v}
+          echo "Latest $MAJOR.x patch: $LATEST. Bundled in $TAG: $BUNDLED."
+
+          if [ "$LATEST" = "$BUNDLED" ]; then echo "Up to date."; exit 0; fi
+
+          # Security if index.json marks a release newer than the bundled one as a security release.
+          SECURITY=false
+          for v in $(jq -r --arg p "v${MAJOR}." '.[] | select((.version | startswith($p)) and .security == true) | .version' "$RUNNER_TEMP/index.json"); do
+            v=${v#v}
+            newest=$(printf '%s\n%s\n' "$BUNDLED" "$v" | sort -V | tail -1)
+            if [ "$v" != "$BUNDLED" ] && [ "$newest" = "$v" ]; then SECURITY=true; fi
+          done
+
+          TITLE="Node $LATEST is out (MediaHub $TAG bundles $BUNDLED)"
+          if [ "$SECURITY" = "true" ]; then TITLE="[Security] $TITLE"; fi
+
+          # Skip if an open issue already has this exact title.
+          OPEN=$(gh issue list --state open --limit 200 --json title --jq '.[].title')
+          if grep -Fxq -- "$TITLE" <<< "$OPEN"; then echo "Issue already open: $TITLE"; exit 0; fi
+
+          BODY="Node $LATEST is out. The newest MediaHub release ($TAG) bundles Node $BUNDLED.\n\nRelease notes: https://nodejs.org/en/blog/release/v$LATEST"
+          if [ "$SECURITY" = "true" ]; then
+            BODY="$BODY\n\nNode marks a release newer than $BUNDLED as a security release."
+          fi
+
+          # Note only, no separate issue: a newer LTS major than the one this project uses.
+          LTS_MAJOR=$(jq -r '[.[] | select(.lts != false)][0].version // empty' "$RUNNER_TEMP/index.json" | sed 's/^v//; s/\..*//')
+          if [ -n "$LTS_MAJOR" ] && [ "$LTS_MAJOR" -gt "$MAJOR" ]; then
+            BODY="$BODY\n\nNote: the newest LTS line is Node $LTS_MAJOR, newer than the $MAJOR line in .node-version."
+          fi
+
+          BODY="$BODY\n\nTo ship it: publish a new MediaHub release; the release workflow bundles the newest $MAJOR.x patch automatically."
+
+          gh issue create --title "$TITLE" --body "$(printf "%b" "$BODY")"
