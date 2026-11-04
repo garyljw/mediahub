@@ -1,4 +1,5 @@
-// Break-glass: clears the Plex admin setup so /setup can run again, and signs out every admin.
+// Break-glass: clears the Plex admin setup so /setup can run again, signs out every admin, and clears the Plex
+// data connection (its stored token may belong to the account that was removed).
 // Use it when the Plex server or account has changed, or when the setup must be redone.
 //
 // Usage:
@@ -20,7 +21,7 @@ function fail(message: string): never {
 async function main() {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await rl.question(
-    "This clears the Plex admin setup and signs out every admin. Requesters are not affected.\nType RESET to continue: ",
+    "This clears the Plex admin setup and the Plex data connection, and signs out every admin. Requesters are not affected.\nType RESET to continue: ",
   );
   rl.close();
   if (answer.trim() !== "RESET") fail("not confirmed. Nothing was changed.");
@@ -39,6 +40,7 @@ async function main() {
       ? `Cleared the Plex admin setup for server "${before.serverName}".`
       : "No Plex admin setup was stored.",
   );
+  console.log("Cleared the Plex data connection. Connect Plex again in Settings -> Connections after setup.");
   console.log(`Signed out ${admins.length} admin account(s). Open /setup to set Plex up again.`);
 }
 

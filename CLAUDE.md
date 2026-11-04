@@ -19,7 +19,7 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 5. **Never commit real secrets.** `.env.example` holds placeholders only, and real values go in `.env.local`. A gitleaks pre-commit hook enforces this; don't bypass it with `--no-verify`.
 6. **Don't log API keys, session tokens or full upstream URLs that contain `apikey=`. Don't log Plex tokens.** Send the key as the `X-Api-Key` header, not as a query parameter.
 7. **Stored API keys are write-only.** Never send a stored Arr key to the browser. Using a stored key with a different URL origin requires the key to be entered again.
-8. **Plex sign-in uses Plex's PIN flow with one fixed client id and keeps no Plex token.** The JWT method is for a future Plex data connection only. Never sign anyone in with a stored Plex credential.
+8. **Plex sign-in uses Plex's PIN flow with one fixed client id and keeps no Plex token.** Never sign anyone in with a stored Plex credential. The Plex data connection (Settings → Connections) is separate: it has its own fixed client id, and its token is stored server-side, is write-only like the Arr keys (never sent to the browser), is used only to read from the Plex server, and is never used for sign-in.
 
 ## Conventions
 - Use the generated Radarr/Sonarr types in `src/server/arr/generated/`. Don't hand-write upstream response types or guess endpoints.

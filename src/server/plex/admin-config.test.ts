@@ -12,6 +12,7 @@ const testDb = vi.hoisted(() => ({ current: undefined as BetterSQLite3Database<t
 vi.mock("@/server/db", () => ({ db: () => testDb.current }));
 
 import { claimPlexAdminConfig, clearPlexAdminConfig, getPlexAdminConfig } from "./admin-config";
+import { getPlexDataConnection, savePlexDataConnection } from "./data-connection";
 
 const CONFIG = { serverId: "fake-server-id-1", serverName: "Fake Server", ownerAccountId: "1001" };
 const OTHER = { serverId: "fake-server-id-2", serverName: "Other Server", ownerAccountId: "2002" };
@@ -39,6 +40,24 @@ describe("Plex admin config", () => {
     expect(getPlexAdminConfig()).toBeNull();
     expect(claimPlexAdminConfig(OTHER)).toBe(true);
     expect(getPlexAdminConfig()).toEqual(OTHER);
+  });
+
+  it("clearing the admin config also clears the Plex data connection, but keeps other settings", () => {
+    claimPlexAdminConfig(CONFIG);
+    savePlexDataConnection({
+      url: "http://192.168.10.5:32400",
+      pinAddress: null,
+      token: "fake-data-token-0123456789",
+      serverId: "fake-server-id-1",
+      serverName: "Fake Server",
+    });
+    testDb.current!.insert(schema.setting).values({ key: "radarr.url", value: "http://radarr.test:7878", updatedAt: new Date() }).run();
+
+    clearPlexAdminConfig();
+
+    expect(getPlexAdminConfig()).toBeNull();
+    expect(getPlexDataConnection()).toBeNull();
+    expect(testDb.current!.select().from(schema.setting).all().map((row) => row.key)).toEqual(["radarr.url"]);
   });
 
   it("returns null when only some of the values are stored", () => {
