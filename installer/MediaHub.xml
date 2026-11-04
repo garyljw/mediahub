@@ -1,0 +1,24 @@
+<service>
+  <!-- Template: the installer replaces @APP@ (install folder) and @DATA@ (C:\ProgramData\MediaHub). -->
+  <id>MediaHub</id>
+  <name>MediaHub</name>
+  <description>MediaHub web UI for Radarr and Sonarr.</description>
+  <executable>@APP@\node.exe</executable>
+  <arguments>--env-file="@DATA@\mediahub.env" "@APP@\app\mediahub.mjs"</arguments>
+  <workingdirectory>@DATA@</workingdirectory>
+  <logpath>@DATA@\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart/>
+  <onfailure action="restart" delay="10 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+  <!-- Used only on a fresh install. An upgrade keeps whatever account the service already runs as. -->
+  <serviceaccount>
+    <domain>NT SERVICE</domain>
+    <user>MediaHub</user>
+  </serviceaccount>
+</service>
