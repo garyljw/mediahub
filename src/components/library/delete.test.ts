@@ -5,7 +5,6 @@ import {
   canConfirmDelete,
   confirmLabel,
   deleteTitle,
-  deletedMessage,
   itemLabel,
   listedItems,
   typedConfirmMatches,
@@ -113,17 +112,5 @@ describe("canConfirmDelete", () => {
     expect(canConfirmDelete(true, "")).toBe(false);
     expect(canConfirmDelete(true, "dele")).toBe(false);
     expect(canConfirmDelete(true, " DELETE ")).toBe(true);
-  });
-});
-
-describe("deletedMessage", () => {
-  it("reports the count in the right form", () => {
-    expect(deletedMessage(1, MOVIE)).toBe("Deleted 1 movie");
-    expect(deletedMessage(4, MOVIE)).toBe("Deleted 4 movies");
-  });
-
-  it("uses the same word for one series and many", () => {
-    expect(deletedMessage(1, SERIES)).toBe("Deleted 1 series");
-    expect(deletedMessage(2, SERIES)).toBe("Deleted 2 series");
   });
 });

@@ -3,7 +3,6 @@ import { ArrRequestError } from "@/server/arr/request";
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
-  deleteMovies: vi.fn(),
   listQualityProfiles: vi.fn(),
   refresh: vi.fn(),
   lookupMovies: vi.fn(),
@@ -30,7 +29,6 @@ vi.mock("@/server/authz", () => {
 });
 
 vi.mock("@/server/arr/movies", () => ({
-  deleteMovies: mocks.deleteMovies,
   listQualityProfiles: mocks.listQualityProfiles,
   searchMovieReleases: mocks.searchMovieReleases,
   refreshMovies: mocks.refreshMovies,
@@ -71,21 +69,16 @@ import {
   findMovieReleases,
   grabMovieRelease,
   refreshLibraryMovies,
-  removeMovies,
   searchLibraryMovies,
   searchMovies,
 } from "./actions";
 import { ReleaseGrabError } from "@/server/arr/releases";
 import { MovieAddError } from "@/server/arr/movie-add";
-import { MAX_BULK_MOVIES } from "@/components/movies/movie-bulk";
 import { MAX_REFRESH_MOVIES } from "@/components/movies/movie-refresh";
-
-const DELETE_DENIED = "You don't have permission to delete movies.";
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
-  mocks.deleteMovies.mockResolvedValue(undefined);
   mocks.searchMovieReleases.mockResolvedValue(undefined);
   mocks.refreshMovies.mockResolvedValue(undefined);
   mocks.searchReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
@@ -96,149 +89,6 @@ beforeEach(() => {
   ]);
   mocks.getMovieAddDefaults.mockReturnValue({ profileId: null, rootFolderId: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
-});
-
-describe("removeMovies authorization", () => {
-  const input = { movieIds: [1], deleteFiles: false, addImportExclusion: false, confirmCount: 1 };
-
-  it("checks for the admin role", async () => {
-    await removeMovies(input);
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-  });
-
-  it("rejects a requester and never calls Radarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    const result = await removeMovies(input);
-
-    expect(result).toEqual({ ok: false, error: DELETE_DENIED });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Radarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    const result = await removeMovies(input);
-
-    expect(result).toEqual({ ok: false, error: DELETE_DENIED });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(removeMovies(input)).rejects.toThrow("database down");
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-});
-
-describe("removeMovies input validation", () => {
-  const valid = { movieIds: [1, 2], deleteFiles: false, addImportExclusion: false, confirmCount: 2 };
-  const without = (key: string) => {
-    const copy: Record<string, unknown> = { ...valid };
-    delete copy[key];
-    return copy;
-  };
-
-  const invalid: [string, unknown][] = [
-    ["not an object", "movies"],
-    ["null", null],
-    ["missing deleteFiles", without("deleteFiles")],
-    ["missing addImportExclusion", without("addImportExclusion")],
-    ["missing confirmCount", without("confirmCount")],
-    ["a string boolean for deleteFiles", { ...valid, deleteFiles: "true" }],
-    ["a string boolean for addImportExclusion", { ...valid, addImportExclusion: "false" }],
-    ["an extra key moveFiles", { ...valid, moveFiles: true }],
-    ["an extra key qualityProfileId", { ...valid, qualityProfileId: 1 }],
-    ["empty movieIds", { ...valid, movieIds: [], confirmCount: 0 }],
-    ["a negative id", { ...valid, movieIds: [-1, 2] }],
-    ["a zero id", { ...valid, movieIds: [0, 2] }],
-    ["a string id", { ...valid, movieIds: ["1", 2] }],
-    ["a fractional id", { ...valid, movieIds: [1.5, 2] }],
-    ["a zero confirmCount", { ...valid, confirmCount: 0 }],
-    ["a string confirmCount", { ...valid, confirmCount: "2" }],
-    ["more than 2000 ids", { ...valid, movieIds: Array.from({ length: 2001 }, (_, i) => i + 1), confirmCount: 2001 }],
-    ["a confirmCount larger than the ids", { ...valid, confirmCount: 3 }],
-    ["a confirmCount smaller than the ids", { ...valid, confirmCount: 1 }],
-    ["duplicates that make the unique count differ", { ...valid, movieIds: [1, 1, 2], confirmCount: 3 }],
-    ["a confirmCount equal to the raw count but not the unique count", { ...valid, movieIds: [1, 1], confirmCount: 2 }],
-  ];
-
-  it.each(invalid)("rejects %s without calling Radarr", async (_name, input) => {
-    const result = await removeMovies(input);
-
-    expect(result).toEqual({ ok: false, error: "Invalid delete." });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("uses the same 2000 limit as the client", () => {
-    expect(MAX_BULK_MOVIES).toBe(2000);
-  });
-
-  it("accepts exactly 2000 ids", async () => {
-    const movieIds = Array.from({ length: 2000 }, (_, i) => i + 1);
-    const result = await removeMovies({ movieIds, deleteFiles: true, addImportExclusion: true, confirmCount: 2000 });
-    expect(result).toEqual({ ok: true, deleted: 2000 });
-    expect(mocks.deleteMovies).toHaveBeenCalledWith({ movieIds, deleteFiles: true, addImportExclusion: true });
-  });
-
-  it("does not put Zod details in the error", async () => {
-    const result = await removeMovies({ ...valid, moveFiles: true });
-    expect(JSON.stringify(result)).not.toMatch(/Unrecognized|received|issues|path/);
-  });
-});
-
-describe("removeMovies deletes", () => {
-  it("de-duplicates ids and checks the count against the unique ids", async () => {
-    const result = await removeMovies({ movieIds: [3, 1, 3, 2, 1], deleteFiles: false, addImportExclusion: true, confirmCount: 3 });
-
-    expect(result).toEqual({ ok: true, deleted: 3 });
-    expect(mocks.deleteMovies).toHaveBeenCalledWith({ movieIds: [3, 1, 2], deleteFiles: false, addImportExclusion: true });
-  });
-
-  it("on success calls deleteMovies with exactly the validated fields, then refreshes", async () => {
-    const result = await removeMovies({ movieIds: [5, 6], deleteFiles: true, addImportExclusion: false, confirmCount: 2 });
-
-    expect(result).toEqual({ ok: true, deleted: 2 });
-    expect(mocks.deleteMovies).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteMovies.mock.calls[0][0]).toStrictEqual({ movieIds: [5, 6], deleteFiles: true, addImportExclusion: false });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("gives the friendly error when Radarr rejects the delete, and logs only the safe message", async () => {
-    mocks.deleteMovies.mockRejectedValue(new ArrRequestError("Radarr movie delete request failed: HTTP 500"));
-
-    const result = await removeMovies({ movieIds: [1], deleteFiles: false, addImportExclusion: false, confirmCount: 1 });
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Radarr didn't confirm the delete, so some movies may already be gone. The table has been refreshed; check it before trying again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Movie delete: Radarr movie delete request failed: HTTP 500");
-    // Radarr may have deleted some anyway, so the table is re-read even on failure.
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("says a timed-out delete may still be running, and refreshes", async () => {
-    mocks.deleteMovies.mockRejectedValue(new ArrRequestError("Radarr movie delete request failed: timed out", "timeout"));
-
-    const result = await removeMovies({ movieIds: [1], deleteFiles: true, addImportExclusion: false, confirmCount: 1 });
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Radarr is taking a long time and may still be deleting. The table has been refreshed; check it before trying again.",
-    });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("rethrows errors that are not Radarr request failures", async () => {
-    mocks.deleteMovies.mockRejectedValue(new Error("config broken"));
-    await expect(removeMovies({ movieIds: [1], deleteFiles: false, addImportExclusion: false, confirmCount: 1 })).rejects.toThrow(
-      "config broken",
-    );
-  });
 });
 
 const ADDER = { id: "u1", email: "a@example.test", name: "A", role: "requester" };

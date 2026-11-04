@@ -7,7 +7,7 @@ import { useActivity } from "@/components/library/use-activity";
 import { cn } from "@/lib/utils";
 
 /**
- * This movie's live Radarr queue state, polled from the browser like the table's Activity column. Renders nothing
+ * This movie's live Radarr queue state, polled from the browser like the other activity indicators. Renders nothing
  * while the movie isn't in the queue, and a warning when the last poll failed. Empty until the first reply, so the
  * server render and the first browser render match.
  */

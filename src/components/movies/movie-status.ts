@@ -1,6 +1,6 @@
 import type { MovieStatus } from "@/server/arr/movies";
 
-// Status badges for movies. Shared by the Movies table and the movie page, so both label and colour a status the same way.
+// Status badges for movies. Shared by the movie page and the merged library rows, so both label and colour a status the same way.
 export const STATUS_LABEL: Record<MovieStatus, string> = {
   downloaded: "Downloaded",
   missing: "Missing",

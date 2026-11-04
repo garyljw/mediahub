@@ -1,5 +1,5 @@
-// Pure delete-dialog logic for the library tables. Must not import from src/server at runtime.
-import { countNoun, type Noun } from "./nouns";
+// Pure delete-dialog logic for the movie and series pages. Must not import from src/server at runtime.
+import type { Noun } from "./nouns";
 
 /** How many titles the delete dialog lists before "and N more". */
 export const DELETE_LIST_LIMIT = 10;
@@ -48,9 +48,4 @@ export function typedConfirmMatches(typed: string): boolean {
 /** Confirm is allowed unless files are being deleted and the admin has not typed the confirm word. */
 export function canConfirmDelete(deleteFiles: boolean, typed: string): boolean {
   return !deleteFiles || typedConfirmMatches(typed);
-}
-
-/** The status line after a successful delete. */
-export function deletedMessage(count: number, noun: Noun): string {
-  return `Deleted ${countNoun(count, noun)}`;
 }

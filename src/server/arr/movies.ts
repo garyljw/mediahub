@@ -13,7 +13,7 @@ type MovieEditorResource = RadarrComponents["schemas"]["MovieEditorResource"];
 
 export type MovieStatus = "downloaded" | "missing" | "unreleased";
 
-/** One movie, reduced to the fields the Movies table shows. */
+/** One movie, reduced to the fields the library shows. */
 export type MovieRow = {
   id: number;
   title: string;
@@ -37,8 +37,8 @@ function movieStatus(movie: MovieResource): MovieStatus {
 }
 
 /**
- * Pure: maps upstream movies to table rows, in upstream order. Skips movies without an
- * id or title. Sorting is the table's job (movie-filters.ts), so it lives in one place.
+ * Pure: maps upstream movies to rows, in upstream order. Skips movies without an id or title. Sorting is
+ * done by the caller.
  */
 export function toMovieRows(movies: MovieResource[], profiles: QualityProfileResource[]): MovieRow[] {
   const profileNames = new Map(usableProfiles(profiles).map((p) => [p.id, p.name]));
@@ -56,7 +56,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       status,
       monitored: movie.monitored ?? false,
       qualityProfileId,
-      // The filter dropdown reuses this label for orphaned ids, so the two always match.
+      // The profile filter reuses this label for orphaned ids, so the two always match.
       qualityProfile: profileNames.get(qualityProfileId) ?? `Unknown profile (#${qualityProfileId})`,
       fileQuality: status === "downloaded" ? (movie.movieFile?.quality?.quality?.name ?? null) : null,
       sizeOnDisk: status === "downloaded" ? (movie.sizeOnDisk ?? 0) : 0,

@@ -16,7 +16,7 @@ const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try agai
 
 /**
  * The action bar on a series' page, for the whole series. Search is for everyone. Refresh and delete are admin
- * only, and the page only renders them for admins. Search and refresh reuse the TV table's actions. Delete uses the
+ * only, and the page only renders them for admins. Search and refresh reuse the shared series actions. Delete uses the
  * page's own action, which sends the browser back to the list.
  */
 export function SeriesHeaderActions({

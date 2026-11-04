@@ -23,7 +23,7 @@ const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try agai
 /** A short result shown beside one control. `ok` picks the live-region role: a status when it worked, an alert when not. */
 type Note = { ok: boolean; text: string };
 
-/** Holds one control's note and clears it after a few seconds, like the table's status line. */
+/** Holds one control's note and clears it after a few seconds, like the other status lines. */
 function useNote() {
   const [note, setNote] = useState<Note | null>(null);
   useEffect(() => {

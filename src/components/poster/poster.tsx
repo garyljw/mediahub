@@ -88,7 +88,7 @@ export function PosterTile({ src, previewThumb = false }: { src: string | null; 
 
 /**
  * A larger copy of a poster, shown beside a hovered row. `src` is the thumbnail's own URL, so the browser
- * serves it from cache. It is portalled to body so the table's overflow clipping can't cut it off.
+ * serves it from cache. It is portalled to body so a list's overflow clipping can't cut it off.
  */
 export function PosterPreview({ src, top, left }: { src: string; top: number; left: number }) {
   return createPortal(

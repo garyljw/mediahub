@@ -1,4 +1,4 @@
-// Pure "refresh & scan" logic for the Movies table. Must not import from src/server at runtime.
+// Pure "refresh & scan" logic for movies. Must not import from src/server at runtime.
 import { MAX_BULK_MOVIES } from "./movie-bulk";
 
 /**
@@ -10,7 +10,7 @@ export const MAX_REFRESH_MOVIES = MAX_BULK_MOVIES;
 
 /**
  * The brief status line after Radarr accepts a refresh. Radarr only queues the command, so it is "started", not
- * finished, and the table only changes once the user reloads.
+ * finished, and the page only changes once the user reloads.
  */
 export function refreshStartedMessage(movieCount: number): string {
   return `Started a refresh and scan for ${movieCount} ${movieCount === 1 ? "movie" : "movies"}. Reload in a minute to see changes.`;

@@ -194,8 +194,6 @@ describe("server actions in src/", () => {
   it("finds the expected actions, so the checks below cannot pass vacuously", () => {
     const actions = results.flatMap((r) => r.actions);
     expect(actions.length).toBeGreaterThanOrEqual(2);
-    expect(actions).toContain("app/(app)/movies/actions.ts#removeMovies");
-    expect(actions).toContain("app/(app)/tv/actions.ts#removeSeries");
     expect(actions).toContain("app/(app)/tv/[id]/actions.ts#setSeasonMonitoring");
     expect(actions).toContain("app/(app)/tv/[id]/actions.ts#setEpisodeMonitoring");
     expect(actions).toContain("app/(app)/tv/[id]/actions.ts#deleteSeriesItem");

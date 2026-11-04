@@ -69,7 +69,7 @@ describe("toMovieRows", () => {
     expect(rows).toHaveLength(6);
   });
 
-  it("keeps upstream order (sorting is the table's job) and falls back to the title for sortTitle", () => {
+  it("keeps upstream order (sorting is the caller's job) and falls back to the title for sortTitle", () => {
     const expectedIds = movies.filter((m) => typeof m.id === "number" && m.title).map((m) => m.id);
     expect(rows.map((r) => r.id)).toEqual(expectedIds);
     expect(rows.find((r) => r.id === 6)?.sortTitle).toBe("ampersand & co");

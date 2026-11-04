@@ -1,4 +1,4 @@
-// Pure "search now" logic for the TV table. Must not import from src/server at runtime.
+// Pure "search now" logic for series. Must not import from src/server at runtime.
 import { SERIES, countNoun } from "@/components/library/nouns";
 
 /**

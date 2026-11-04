@@ -53,7 +53,7 @@ export type MovieDetail = {
 
 /**
  * Pure: maps one movie and the quality profiles to the movie page's shape. Returns null when the movie has no
- * numeric id or no title. The status, profile label and file fields come from toMovieRows, so the table and the
+ * numeric id or no title. The status, profile label and file fields come from toMovieRows, so the list and the
  * page agree.
  */
 export function toMovieDetail(movie: MovieResource, profiles: QualityProfileResource[]): MovieDetail | null {

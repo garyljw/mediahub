@@ -1,4 +1,4 @@
-// Pure "search now" logic for the Movies table. Must not import from src/server at runtime.
+// Pure "search now" logic for movies. Must not import from src/server at runtime.
 
 /**
  * Most movies one search request may cover (src/app/(app)/movies/actions.ts uses this same value).

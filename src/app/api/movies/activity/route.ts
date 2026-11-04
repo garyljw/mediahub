@@ -6,7 +6,7 @@ import { ArrRequestError } from "@/server/arr/request";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-// The Movies table polls this every 10 seconds, so it is a GET route and not a server action. Next runs
+// Home and the movie page poll this every 10 seconds, so it is a GET route and not a server action. Next runs
 // server actions one at a time per client, so a poll as an action would queue behind a 90 second release
 // search and delay the user's clicks. Route handlers run in parallel.
 //

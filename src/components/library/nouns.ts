@@ -1,4 +1,4 @@
-// Singular and plural words for the two library tables. Pure, so it can be tested without a DOM.
+// Singular and plural words for movies and series. Pure, so it can be tested without a DOM.
 
 /** A noun with its singular and plural forms. Series is the same word in both. */
 export type Noun = { one: string; many: string };

@@ -4,7 +4,6 @@ import { SeriesAddError } from "@/server/arr/series-add";
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
-  deleteSeries: vi.fn(),
   listSeriesQualityProfiles: vi.fn(),
   refresh: vi.fn(),
   lookupSeries: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock("@/server/authz", () => {
 });
 
 vi.mock("@/server/arr/series", () => ({
-  deleteSeries: mocks.deleteSeries,
   listSeriesQualityProfiles: mocks.listSeriesQualityProfiles,
   searchSeriesReleases: mocks.searchSeriesReleases,
   refreshSeries: mocks.refreshSeries,
@@ -56,20 +54,15 @@ import { AuthzError } from "@/server/authz";
 import {
   addLibrarySeries,
   refreshLibrarySeries,
-  removeSeries,
   searchLibrarySeries,
   searchSeries,
 } from "./actions";
-import { MAX_BULK_SERIES } from "@/components/tv/series-bulk";
 import { MAX_REFRESH_SERIES } from "@/components/tv/series-refresh";
 import { MAX_SEARCH_SERIES } from "@/components/tv/series-search";
-
-const DELETE_DENIED = "You don't have permission to delete series.";
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
-  mocks.deleteSeries.mockResolvedValue(undefined);
   mocks.searchSeriesReleases.mockResolvedValue(undefined);
   mocks.refreshSeries.mockResolvedValue(undefined);
   mocks.listSeriesQualityProfiles.mockResolvedValue([
@@ -78,150 +71,6 @@ beforeEach(() => {
   ]);
   mocks.getSeriesAddDefaults.mockReturnValue({ profileId: null, rootFolderId: null, monitor: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
-});
-
-describe("removeSeries authorization", () => {
-  const input = { seriesIds: [1], deleteFiles: false, addImportListExclusion: false, confirmCount: 1 };
-
-  it("checks for the admin role", async () => {
-    await removeSeries(input);
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-  });
-
-  it("rejects a requester and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    const result = await removeSeries(input);
-
-    expect(result).toEqual({ ok: false, error: DELETE_DENIED });
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    const result = await removeSeries(input);
-
-    expect(result).toEqual({ ok: false, error: DELETE_DENIED });
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(removeSeries(input)).rejects.toThrow("database down");
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-  });
-});
-
-describe("removeSeries input validation", () => {
-  const valid = { seriesIds: [1, 2], deleteFiles: false, addImportListExclusion: false, confirmCount: 2 };
-  const without = (key: string) => {
-    const copy: Record<string, unknown> = { ...valid };
-    delete copy[key];
-    return copy;
-  };
-
-  const invalid: [string, unknown][] = [
-    ["not an object", "series"],
-    ["null", null],
-    ["missing deleteFiles", without("deleteFiles")],
-    ["missing addImportListExclusion", without("addImportListExclusion")],
-    ["missing confirmCount", without("confirmCount")],
-    ["a string boolean for deleteFiles", { ...valid, deleteFiles: "true" }],
-    ["a string boolean for addImportListExclusion", { ...valid, addImportListExclusion: "false" }],
-    ["the Radarr name addImportExclusion", { ...valid, addImportExclusion: false }],
-    ["an extra key moveFiles", { ...valid, moveFiles: true }],
-    ["an extra key qualityProfileId", { ...valid, qualityProfileId: 1 }],
-    ["empty seriesIds", { ...valid, seriesIds: [], confirmCount: 0 }],
-    ["a negative id", { ...valid, seriesIds: [-1, 2] }],
-    ["a zero id", { ...valid, seriesIds: [0, 2] }],
-    ["a string id", { ...valid, seriesIds: ["1", 2] }],
-    ["a fractional id", { ...valid, seriesIds: [1.5, 2] }],
-    ["a zero confirmCount", { ...valid, confirmCount: 0 }],
-    ["a string confirmCount", { ...valid, confirmCount: "2" }],
-    ["more than 2000 ids", { ...valid, seriesIds: Array.from({ length: 2001 }, (_, i) => i + 1), confirmCount: 2001 }],
-    ["a confirmCount larger than the ids", { ...valid, confirmCount: 3 }],
-    ["a confirmCount smaller than the ids", { ...valid, confirmCount: 1 }],
-    ["duplicates that make the unique count differ", { ...valid, seriesIds: [1, 1, 2], confirmCount: 3 }],
-    ["a confirmCount equal to the raw count but not the unique count", { ...valid, seriesIds: [1, 1], confirmCount: 2 }],
-  ];
-
-  it.each(invalid)("rejects %s without calling Sonarr", async (_name, input) => {
-    const result = await removeSeries(input);
-
-    expect(result).toEqual({ ok: false, error: "Invalid delete." });
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("uses the same 2000 limit as the client", () => {
-    expect(MAX_BULK_SERIES).toBe(2000);
-  });
-
-  it("accepts exactly 2000 ids", async () => {
-    const seriesIds = Array.from({ length: 2000 }, (_, i) => i + 1);
-    const result = await removeSeries({ seriesIds, deleteFiles: true, addImportListExclusion: true, confirmCount: 2000 });
-    expect(result).toEqual({ ok: true, deleted: 2000 });
-    expect(mocks.deleteSeries).toHaveBeenCalledWith({ seriesIds, deleteFiles: true, addImportListExclusion: true });
-  });
-
-  it("does not put Zod details in the error", async () => {
-    const result = await removeSeries({ ...valid, moveFiles: true });
-    expect(JSON.stringify(result)).not.toMatch(/Unrecognized|received|issues|path/);
-  });
-});
-
-describe("removeSeries deletes", () => {
-  it("de-duplicates ids and checks the count against the unique ids", async () => {
-    const result = await removeSeries({ seriesIds: [3, 1, 3, 2, 1], deleteFiles: false, addImportListExclusion: true, confirmCount: 3 });
-
-    expect(result).toEqual({ ok: true, deleted: 3 });
-    expect(mocks.deleteSeries).toHaveBeenCalledWith({ seriesIds: [3, 1, 2], deleteFiles: false, addImportListExclusion: true });
-  });
-
-  it("on success calls deleteSeries with exactly the validated fields, then refreshes", async () => {
-    const result = await removeSeries({ seriesIds: [5, 6], deleteFiles: true, addImportListExclusion: false, confirmCount: 2 });
-
-    expect(result).toEqual({ ok: true, deleted: 2 });
-    expect(mocks.deleteSeries).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteSeries.mock.calls[0][0]).toStrictEqual({ seriesIds: [5, 6], deleteFiles: true, addImportListExclusion: false });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("gives the friendly error when Sonarr rejects the delete, and logs only the safe message", async () => {
-    mocks.deleteSeries.mockRejectedValue(new ArrRequestError("Sonarr series delete request failed: HTTP 500"));
-
-    const result = await removeSeries({ seriesIds: [1], deleteFiles: false, addImportListExclusion: false, confirmCount: 1 });
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Sonarr didn't confirm the delete, so some series may already be gone. The table has been refreshed; check it before trying again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Series delete: Sonarr series delete request failed: HTTP 500");
-    // Sonarr may have deleted some anyway, so the table is re-read even on failure.
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("says a timed-out delete may still be running, and refreshes", async () => {
-    mocks.deleteSeries.mockRejectedValue(new ArrRequestError("Sonarr series delete request failed: timed out", "timeout"));
-
-    const result = await removeSeries({ seriesIds: [1], deleteFiles: true, addImportListExclusion: false, confirmCount: 1 });
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Sonarr is taking a long time and may still be deleting. The table has been refreshed; check it before trying again.",
-    });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.deleteSeries.mockRejectedValue(new Error("config broken"));
-    await expect(removeSeries({ seriesIds: [1], deleteFiles: false, addImportListExclusion: false, confirmCount: 1 })).rejects.toThrow(
-      "config broken",
-    );
-  });
 });
 
 const SEARCH_DENIED = "You don't have permission to add series.";
@@ -640,7 +489,7 @@ describe("searchLibrarySeries", () => {
     const result = await searchLibrarySeries({ seriesIds: [1, 2, 3, 4] });
     expect(result).toEqual({
       ok: false,
-      error: "Sonarr started searches for 2 of 4 series, then the next one failed. Those are now deselected; check Sonarr before searching the rest.",
+      error: "Sonarr started searches for 2 of 4 series, then the next one failed. Check Sonarr before searching the rest.",
       startedIds: [1, 2],
     });
     expect(mocks.searchSeriesReleases.mock.calls).toEqual([[1], [2], [3]]);
@@ -654,7 +503,7 @@ describe("searchLibrarySeries", () => {
     expect(result).toEqual({
       ok: false,
       error:
-        "Sonarr started searches for 1 of 3 series, then took too long on the next one, which may also have started. Those are now deselected; check Sonarr before searching the rest.",
+        "Sonarr started searches for 1 of 3 series, then took too long on the next one, which may also have started. Check Sonarr before searching the rest.",
       startedIds: [7],
     });
     expect(mocks.searchSeriesReleases.mock.calls).toEqual([[7], [8]]);

@@ -98,7 +98,7 @@ export function QueueView({
   const [removing, setRemoving] = useState<QueueRow | null>(null);
   // The row the Force import dialog is open for. A snapshot, like the Remove dialog's.
   const [importing, setImporting] = useState<QueueRow | null>(null);
-  // The row whose ⋯ menu is open. Its poster preview is hidden meanwhile, as on the Movies table.
+  // The row whose ⋯ menu is open. Its poster preview is hidden meanwhile, as on other lists.
   const [menuRowKey, setMenuRowKey] = useState<string | null>(null);
   const posterPreview = usePosterPreview<string>();
 
