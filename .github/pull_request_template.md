@@ -11,5 +11,9 @@
 ## Testing
 <!-- Commands run and their results, plus anything you checked by hand. Say what was NOT verified. -->
 
+## README
+<!-- Does this change what users see or do, or how MediaHub is installed or configured? Then the README is updated in this PR. -->
+- README: updated / not affected
+
 ## How to revert
-<!-- e.g. "revert this commit". List anything a plain revert won't undo: DB migrations, created users, changed files on the NAS. -->
+<!-- e.g. "revert this commit". List anything a plain revert won't undo: DB migrations, created users, changed files on the installed PC. -->
