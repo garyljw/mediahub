@@ -84,11 +84,16 @@ const bundles = [
   ["scripts/create-user.ts", path.join("tools", "create-user.mjs")],
   ["scripts/reset-plex-admin.ts", path.join("tools", "reset-plex-admin.mjs")],
   ["scripts/migrate-tool.ts", path.join("tools", "migrate.mjs")],
+  ["scripts/updater.ts", path.join("tools", "updater.mjs")],
 ];
 mkdirSync(path.join(out, "tools"), { recursive: true });
 for (const [entry, outfile] of bundles) {
   await build({ ...bundleOptions, entryPoints: [path.join(root, entry)], outfile: path.join(out, outfile) });
 }
+
+// The updater runs from a copy in the updates folder and must never load the database driver.
+const updaterSource = readFileSync(path.join(out, "tools", "updater.mjs"), "utf8");
+if (updaterSource.includes("better-sqlite3")) fail("tools/updater.mjs references better-sqlite3. It must not import the database.");
 
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 writeFileSync(

@@ -6,7 +6,7 @@ export const DB_OUT_OF_DATE =
   "The database needs updating. Stop MediaHub, run `npm run db:migrate` (or restart the packaged app, which migrates on start), then start it again.";
 
 // The journal is imported at build time, so this needs no file read at runtime.
-const LATEST_EXPECTED = journal.entries[journal.entries.length - 1].when;
+export const LATEST_EXPECTED = journal.entries[journal.entries.length - 1].when;
 
 // drizzle-orm stores each applied migration's journal `when` as created_at, and treats a
 // migration as pending when the latest created_at is older than its `when`.
@@ -14,15 +14,19 @@ export function isUpToDate(latestApplied: number | null, latestExpected: number)
   return latestApplied !== null && latestApplied >= latestExpected;
 }
 
-/** Throws DB_OUT_OF_DATE when migrations in drizzle/ have not all been applied. */
-export function assertMigrated(sqlite: Database.Database): void {
+/** The newest applied migration's created_at, or null when none has been applied. */
+export function latestAppliedMigration(sqlite: Database.Database): number | null {
   // The table is missing until the first migration has run, which means nothing is applied.
   const hasTable = sqlite
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'")
     .get();
-  const latestApplied = hasTable
-    ? (sqlite.prepare("SELECT MAX(created_at) AS latest FROM __drizzle_migrations").get() as { latest: number | null })
-        .latest
-    : null;
-  if (!isUpToDate(latestApplied, LATEST_EXPECTED)) throw new Error(DB_OUT_OF_DATE);
+  if (!hasTable) return null;
+  const latest = (sqlite.prepare("SELECT MAX(created_at) AS latest FROM __drizzle_migrations").get() as { latest: unknown })
+    .latest;
+  return latest === null || latest === undefined ? null : Number(latest);
+}
+
+/** Throws DB_OUT_OF_DATE when migrations in drizzle/ have not all been applied. */
+export function assertMigrated(sqlite: Database.Database): void {
+  if (!isUpToDate(latestAppliedMigration(sqlite), LATEST_EXPECTED)) throw new Error(DB_OUT_OF_DATE);
 }

@@ -42,6 +42,10 @@ Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recurse
 Source: "{#SourceDir}\service\MediaHub.exe"; DestDir: "{app}\service"; Flags: ignoreversion
 ; Template: rewritten with the real paths in [Code] after the files are copied.
 Source: "{#SourceDir}\service\MediaHub.xml"; DestDir: "{app}\service"; Flags: ignoreversion
+; Template for the MediaHub\Updater scheduled task: filled in like MediaHub.xml and registered in CurStepChanged.
+Source: "{#SourceDir}\service\MediaHub-Updater.xml"; DestDir: "{app}\service"; Flags: ignoreversion
+; Template for the MediaHub\UpdateInstall task (started by the updater to install a verified update).
+Source: "{#SourceDir}\service\MediaHub-UpdateInstall.xml"; DestDir: "{app}\service"; Flags: ignoreversion
 Source: "{#SourceDir}\mediahub-tool.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
@@ -396,14 +400,41 @@ begin
   StringChangeEx(Result, '&', '&amp;', True);
 end;
 
+// Replaces @APP@ and @DATA@ in a template in {app}\service and writes it back as UTF-8 without a byte order mark.
+function FillTemplate(const Path: String): Boolean;
+var
+  Text: AnsiString;
+  Body: String;
+  Lines: TArrayOfString;
+begin
+  Result := False;
+  if not LoadStringFromFile(Path, Text) then Exit;
+  Body := Text;
+  // Paths may contain & (see XmlEscape) and non-ASCII letters. The templates are ASCII, so reading them as ANSI is safe.
+  StringChangeEx(Body, '@APP@', XmlEscape(ExpandConstant('{app}')), True);
+  StringChangeEx(Body, '@DATA@', XmlEscape(DataDir()), True);
+  SetArrayLength(Lines, 1);
+  Lines[0] := Body;
+  Result := SaveStringsToUTF8FileWithoutBOM(Path, Lines, False);
+end;
+
+// True when Setup was started by the updater (with /UPDATER). The updater then registers the update task itself.
+function IsUpdaterRun(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if SameText(ParamStr(I), '/UPDATER') then Result := True;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Rc: Integer;
   Lines: TArrayOfString;
-  XmlPath, XmlText, Account, Grant, Port, Exe, Params: String;
-  XmlAnsi: AnsiString;
-  XmlLines: TArrayOfString;
+  XmlPath, Account, Grant, Port, Exe, Params: String;
   PortNumber: Integer;
+  FindRec: TFindRec;
   Zone, Address, PortText: String;
 begin
   if CurStep <> ssPostInstall then Exit;
@@ -414,6 +445,9 @@ begin
   if not ForceDirectories(DataDir()) then RaiseException('Could not create ' + DataDir() + '.');
   if not ForceDirectories(DataDir() + '\data') then RaiseException('Could not create the data folder.');
   if not ForceDirectories(DataDir() + '\logs') then RaiseException('Could not create the logs folder.');
+  // The auto-updater keeps its state here. Only the requests folder is writable by the service (step 5).
+  if not ForceDirectories(DataDir() + '\updates') then RaiseException('Could not create the updates folder.');
+  if not ForceDirectories(DataDir() + '\updates\requests') then RaiseException('Could not create the update requests folder.');
   // Locked before the settings file is written, so nobody else can add files to the folder from here on.
   if not LockDataDir() then RaiseException('Could not set permissions on ' + DataDir() + '.');
   // Checked again now that only SYSTEM and Administrators can add to it: the folder may not have existed when
@@ -447,16 +481,10 @@ begin
     Log('Wrote the settings file.');
   end;
 
-  // 3. Fill the placeholders in the WinSW config with the real paths.
-  if not LoadStringFromFile(XmlPath, XmlAnsi) then RaiseException('Could not read ' + XmlPath + '.');
-  XmlText := XmlAnsi;
-  // Paths may contain & (the only XML special character a Windows path can hold) and non-ASCII letters,
-  // so & is escaped and the file is written as UTF-8 without a byte order mark.
-  StringChangeEx(XmlText, '@APP@', XmlEscape(ExpandConstant('{app}')), True);
-  StringChangeEx(XmlText, '@DATA@', XmlEscape(DataDir()), True);
-  SetArrayLength(XmlLines, 1);
-  XmlLines[0] := XmlText;
-  if not SaveStringsToUTF8FileWithoutBOM(XmlPath, XmlLines, False) then RaiseException('Could not write ' + XmlPath + '.');
+  // 3. Fill the placeholders in the WinSW config and the updater task template with the real paths.
+  if not FillTemplate(XmlPath) then RaiseException('Could not write ' + XmlPath + '.');
+  if not FillTemplate(ExpandConstant('{app}\service\MediaHub-Updater.xml')) then RaiseException('Could not write the update task template.');
+  if not FillTemplate(ExpandConstant('{app}\service\MediaHub-UpdateInstall.xml')) then RaiseException('Could not write the update install task template.');
 
   // 4. Install the service on a fresh install only. An existing service keeps its account and settings.
   if not ServiceExists() then
@@ -488,6 +516,10 @@ begin
       RaiseException('Could not set permissions on the data folder (exit code ' + IntToStr(Rc) + ').');
     if not RunStep('Let the service write logs', SysTool('icacls.exe'), '"' + DataDir() + '\logs" /grant:r "' + AccountPrincipal(Account) + ':(OI)(CI)M"', Rc) then
       RaiseException('Could not set permissions on the logs folder (exit code ' + IntToStr(Rc) + ').');
+    // The only part of updates\ the service can change: "check now" requests are files dropped here.
+    // updates\ itself stays read-only for the service (it inherits RX from the data folder).
+    if not RunStep('Let the service write update requests', SysTool('icacls.exe'), '"' + DataDir() + '\updates\requests" /grant:r "' + AccountPrincipal(Account) + ':(OI)(CI)M"', Rc) then
+      RaiseException('Could not set permissions on the update requests folder (exit code ' + IntToStr(Rc) + ').');
   end;
 
   // 6. Firewall: private networks only. The old rule is removed first, so a changed port is picked up.
@@ -507,6 +539,38 @@ begin
   // 7. Start. WinSW reads MediaHub.xml each time the service starts, so this also picks up the rewritten config.
   if (PostInstallError = '') and not RunStep('Start the service', Exe, 'start', Rc) then
     PostInstallError := 'MediaHub is installed but did not start (exit code ' + IntToStr(Rc) + '). See the logs in ' + DataDir() + '\logs.';
+
+  // 8. Update tasks: MediaHub\Updater (every minute: checks and downloads) and MediaHub\UpdateInstall (started
+  // by the updater: installs). Not registered when the updater runs this installer (/UPDATER): the updater, which
+  // runs inside MediaHub\UpdateInstall, registers both itself afterwards, last of all. It is not known whether
+  // re-registering a task stops a running instance of it.
+  if (PostInstallError = '') and not IsUpdaterRun() then
+  begin
+    if not RunStep('Register the update task', SysTool('schtasks.exe'), '/create /tn "MediaHub\Updater" /xml "' + ExpandConstant('{app}') + '\service\MediaHub-Updater.xml" /f', Rc) then
+      PostInstallError := 'MediaHub is running, but the update task could not be created (exit code ' + IntToStr(Rc) + ').'
+    else if not RunStep('Register the update install task', SysTool('schtasks.exe'), '/create /tn "MediaHub\UpdateInstall" /xml "' + ExpandConstant('{app}') + '\service\MediaHub-UpdateInstall.xml" /f', Rc) then
+      PostInstallError := 'MediaHub is running, but the update install task could not be created (exit code ' + IntToStr(Rc) + ').';
+  end;
+
+  // 9. A copy of this installer, kept for rollback: the updater runs it if an update fails to start. Only after a
+  // successful install. A failure here is only logged, because a missing copy must not fail the install.
+  if PostInstallError = '' then
+  begin
+    if not ForceDirectories(DataDir() + '\updates\installers') then
+      Log('Could not create the rollback installer folder.')
+    else
+    begin
+      if FindFirst(DataDir() + '\updates\installers\*.exe', FindRec) then
+      begin
+        repeat
+          DeleteFile(DataDir() + '\updates\installers\' + FindRec.Name);
+        until not FindNext(FindRec);
+        FindClose(FindRec);
+      end;
+      if not FileCopy(ExpandConstant('{srcexe}'), DataDir() + '\updates\installers\MediaHub-Setup-{#AppVersion}.exe', False) then
+        Log('Could not keep a copy of this installer for rollback.');
+    end;
+  end;
   if PostInstallError <> '' then
   begin
     Log('Error: ' + PostInstallError);
@@ -552,6 +616,14 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    // The update task goes first, so nothing starts the updater while the service is being removed. Result ignored.
+    RunStep('Remove the update task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\Updater" /f', Rc);
+    RunStep('Remove the update install task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\UpdateInstall" /f', Rc);
+    // Program files the updater keeps in the data folder. Removed even on a silent uninstall, because they are not
+    // user data. status.json and updater.log stay.
+    DelTree(DataDir() + '\updates\installers', True, True, True);
+    DelTree(DataDir() + '\updates\downloads', True, True, True);
+    DelTree(DataDir() + '\updates\run', True, True, True);
     Exe := ExpandConstant('{app}\service\MediaHub.exe');
     if ServiceExists() and FileExists(Exe) then
     begin

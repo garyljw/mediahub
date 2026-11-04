@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Template: the installer replaces @APP@ and @DATA@ and registers the task as MediaHub\UpdateInstall.
+     No trigger: MediaHub\Updater starts it (schtasks /run) once it has verified an update and left run\job.json.
+     It runs stage 2 from a copy of node.exe and the updater in updates\run (only SYSTEM and Administrators can
+     write there), so the installer can replace everything in the app folder. -->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Installs a verified MediaHub update, and puts back the previous version if it doesn't start.</Description>
+  </RegistrationInfo>
+  <Triggers />
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <LogonType>ServiceAccount</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <!-- Shorter than the updater's 70-minute lock age (src/server/updater/run.ts). -->
+    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>@DATA@\updates\run\node.exe</Command>
+      <Arguments>--env-file="@DATA@\mediahub.env" "@DATA@\updates\run\updater.mjs" --stage2 --app-dir "@APP@" --data-dir "@DATA@"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
