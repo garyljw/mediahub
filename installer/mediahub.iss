@@ -416,6 +416,15 @@ begin
   if not ForceDirectories(DataDir() + '\logs') then RaiseException('Could not create the logs folder.');
   // Locked before the settings file is written, so nobody else can add files to the folder from here on.
   if not LockDataDir() then RaiseException('Could not set permissions on ' + DataDir() + '.');
+  // Checked again now that only SYSTEM and Administrators can add to it: the folder may not have existed when
+  // PrepareToInstall checked, and a standard user could have created it during the file copy.
+  PostInstallError := CheckDataOwners();
+  if PostInstallError <> '' then
+  begin
+    Log('Error: ' + PostInstallError);
+    MsgBox(PostInstallError, mbError, MB_OK);
+    Exit;
+  end;
 
   // 2. Settings file: fresh install only. A repair or upgrade keeps the existing file.
   if not FileExists(EnvFile()) then
