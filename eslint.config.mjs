@@ -69,6 +69,8 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
+    // Packaged output from scripts/package.mjs (bundles, not source).
+    "dist/**",
     "build/**",
     "next-env.d.ts",
     // Generated from openapi/*.json by scripts/gen-arr.mjs.

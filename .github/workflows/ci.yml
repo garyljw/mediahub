@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
 
       - run: npm ci
@@ -34,3 +34,51 @@ jobs:
       - run: npm test
       # Builds without any env vars: env() is only read at request time.
       - run: npm run build
+      # Assembles dist/mediahub from the build above (no second next build).
+      - run: node scripts/package.mjs
+
+      # Smoke test of the packaged app, Linux only. The copy is made outside the repo, so the
+      # package must not depend on the repo's node_modules. The server is started from another
+      # working directory with a throwaway env file: no secrets, BETTER_AUTH_SECRET is left unset.
+      - name: Start the packaged app and check /login
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/mh" "$RUNNER_TEMP/mh-data"
+          cp -R dist/mediahub "$RUNNER_TEMP/mh"
+          printf '%s\n' \
+            "BETTER_AUTH_URL=http://127.0.0.1:7979" \
+            "DATABASE_PATH=$RUNNER_TEMP/mh-data/mediahub.db" \
+            "MEDIAHUB_HOST=127.0.0.1" \
+            "MEDIAHUB_PORT=7979" > "$RUNNER_TEMP/mh.env"
+          (cd "$RUNNER_TEMP" && exec node --env-file="$RUNNER_TEMP/mh.env" "$RUNNER_TEMP/mh/mediahub.mjs") > "$RUNNER_TEMP/mh-server.log" 2>&1 &
+          server_pid=$!
+          code=000
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7979/login || true)
+            if [ "$code" = "200" ]; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          kill "$server_pid" 2>/dev/null || true
+          wait "$server_pid" 2>/dev/null || true
+          if [ "$code" != "200" ]; then
+            echo "Packaged app did not return 200 from /login (got $code)."
+            cat "$RUNNER_TEMP/mh-server.log"
+            exit 1
+          fi
+          # The launcher's migrations ran: every migration in the packaged journal is recorded in the DB.
+          (cd "$RUNNER_TEMP/mh" && node -e '
+            const Database = require("better-sqlite3");
+            const expected = require("./drizzle/meta/_journal.json").entries.length;
+            const db = new Database(process.argv[1], { readonly: true });
+            const applied = db.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get().n;
+            if (applied !== expected) { console.error(`migrations applied: ${applied}, expected ${expected}`); process.exit(1); }
+          ' "$RUNNER_TEMP/mh-data/mediahub.db")
+          cd "$RUNNER_TEMP"
+          # The migrate tool is idempotent: a second run against the same DB must succeed.
+          node --env-file=mh.env mh/tools/migrate.mjs
+          # The other tools load and reach their first check (no TTY, wrong confirmation): both refuse with exit 1.
+          out=$(node --env-file=mh.env mh/tools/create-user.mjs --email ci@example.com --role requester </dev/null 2>&1) && exit 1
+          echo "$out" | grep -q "interactive terminal"
+          out=$(echo nope | node --env-file=mh.env mh/tools/reset-plex-admin.mjs 2>&1) && exit 1
+          echo "$out" | grep -q "not confirmed"

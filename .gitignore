@@ -49,3 +49,6 @@ next-env.d.ts
 *.db-journal
 *.db-wal
 *.db-shm
+
+# packaged app (npm run package)
+/dist/

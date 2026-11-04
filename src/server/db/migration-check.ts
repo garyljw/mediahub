@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import journal from "../../../drizzle/meta/_journal.json";
 
 export const DB_OUT_OF_DATE =
-  "The database needs updating. Stop MediaHub, run `npm run db:migrate`, then start it again.";
+  "The database needs updating. Stop MediaHub, run `npm run db:migrate` (or restart the packaged app, which migrates on start), then start it again.";
 
 // The journal is imported at build time, so this needs no file read at runtime.
 const LATEST_EXPECTED = journal.entries[journal.entries.length - 1].when;

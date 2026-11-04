@@ -12,6 +12,17 @@ One web UI for Radarr and Sonarr. Private, LAN-only, self-hosted on Synology.
 
 Sign-up is disabled. Admins come from Plex setup, and requesters come from the script below.
 
+## Self-contained package
+`npm run package` builds `dist/mediahub/`, a folder that runs MediaHub with only a Node binary: no repo, no `npm install`, no dev tools. Copy it anywhere and run it with your config file:
+
+```
+node --env-file=<config> dist/mediahub/mediahub.mjs
+```
+
+On start it applies pending database migrations, then serves the app. `MEDIAHUB_HOST` and `MEDIAHUB_PORT` (see `.env.example`, default `0.0.0.0:7979`) set where it listens. The break-glass tools are in `dist/mediahub/tools/`, for example `node --env-file=<config> dist/mediahub/tools/create-user.mjs --email <email> --role requester`. They behave like the npm scripts above. `npm start` runs the same package from this repo, using `.env.local`. Run `npm run package` first, and again after code changes, because `npm start` doesn't rebuild.
+
+This folder is the basis for the Windows installer and the Docker image planned next.
+
 ## Admin and Plex
 - Admins sign in only with Plex. The Plex account must own the server chosen during setup. Password sign-in is refused for admins.
 - Requesters keep email and password sign-in.
