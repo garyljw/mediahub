@@ -21,7 +21,8 @@ import {
 } from "./data-connection";
 
 const TOKEN = "fake-plex-data-token-0123456789abcdef";
-const LAN = { url: "https://192-168-10-5.fakehash.plex.direct:32400", pinAddress: "192.168.10.5", token: TOKEN };
+const SERVER = { serverId: "fakefriendmachine0123456789abcdef0123", serverName: "Fake Friend Server" };
+const LAN = { url: "https://192-168-10-5.fakehash.plex.direct:32400", pinAddress: "192.168.10.5", token: TOKEN, ...SERVER };
 
 function settingKeys(): string[] {
   return testDb.current!.select().from(schema.setting).all().map((row) => row.key).sort();
@@ -50,70 +51,64 @@ describe("getPlexDataClientId", () => {
 });
 
 describe("the stored data connection", () => {
-  it("is null until a url and a token are both stored", () => {
+  it("is null until the address, token and server are stored", () => {
     expect(getPlexDataConnection()).toBeNull();
-    expect(getPlexDataSummary()).toEqual({ connected: false, url: null });
+    expect(getPlexDataSummary()).toEqual({ connected: false, url: null, serverName: null });
   });
 
-  it("saves and reads back the url, pin address and token", () => {
+  it("saves and reads back the address, pin, token and the chosen server", () => {
     savePlexDataConnection(LAN);
     expect(getPlexDataConnection()).toEqual(LAN);
   });
 
   it("stores a plain http connection with no pin address", () => {
-    savePlexDataConnection({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN });
-    expect(getPlexDataConnection()).toEqual({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN });
+    savePlexDataConnection({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN, ...SERVER });
+    expect(getPlexDataConnection()).toEqual({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN, ...SERVER });
     expect(settingKeys()).not.toContain("plex.dataPinAddress");
   });
 
   it("removes an old pin address when the new connection has none", () => {
     savePlexDataConnection(LAN);
-    savePlexDataConnection({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN });
+    savePlexDataConnection({ url: "http://192.168.10.5:32400", pinAddress: null, token: TOKEN, ...SERVER });
     expect(getPlexDataConnection()?.pinAddress).toBeNull();
   });
 
-  it("replaces an earlier connection", () => {
+  it("replaces an earlier connection, including its server", () => {
     savePlexDataConnection(LAN);
-    savePlexDataConnection({ ...LAN, token: "fake-second-token-0123456789abcdef" });
+    savePlexDataConnection({ ...LAN, token: "fake-second-token-0123456789abcdef", serverName: "Fake Home Server" });
     expect(getPlexDataConnection()?.token).toBe("fake-second-token-0123456789abcdef");
+    expect(getPlexDataConnection()?.serverName).toBe("Fake Home Server");
     expect(settingKeys().filter((key) => key === "plex.dataToken")).toHaveLength(1);
   });
 
-  it("the summary shows the url and whether it is connected, never the token", () => {
+  it("the summary shows whether it is connected, the address and the server name, never the token", () => {
     savePlexDataConnection(LAN);
     const summary = getPlexDataSummary();
-    expect(summary).toEqual({ connected: true, url: LAN.url });
+    expect(summary).toEqual({ connected: true, url: LAN.url, serverName: "Fake Friend Server" });
     expect(JSON.stringify(summary)).not.toContain(TOKEN);
   });
 
-  it("the summary is not connected when only the url is stored", () => {
+  it("is not connected when only the address is stored", () => {
     savePlexDataConnection(LAN);
     testDb.current!.delete(schema.setting).where(eq(schema.setting.key, "plex.dataToken")).run();
-    expect(getPlexDataSummary()).toEqual({ connected: false, url: null });
+    expect(getPlexDataSummary()).toEqual({ connected: false, url: null, serverName: null });
     expect(getPlexDataConnection()).toBeNull();
   });
 
-  it("clear removes the url, pin address and token but keeps the client id", () => {
+  it("is not connected for a connection saved before the server was recorded", () => {
+    savePlexDataConnection(LAN);
+    testDb.current!.delete(schema.setting).where(eq(schema.setting.key, "plex.dataServerId")).run();
+    expect(getPlexDataConnection()).toBeNull();
+    expect(getPlexDataSummary().connected).toBe(false);
+  });
+
+  it("clear removes the address, pin, token and server but keeps the client id", () => {
     const clientId = getPlexDataClientId();
     savePlexDataConnection(LAN);
     clearPlexDataConnection();
     expect(getPlexDataConnection()).toBeNull();
-    expect(getPlexDataSummary()).toEqual({ connected: false, url: null });
+    expect(getPlexDataSummary()).toEqual({ connected: false, url: null, serverName: null });
     expect(settingKeys()).toEqual(["plex.dataClientId"]);
     expect(getPlexDataClientId()).toBe(clientId);
-  });
-
-  it("clear also removes in-flight connect rows, and leaves other verification rows alone", () => {
-    const now = new Date();
-    const row = (identifier: string) => ({ id: identifier, identifier, value: "{}", expiresAt: now, createdAt: now, updatedAt: now });
-    testDb
-      .current!.insert(schema.verification)
-      .values([row("plex-data-pin:admin-1"), row("plex-data-pending:admin-1"), row("plex-pin:fake-state")])
-      .run();
-
-    clearPlexDataConnection();
-
-    const left = testDb.current!.select().from(schema.verification).all().map((r) => r.identifier);
-    expect(left).toEqual(["plex-pin:fake-state"]);
   });
 });

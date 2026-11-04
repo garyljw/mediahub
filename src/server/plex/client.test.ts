@@ -7,7 +7,7 @@ import {
   createPin,
   getOwnedServers,
   getPlexAccount,
-  getServerConnections,
+  getVisibleServers,
   PlexRequestError,
 } from "./client";
 
@@ -279,35 +279,68 @@ describe("data-connection calls", () => {
     expect(params.has("forwardUrl")).toBe(false);
   });
 
-  it("getServerConnections returns the owned server's addresses, validated", async () => {
-    stubPlex(() =>
+  it("getVisibleServers returns owned and shared servers with their own access tokens and validated addresses", async () => {
+    const mock = stubPlex(() =>
       json([
         {
           name: "Fake Home Server",
           provides: "server",
           owned: true,
           clientIdentifier: "fake-server-1",
+          accessToken: "fake-owned-access-token-0123456789",
           connections: [
             { protocol: "https", address: "192.168.10.5", port: 32400, uri: "https://192-168-10-5.x.plex.direct:32400", local: true, relay: false, IPv6: false },
           ],
         },
+        {
+          name: "Fake Friend Server",
+          provides: "server",
+          owned: false,
+          clientIdentifier: "fake-server-2",
+          accessToken: "fake-shared-access-token-0123456789",
+          connections: [],
+        },
       ]),
     );
-    await expect(getServerConnections(TOKEN, "fake-server-1", { clientId: DATA_CLIENT_ID })).resolves.toEqual([
-      { protocol: "https", address: "192.168.10.5", port: 32400, uri: "https://192-168-10-5.x.plex.direct:32400", local: true, relay: false, IPv6: false },
+    await expect(getVisibleServers(TOKEN, { clientId: DATA_CLIENT_ID, product: "MediaHub watched status" })).resolves.toEqual([
+      {
+        clientIdentifier: "fake-server-1",
+        name: "Fake Home Server",
+        owned: true,
+        accessToken: "fake-owned-access-token-0123456789",
+        connections: [
+          { protocol: "https", address: "192.168.10.5", port: 32400, uri: "https://192-168-10-5.x.plex.direct:32400", local: true, relay: false, IPv6: false },
+        ],
+      },
+      {
+        clientIdentifier: "fake-server-2",
+        name: "Fake Friend Server",
+        owned: false,
+        accessToken: "fake-shared-access-token-0123456789",
+        connections: [],
+      },
     ]);
+    expect(requestedHeaders(mock)["X-Plex-Client-Identifier"]).toBe(DATA_CLIENT_ID);
+    expect(requestedHeaders(mock)["X-Plex-Product"]).toBe("MediaHub watched status");
   });
 
-  it("getServerConnections returns null when the account doesn't own that server", async () => {
-    stubPlex(() => json([{ name: "Fake Friend", provides: "server", owned: false, clientIdentifier: "fake-server-1", connections: [] }]));
-    await expect(getServerConnections(TOKEN, "fake-server-1")).resolves.toBeNull();
-  });
-
-  it("getServerConnections rejects a connection with the wrong shape", async () => {
+  it("getVisibleServers skips servers without an access token, and entries that aren't servers", async () => {
     stubPlex(() =>
-      json([{ name: "Fake", provides: "server", owned: true, clientIdentifier: "fake-server-1", connections: [{ protocol: "https" }] }]),
+      json([
+        { name: "Fake No Token", provides: "server", owned: false, clientIdentifier: "fake-no-token", accessToken: "" },
+        { name: "Fake Missing Token", provides: "server", owned: false, clientIdentifier: "fake-missing" },
+        { name: "Fake Player", provides: "player", owned: true, clientIdentifier: "fake-player", accessToken: "fake-player-token-0123456789" },
+        { name: "Fake Kept", provides: "server", owned: false, clientIdentifier: "fake-kept", accessToken: "fake-kept-token-0123456789" },
+      ]),
     );
-    await expect(getServerConnections(TOKEN, "fake-server-1")).rejects.toMatchObject({ kind: "invalid" });
+    await expect(getVisibleServers(TOKEN)).resolves.toMatchObject([{ clientIdentifier: "fake-kept", owned: false }]);
+  });
+
+  it("getVisibleServers rejects a connection with the wrong shape", async () => {
+    stubPlex(() =>
+      json([{ name: "Fake", provides: "server", owned: true, clientIdentifier: "fake-server-1", accessToken: "fake-token-0123456789", connections: [{ protocol: "https" }] }]),
+    );
+    await expect(getVisibleServers(TOKEN)).rejects.toMatchObject({ kind: "invalid" });
   });
 
   it("sign-in resources parsing still works when the connections list is malformed", async () => {

@@ -12,13 +12,19 @@ const CLIENT_ID_KEY = "plex.dataClientId";
 const TOKEN_KEY = "plex.dataToken";
 const URL_KEY = "plex.dataUrl";
 const PIN_ADDRESS_KEY = "plex.dataPinAddress";
-const CONNECTION_KEYS = [TOKEN_KEY, URL_KEY, PIN_ADDRESS_KEY];
+const SERVER_ID_KEY = "plex.dataServerId";
+const SERVER_NAME_KEY = "plex.dataServerName";
+const CONNECTION_KEYS = [TOKEN_KEY, URL_KEY, PIN_ADDRESS_KEY, SERVER_ID_KEY, SERVER_NAME_KEY];
 
 export type PlexDataConnection = {
   url: string;
   /** The IP to pin the lookup to, for an https plex.direct address. Null for plain http. */
   pinAddress: string | null;
+  /** The chosen server's own access token (never the PIN token unless the two are equal). */
   token: string;
+  /** The chosen server's machine identifier. Checked against /identity before each use. */
+  serverId: string;
+  serverName: string;
 };
 
 let cachedClientId: string | undefined;
@@ -60,32 +66,38 @@ function readValues(): Map<string, string> {
   return new Map(rows.map((row) => [row.key, row.value]));
 }
 
-/** The stored connection, or null unless both the address and the token are stored. Server-only callers. */
+/**
+ * The stored connection, or null unless the address, token, server id and server name are all stored (a connection
+ * saved before servers were recorded counts as not connected, so it is connected again once). Server-only callers.
+ */
 export function getPlexDataConnection(): PlexDataConnection | null {
   const values = readValues();
   const url = values.get(URL_KEY);
   const token = values.get(TOKEN_KEY);
-  if (!url || !token) return null;
-  return { url, pinAddress: values.get(PIN_ADDRESS_KEY) ?? null, token };
+  const serverId = values.get(SERVER_ID_KEY);
+  const serverName = values.get(SERVER_NAME_KEY);
+  if (!url || !token || !serverId || !serverName) return null;
+  return { url, pinAddress: values.get(PIN_ADDRESS_KEY) ?? null, token, serverId, serverName };
 }
 
 /**
- * What the Connections page may show. Never the token, only whether the connection is complete and the address.
+ * What the Connections page may show: whether it is connected, the address and the server's name. Never the token.
  */
-export function getPlexDataSummary(): { connected: boolean; url: string | null } {
-  const values = readValues();
-  const url = values.get(URL_KEY) ?? null;
-  const connected = Boolean(url && values.get(TOKEN_KEY));
-  return { connected, url: connected ? url : null };
+export function getPlexDataSummary(): { connected: boolean; url: string | null; serverName: string | null } {
+  const connection = getPlexDataConnection();
+  if (!connection) return { connected: false, url: null, serverName: null };
+  return { connected: true, url: connection.url, serverName: connection.serverName };
 }
 
 /** Stores the connection in one transaction. The pin address row is removed when there is no pin address. */
-export function savePlexDataConnection({ url, pinAddress, token }: PlexDataConnection): void {
+export function savePlexDataConnection({ url, pinAddress, token, serverId, serverName }: PlexDataConnection): void {
   const updatedAt = new Date();
   db().transaction((tx) => {
     for (const [key, value] of [
       [URL_KEY, url],
       [TOKEN_KEY, token],
+      [SERVER_ID_KEY, serverId],
+      [SERVER_NAME_KEY, serverName],
     ] as const) {
       tx.insert(setting)
         .values({ key, value, updatedAt })
@@ -103,7 +115,7 @@ export function savePlexDataConnection({ url, pinAddress, token }: PlexDataConne
   });
 }
 
-/** Removes the address, pin and token. The data client id is kept: it is not secret and is reused. */
+/** Removes the address, pin, token and server. The data client id is kept: it is not secret and is reused. */
 export function clearPlexDataConnection(): void {
   db().transaction((tx) => {
     tx.delete(setting).where(inArray(setting.key, CONNECTION_KEYS)).run();

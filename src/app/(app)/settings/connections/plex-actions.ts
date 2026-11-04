@@ -6,7 +6,7 @@ import { getAuth } from "@/server/auth";
 import { AuthzError, requireRole } from "@/server/authz";
 import { buildCandidates, type ServerCandidate } from "@/server/plex/candidates";
 import { getPlexAdminConfig, type PlexAdminConfig } from "@/server/plex/admin-config";
-import { authAppUrl, checkPin, createPin, getPlexAccount, getServerConnections } from "@/server/plex/client";
+import { authAppUrl, checkPin, createPin, getPlexAccount, getVisibleServers, type VisibleServer } from "@/server/plex/client";
 import {
   clearPlexDataConnection,
   getPlexDataClientId,
@@ -22,7 +22,8 @@ import { parseStoredState, STATE_TTL_MS } from "@/server/plex/state";
 //
 // In-flight state lives in the verification table, keyed by the admin's user id, for 10 minutes:
 //   plex-data-pin:<userId>      the PIN id, while the admin approves it on Plex
-//   plex-data-pending:<userId>  the token and the candidate addresses, while the admin picks one
+//   plex-data-pending:<userId>  the owner id and the candidate addresses (each with its server and token), while the
+//                               admin picks one
 // Only the admin who started can finish. Replies to the browser carry only what the page needs: never the token,
 // a URL or a pin address (the pick list holds the labels, and the chosen id is looked up on the server).
 
@@ -43,6 +44,7 @@ const START_AGAIN = "Start again.";
 const PLEX_UNREACHABLE = "Couldn't reach Plex. Try again.";
 const TOKEN_REFUSED = "Plex refused the stored token. Connect again.";
 const NOT_OWNER = "That Plex account isn't the server owner.";
+const NO_SERVER_REACHABLE = "MediaHub couldn't reach any of your Plex servers.";
 const WRONG_SERVER = "That address now answers as a different Plex server. Connect again.";
 const BAD_OPTION = "Choose an address from the list.";
 const DATA_PRODUCT = "MediaHub watched status";
@@ -55,9 +57,7 @@ const pendingKey = (userId: string) => `plex-data-pending:${userId}`;
 
 const DataPinSchema = z.object({ pinId: z.number().int() });
 const PendingSchema = z.object({
-  token: z.string().min(1),
-  /** The server and owner the token was checked against. Save refuses if the stored setup has changed since. */
-  serverId: z.string().min(1),
+  /** The owner account the approval was checked against. Save refuses if the stored owner has changed since. */
   ownerAccountId: z.string().min(1),
   candidates: z
     .array(
@@ -66,10 +66,16 @@ const PendingSchema = z.object({
         label: z.string(),
         url: z.string(),
         pinAddress: z.string().nullable(),
+        serverId: z.string().min(1),
+        serverName: z.string().min(1),
+        /** That server's own access token. */
+        token: z.string().min(1),
       }),
     )
     .min(1),
 });
+
+type PendingCandidate = z.infer<typeof PendingSchema>["candidates"][number];
 const SaveInputSchema = z.strictObject({ optionId: z.string().min(1).max(64) });
 
 const plexDenied = (): PlexFailure => ({ ok: false, message: DENIED });
@@ -137,7 +143,7 @@ async function startFor(userId: string): Promise<PlexStartResult> {
 
   const clientId = getPlexDataClientId();
   try {
-    const pin = await createPin({ clientId });
+    const pin = await createPin({ clientId, product: DATA_PRODUCT });
     await replaceRow(pinKey(userId), { pinId: pin.id });
     return { ok: true, authUrl: authAppUrl({ code: pin.code, clientId, product: DATA_PRODUCT }) };
   } catch (error) {
@@ -168,7 +174,7 @@ async function checkFor(userId: string): Promise<PlexCheckResult> {
   const parsed = stored === null ? null : parseStoredState(DataPinSchema, stored);
   if (!parsed) return { ok: false, message: START_AGAIN };
 
-  const caller = { clientId: getPlexDataClientId() };
+  const caller = { clientId: getPlexDataClientId(), product: DATA_PRODUCT };
   try {
     const token = await checkPin(parsed.pinId, caller);
     if (!token) return { ok: true, status: "waiting" };
@@ -184,37 +190,63 @@ async function pickAddress(
   userId: string,
   token: string,
   config: PlexAdminConfig,
-  caller: { clientId: string },
+  caller: { clientId: string; product: string },
 ): Promise<PlexCheckResult> {
   const account = await getPlexAccount(token, caller);
   if (String(account.id) !== config.ownerAccountId) return { ok: false, message: NOT_OWNER };
 
-  const connections = await getServerConnections(token, config.serverId, caller);
-  if (!connections) return { ok: false, message: `Plex didn't list ${config.serverName} for that account.` };
+  // Only servers this account owns. A shared server's owner controls the addresses plex.tv lists for it and the
+  // identity it answers with, so probing it would let them point MediaHub (and the token) at any LAN address.
+  const servers = (await getVisibleServers(token, caller)).filter((server) => server.owned);
+  // Each server is checked on its own: one server failing in an unexpected way doesn't block the others.
+  const perServer = await Promise.all(
+    servers.map((server, index) =>
+      reachableAddresses(server, index).catch((error: unknown) => {
+        console.error(error instanceof PlexRequestError ? error.message : "Plex server check failed");
+        return [];
+      }),
+    ),
+  );
+  const passing = perServer.flat().sort(pickOrder);
+  if (passing.length === 0) return { ok: false, message: NO_SERVER_REACHABLE };
 
-  const candidates = buildCandidates(connections);
-  const answers = await Promise.all(candidates.map((candidate) => answersAsServer(candidate, config.serverId)));
-  const answering = candidates.filter((_, index) => answers[index]);
-  // Plain http would send the token unencrypted, and any LAN device can claim the server's (public) identity over it.
-  // So it is offered only when no pinned https address works, where the certificate proves it's the real server.
-  const encrypted = answering.filter((candidate) => candidate.pinAddress !== null);
-  const passing = encrypted.length > 0 ? encrypted : answering;
-  if (passing.length === 0) {
-    return { ok: false, message: `MediaHub couldn't reach ${config.serverName} on any of its addresses.` };
-  }
-
-  await replaceRow(pendingKey(userId), {
-    token,
-    serverId: config.serverId,
-    ownerAccountId: config.ownerAccountId,
-    candidates: passing,
-  });
+  await replaceRow(pendingKey(userId), { ownerAccountId: config.ownerAccountId, candidates: passing });
   return { ok: true, status: "pick", options: passing.map(({ id, label }) => ({ id, label })) };
 }
 
 /**
+ * The addresses of one server that answer as that server. Plain http is offered for this server only when none of its
+ * pinned https addresses works: plain http would send the token unencrypted, and any LAN device can claim the server's
+ * public identity over it. Ids are prefixed with the server's index so they stay unique across servers.
+ */
+async function reachableAddresses(server: VisibleServer, index: number): Promise<PendingCandidate[]> {
+  const candidates = buildCandidates(server.connections, { serverName: server.name });
+  const answers = await Promise.all(candidates.map((candidate) => answersAsServer(candidate, server.clientIdentifier)));
+  const answering = candidates.filter((_, position) => answers[position]);
+  const encrypted = answering.filter((candidate) => candidate.pinAddress !== null);
+  const chosen = encrypted.length > 0 ? encrypted : answering;
+  return chosen.map((candidate) => ({
+    id: `${index}-${candidate.id}`,
+    label: candidate.label,
+    url: candidate.url,
+    pinAddress: candidate.pinAddress,
+    serverId: server.clientIdentifier,
+    serverName: server.name,
+    token: server.accessToken,
+  }));
+}
+
+/** The pick list order: server name, then pinned https before plain http, then id. Plain comparisons keep it deterministic. */
+function pickOrder(a: PendingCandidate, b: PendingCandidate): number {
+  if (a.serverName !== b.serverName) return a.serverName < b.serverName ? -1 : 1;
+  const rank = (candidate: PendingCandidate) => (candidate.pinAddress === null ? 1 : 0);
+  if (rank(a) !== rank(b)) return rank(a) - rank(b);
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
  * Save: the address comes from the pending row, looked up by the chosen id. The browser never supplies a URL.
- * Before saving, the address must still answer as the stored server, and the token must still list its libraries.
+ * Before saving, the address must still answer as the chosen server, and its token must still list its libraries.
  */
 export async function savePlexConnection(input: unknown): Promise<PlexSaveResult> {
   try {
@@ -235,18 +267,22 @@ async function saveFor(userId: string, input: unknown): Promise<PlexSaveResult> 
   // Consumed first, so the pending token can be used by one save only. A failed save means connecting again.
   const stored = await consumeRow(pendingKey(userId));
   const pending = stored === null ? null : parseStoredState(PendingSchema, stored);
-  if (!pending) return { ok: false, message: START_AGAIN };
-  if (pending.serverId !== config.serverId || pending.ownerAccountId !== config.ownerAccountId) {
-    return { ok: false, message: START_AGAIN };
-  }
+  if (!pending || pending.ownerAccountId !== config.ownerAccountId) return { ok: false, message: START_AGAIN };
   const option = pending.candidates.find((candidate) => candidate.id === parsed.data.optionId);
   if (!option) return { ok: false, message: BAD_OPTION };
 
+  // The identity is checked against the chosen server's own id, and its own token is what gets stored.
   const conn: ServerConnection = { url: option.url, pinAddress: option.pinAddress };
   try {
-    if ((await getServerIdentity(conn)) !== config.serverId) return { ok: false, message: WRONG_SERVER };
-    const sections = await getLibrarySections(conn, pending.token);
-    savePlexDataConnection({ url: option.url, pinAddress: option.pinAddress, token: pending.token });
+    if ((await getServerIdentity(conn)) !== option.serverId) return { ok: false, message: WRONG_SERVER };
+    const sections = await getLibrarySections(conn, option.token);
+    savePlexDataConnection({
+      url: option.url,
+      pinAddress: option.pinAddress,
+      token: option.token,
+      serverId: option.serverId,
+      serverName: option.serverName,
+    });
     revalidatePath(REVALIDATE_PATH);
     return { ok: true, label: option.label, sections: sections.length };
   } catch (error) {
@@ -273,7 +309,7 @@ async function testFor(): Promise<PlexTestResult> {
 
   const conn: ServerConnection = { url: stored.url, pinAddress: stored.pinAddress };
   try {
-    if ((await getServerIdentity(conn)) !== config.serverId) return { ok: false, message: WRONG_SERVER };
+    if ((await getServerIdentity(conn)) !== stored.serverId) return { ok: false, message: WRONG_SERVER };
     const sections = await getLibrarySections(conn, stored.token);
     return { ok: true, sections: sections.map((section) => section.title) };
   } catch (error) {

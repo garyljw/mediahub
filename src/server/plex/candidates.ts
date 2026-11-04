@@ -16,12 +16,19 @@ export type ServerCandidate = {
 
 const PLEX_DIRECT_SUFFIX = ".plex.direct";
 
+/** What a label says about the server: its name. */
+export type ServerLabel = { serverName: string };
+
 function hostAndPort(address: string, port: number): string {
   return isIP(address) === 6 ? `[${address}]:${port}` : `${address}:${port}`;
 }
 
+function labelPrefix({ serverName }: ServerLabel): string {
+  return `${serverName} · `;
+}
+
 /** A pinned https candidate: the plex.direct name, with the lookup fixed to the listed address. */
-function pinnedCandidate(connection: PlexConnection): ServerCandidate | null {
+function pinnedCandidate(connection: PlexConnection, named: ServerLabel): ServerCandidate | null {
   if (connection.protocol !== "https" || isIP(connection.address) === 0) return null;
   let uri: URL;
   try {
@@ -34,28 +41,31 @@ function pinnedCandidate(connection: PlexConnection): ServerCandidate | null {
   if (Number(uri.port || 443) !== connection.port) return null;
   return {
     id: "",
-    label: `https · ${hostAndPort(connection.address, connection.port)}`,
+    label: `${labelPrefix(named)}https · ${hostAndPort(connection.address, connection.port)}`,
     url: connection.uri,
     pinAddress: connection.address,
   };
 }
 
 /** A plain http candidate for a local IPv4 address. IPv6 is not built as plain http. */
-function plainCandidate(connection: PlexConnection): ServerCandidate | null {
+function plainCandidate(connection: PlexConnection, named: ServerLabel): ServerCandidate | null {
   if (connection.IPv6 || isIP(connection.address) !== 4) return null;
   return {
     id: "",
-    label: `http · ${hostAndPort(connection.address, connection.port)} (not encrypted)`,
+    label: `${labelPrefix(named)}http · ${hostAndPort(connection.address, connection.port)} (not encrypted)`,
     url: `http://${connection.address}:${connection.port}`,
     pinAddress: null,
   };
 }
 
-/** The addresses to try, pinned https first, then plain http. Duplicates are removed. Ids are index-based. */
-export function buildCandidates(connections: PlexConnection[]): ServerCandidate[] {
+/**
+ * The addresses to try for one server, pinned https first, then plain http. Duplicates are removed. Ids are index-based
+ * within this server; the caller adds a server prefix so ids stay unique across servers.
+ */
+export function buildCandidates(connections: PlexConnection[], named: ServerLabel): ServerCandidate[] {
   const local = connections.filter((connection) => connection.local && !connection.relay);
-  const pinned = local.map(pinnedCandidate).filter((c): c is ServerCandidate => c !== null);
-  const plain = local.map(plainCandidate).filter((c): c is ServerCandidate => c !== null);
+  const pinned = local.map((c) => pinnedCandidate(c, named)).filter((c): c is ServerCandidate => c !== null);
+  const plain = local.map((c) => plainCandidate(c, named)).filter((c): c is ServerCandidate => c !== null);
 
   const seen = new Set<string>();
   const unique: Omit<ServerCandidate, "id">[] = [];

@@ -24,10 +24,18 @@ type Phase =
 type Notice = { tone: "ok" | "error"; text: string };
 
 /**
- * The Plex data connection. The browser only ever gets `connected` and the stored address. The token and the
- * candidate addresses stay on the server; the pick list carries labels and ids only.
+ * The Plex data connection. The browser only ever gets `connected`, the stored address and the server's name. The
+ * tokens and the candidate addresses stay on the server; the pick list carries labels and ids only.
  */
-export function PlexConnectionForm({ connected, url }: { connected: boolean; url: string | null }) {
+export function PlexConnectionForm({
+  connected,
+  url,
+  serverName,
+}: {
+  connected: boolean;
+  url: string | null;
+  serverName: string | null;
+}) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [selected, setSelected] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -84,14 +92,26 @@ export function PlexConnectionForm({ connected, url }: { connected: boolean; url
 
   function connect() {
     setNotice(null);
+    // Browsers only allow a pop-up opened directly by the click, not after an await. So an empty tab is opened now
+    // and pointed at Plex once the server answers. Its opener link is cut so the Plex page can't reach this one.
+    const popup = window.open("", "_blank");
+    if (popup) popup.opener = null;
     startTransition(async () => {
-      const result = await startPlexConnection();
+      let result: Awaited<ReturnType<typeof startPlexConnection>>;
+      try {
+        result = await startPlexConnection();
+      } catch {
+        popup?.close();
+        setNotice({ tone: "error", text: "Couldn't start the Plex connection. Try again." });
+        return;
+      }
       if (!result.ok) {
+        popup?.close();
         setNotice({ tone: "error", text: result.message });
         return;
       }
-      // The link below the waiting text opens the same page if the browser blocks the pop-up.
-      window.open(result.authUrl, "_blank", "noopener");
+      // The link below the waiting text opens the same page if the browser blocked the pop-up anyway.
+      if (popup) popup.location.href = result.authUrl;
       setPhase({ kind: "waiting", startedAt: Date.now(), authUrl: result.authUrl });
     });
   }
@@ -221,7 +241,7 @@ export function PlexConnectionForm({ connected, url }: { connected: boolean; url
   return (
     <div className="space-y-3">
       <p className="text-sm">
-        Connected to Plex at <span className="font-mono">{url}</span>.
+        Connected to {serverName ?? "Plex"} at <span className="font-mono">{url}</span>.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={test} disabled={pending}>

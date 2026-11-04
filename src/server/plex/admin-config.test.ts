@@ -44,7 +44,13 @@ describe("Plex admin config", () => {
 
   it("clearing the admin config also clears the Plex data connection, but keeps other settings", () => {
     claimPlexAdminConfig(CONFIG);
-    savePlexDataConnection({ url: "http://192.168.10.5:32400", pinAddress: null, token: "fake-data-token-0123456789" });
+    savePlexDataConnection({
+      url: "http://192.168.10.5:32400",
+      pinAddress: null,
+      token: "fake-data-token-0123456789",
+      serverId: "fake-server-id-1",
+      serverName: "Fake Server",
+    });
     testDb.current!.insert(schema.setting).values({ key: "radarr.url", value: "http://radarr.test:7878", updatedAt: new Date() }).run();
 
     clearPlexAdminConfig();

@@ -41,7 +41,7 @@ export default async function ConnectionsPage() {
           <h2 className="text-lg font-semibold">Plex</h2>
           <div className="mt-4">
             {plexSetUp ? (
-              <PlexConnectionForm connected={plex.connected} url={plex.url} />
+              <PlexConnectionForm connected={plex.connected} url={plex.url} serverName={plex.serverName} />
             ) : (
               <p className="text-sm text-muted-foreground">
                 Finish Plex sign-in setup first. Then connect the Plex server here.

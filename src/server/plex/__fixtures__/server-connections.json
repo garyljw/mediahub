@@ -42,6 +42,60 @@
         "relay": true,
         "IPv6": false
       }
+    ],
+    "accessToken": "fake-home-access-token-0123456789abcdef"
+  },
+  {
+    "name": "Fake Friend Server",
+    "product": "Plex Media Server",
+    "clientIdentifier": "fakefriendmachine0123456789abcdef0123",
+    "provides": "server",
+    "owned": false,
+    "accessToken": "fake-friend-access-token-0123456789abcd",
+    "connections": [
+      {
+        "protocol": "https",
+        "address": "198.51.100.20",
+        "port": 32400,
+        "uri": "https://198-51-100-20.fakehash0123456789abcdef.plex.direct:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      },
+      {
+        "protocol": "http",
+        "address": "198.51.100.20",
+        "port": 32400,
+        "uri": "http://198.51.100.20:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      }
     ]
+  },
+  {
+    "name": "Fake No Token Server",
+    "provides": "server",
+    "owned": false,
+    "clientIdentifier": "fakenotokenmachine0123456789abcdef01",
+    "connections": [
+      {
+        "protocol": "https",
+        "address": "192.0.2.44",
+        "port": 32400,
+        "uri": "https://192-0-2-44.fakehash0123456789abcdef.plex.direct:32400",
+        "local": true,
+        "relay": false,
+        "IPv6": false
+      }
+    ]
+  },
+  {
+    "name": "Fake Living Room Player",
+    "provides": "player",
+    "owned": true,
+    "clientIdentifier": "fakeplayer0123456789abcdef0123456789ab",
+    "accessToken": "fake-player-access-token-0123456789abcdef",
+    "connections": []
   }
 ]

@@ -16,8 +16,11 @@ const AUTH_APP_URL = "https://app.plex.tv/auth#?";
 const PLEX_PRODUCT = "MediaHub";
 const PLEX_TIMEOUT_MS = 10_000;
 
-/** Which device a plex.tv call is made as. Omitted, it is the sign-in client id. */
-export type PlexCaller = { clientId?: string };
+/**
+ * Which device a plex.tv call is made as. Omitted, it is the sign-in client id and product. The product name must be
+ * the same on every call for that device, including the approval link (authAppUrl).
+ */
+export type PlexCaller = { clientId?: string; product?: string };
 
 const PinSchema = z.object({ id: z.number().int(), code: z.string() });
 const PinStatusSchema = z.object({ authToken: z.string().nullish() });
@@ -41,8 +44,12 @@ const ResourceSchema = z.object({
   owned: z.boolean().nullish(),
   clientIdentifier: z.string().nullish(),
 });
-// The data connection needs each server's addresses. Sign-in never reads them, so a shape problem here can't break sign-in.
-const DataResourceSchema = ResourceSchema.extend({ connections: z.array(ConnectionSchema).nullish() });
+// The data connection needs each server's addresses and access token. Sign-in never reads them, so a shape problem
+// here can't break sign-in.
+const DataResourceSchema = ResourceSchema.extend({
+  accessToken: z.string().nullish(),
+  connections: z.array(ConnectionSchema).nullish(),
+});
 
 /** One address a Plex server listens on, as plex.tv reports it. */
 export type PlexConnection = z.infer<typeof ConnectionSchema>;
@@ -53,6 +60,7 @@ type PlexFetchOptions = {
   token?: string;
   query?: Record<string, string>;
   clientId?: string;
+  product?: string;
 };
 
 /** The one place every plex.tv request goes through: headers, timeout, no redirects, and Zod validation. */
@@ -63,7 +71,7 @@ async function plexFetch<T>(step: string, schema: z.ZodType<T>, options: PlexFet
   const headers: Record<string, string> = {
     Accept: "application/json",
     "X-Plex-Client-Identifier": options.clientId ?? getPlexClientId(),
-    "X-Plex-Product": PLEX_PRODUCT,
+    "X-Plex-Product": options.product ?? PLEX_PRODUCT,
   };
   if (options.token) headers["X-Plex-Token"] = options.token;
 
@@ -100,6 +108,7 @@ export async function createPin(caller: PlexCaller = {}): Promise<{ id: number; 
     method: "POST",
     query: { strong: "true" },
     clientId: caller.clientId,
+    product: caller.product,
   });
   return { id: pin.id, code: pin.code };
 }
@@ -144,6 +153,7 @@ export async function checkPin(pinId: number, caller: PlexCaller = {}): Promise<
   const pin = await plexFetch("Plex PIN check", PinStatusSchema, {
     path: `/api/v2/pins/${pinId}`,
     clientId: caller.clientId,
+    product: caller.product,
   });
   return pin.authToken || null;
 }
@@ -157,6 +167,7 @@ export async function getPlexAccount(
     path: "/api/v2/user",
     token,
     clientId: caller.clientId,
+    product: caller.product,
   });
   return { id: user.id, username: user.username, email: user.email ?? null };
 }
@@ -178,26 +189,39 @@ export async function getOwnedServers(token: string): Promise<{ clientIdentifier
   return servers;
 }
 
+/** A Plex server the approving account can see: owned, or shared with it. `accessToken` is that server's own token. */
+export type VisibleServer = {
+  clientIdentifier: string;
+  name: string;
+  owned: boolean;
+  accessToken: string;
+  connections: PlexConnection[];
+};
+
 /**
- * The addresses of one owned server, from plex.tv's resource list. Returns null when the account doesn't own a
- * server with that id. Relay and other addresses are returned as plex.tv reports them; candidates.ts decides which to use.
+ * Every server the account can see in plex.tv's resource list, owned and shared alike. Entries that aren't servers,
+ * or have no name, id or access token, are skipped. Each server's own accessToken is what it accepts, so it is
+ * returned here for the caller to store (the PIN token only matches it for an owned server).
  */
-export async function getServerConnections(
-  token: string,
-  serverId: string,
-  caller: PlexCaller = {},
-): Promise<PlexConnection[] | null> {
+export async function getVisibleServers(token: string, caller: PlexCaller = {}): Promise<VisibleServer[]> {
   const resources = await plexFetch("Plex resources", z.array(DataResourceSchema), {
     path: "/api/v2/resources",
     query: { includeHttps: "1" },
     token,
     clientId: caller.clientId,
+    product: caller.product,
   });
-  const server = resources.find(
-    (resource) =>
-      resource.owned === true &&
-      (resource.provides ?? "").split(",").includes("server") &&
-      resource.clientIdentifier === serverId,
-  );
-  return server ? (server.connections ?? []) : null;
+  const servers: VisibleServer[] = [];
+  for (const resource of resources) {
+    const isServer = (resource.provides ?? "").split(",").includes("server");
+    if (!isServer || !resource.clientIdentifier || !resource.name || !resource.accessToken) continue;
+    servers.push({
+      clientIdentifier: resource.clientIdentifier,
+      name: resource.name,
+      owned: resource.owned === true,
+      accessToken: resource.accessToken,
+      connections: resource.connections ?? [],
+    });
+  }
+  return servers;
 }
