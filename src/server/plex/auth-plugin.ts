@@ -4,6 +4,7 @@ import { APIError, createAuthEndpoint, createAuthMiddleware } from "better-auth/
 import { setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
 import { env } from "@/server/env";
+import { normalizeName } from "@/server/users/names";
 import { claimPlexAdminConfig, clearPlexAdminConfig, getPlexAdminConfig } from "./admin-config";
 import {
   authAppUrl,
@@ -132,6 +133,18 @@ async function chooseAdminUser(adapter: InternalAdapter, pending: SetupState): P
   return user;
 }
 
+/**
+ * Every refusal in the sign-in hook goes through here, so each one gives the same reply. The password is
+ * hashed first, as the normal path does, so the response time doesn't reveal the account either.
+ */
+async function refuseSignIn(hash: (password: string) => Promise<string>, password: unknown): Promise<never> {
+  if (typeof password === "string") await hash(password);
+  throw APIError.fromStatus("UNAUTHORIZED", {
+    code: "INVALID_EMAIL_OR_PASSWORD",
+    message: "Invalid email or password",
+  });
+}
+
 /** Plex sign-in endpoints, plus the rule that admins can't sign in with a password. Registered in src/server/auth.ts. */
 export function plexAuth(options: PlexAuthOptions = {}): BetterAuthPlugin {
   const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -257,25 +270,42 @@ export function plexAuth(options: PlexAuthOptions = {}): BetterAuthPlugin {
     },
 
     hooks: {
+      // ONE before-hook on purpose. Better Auth gives every hook the original request, and merges returned
+      // contexts only afterwards. If name lookup and the admin refusal were separate hooks, the admin check
+      // would see the name, not the email, and an admin could sign in by name with a password.
       before: [
         {
-          // Admins sign in only with Plex. The reply is the same one a wrong password gets, so the
-          // endpoint doesn't show which emails belong to admins. Until Plex is set up the old admin
-          // password still works, so an upgraded install can't lock its admin out before setup.
+          // Two jobs. (1) Sign-in by name: a name with no "@" is looked up, and must match exactly one user
+          // after normalising. The email is then put in the body for Better Auth. (2) Admins sign in only
+          // with Plex, so an admin (by email or name) gets the same reply as a wrong password, which doesn't
+          // reveal which emails or names belong to admins. Until Plex is set up the old admin password still
+          // works, so an upgraded install can't lock its admin out before setup.
           matcher: (ctx) => ctx.path === "/sign-in/email",
           handler: createAuthMiddleware(async (ctx) => {
             const body = ctx.body as { email?: unknown; password?: unknown } | undefined;
-            const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-            if (!email || getPlexAdminConfig() === null) return;
-            const found = await ctx.context.internalAdapter.findUserByEmail(email);
-            if (!found || !isAdmin(found.user)) return;
+            const raw = typeof body?.email === "string" ? body.email.trim() : "";
+            if (!raw) return;
 
-            // Hash first, as the normal path does, so the response time doesn't reveal an admin either.
-            if (typeof body?.password === "string") await ctx.context.password.hash(body.password);
-            throw APIError.fromStatus("UNAUTHORIZED", {
-              code: "INVALID_EMAIL_OR_PASSWORD",
-              message: "Invalid email or password",
-            });
+            const adapter = ctx.context.internalAdapter;
+            const refuse = () => refuseSignIn((password) => ctx.context.password.hash(password), body?.password);
+            let user: { email: string } | null = null;
+            let resolvedEmail: string | null = null;
+            if (raw.includes("@")) {
+              user = (await adapter.findUserByEmail(raw.toLowerCase()))?.user ?? null;
+            } else {
+              // MediaHub has a handful of users, so list them and compare in memory.
+              const wanted = normalizeName(raw);
+              const matches = (await adapter.listUsers(10_000, undefined, undefined, undefined)).filter(
+                (candidate) => normalizeName(candidate.name) === wanted,
+              );
+              // Unknown and ambiguous names are refused the same way.
+              if (matches.length !== 1) return refuse();
+              user = matches[0];
+              resolvedEmail = user.email;
+            }
+
+            if (user && isAdmin(user) && getPlexAdminConfig() !== null) return refuse();
+            if (resolvedEmail) return { context: { body: { ...body, email: resolvedEmail } } };
           }),
         },
       ],

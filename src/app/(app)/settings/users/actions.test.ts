@@ -47,7 +47,7 @@ import { PasswordSetupError } from "@/server/users";
 import { addRequester, deleteRequesterAccount, resetRequesterPassword, signOutRequester } from "./actions";
 
 const DENIED = "You don't have permission to manage users.";
-const INVALID_ADD = "Enter a name, a valid email and a password of 12 to 128 characters.";
+const INVALID_ADD = "Enter a name without @, a valid email and a password of 12 to 128 characters.";
 const INVALID_RESET = "Choose a user and enter a password of 12 to 128 characters.";
 const INVALID_USER = "Choose a user first.";
 const NOT_FOUND = "That user no longer exists.";
@@ -144,6 +144,22 @@ describe("addRequester", () => {
     ["not an object", "fake-input"],
   ])("refuses %s without calling the users module", async (_label, input) => {
     expect(await addRequester(input)).toEqual({ ok: false, message: INVALID_ADD });
+    expect(mocks.createRequester).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("maps a taken name to a message and does not revalidate", async () => {
+    mocks.createRequester.mockResolvedValue({ ok: false, reason: "name-taken" });
+
+    expect(await addRequester(ADD_INPUT)).toEqual({
+      ok: false,
+      message: "A user with that name already exists. Names are used to sign in, so each must be different.",
+    });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses a name containing @ without calling the users module", async () => {
+    expect(await addRequester({ ...ADD_INPUT, name: "fake@example.test" })).toEqual({ ok: false, message: INVALID_ADD });
     expect(mocks.createRequester).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });

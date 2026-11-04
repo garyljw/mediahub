@@ -1,6 +1,7 @@
 import "server-only";
 import type { Auth } from "../auth";
 import { isRole, type Role } from "../roles";
+import { isValidSignInName, normalizeName } from "./names";
 
 // Requester account management, shared by the Settings → Users server actions and scripts/create-user.ts.
 // Every function takes the Better Auth context as a parameter, so tests can pass a test instance.
@@ -18,7 +19,9 @@ export type UserSummary = { id: string; name: string; email: string; role: Role;
 
 export type RequesterRefusal = { ok: false; reason: "not-found" | "not-requester" };
 export type RequesterOutcome = { ok: true } | RequesterRefusal;
-export type CreateRequesterOutcome = { ok: true } | { ok: false; reason: "email-taken" };
+export type CreateRequesterOutcome =
+  | { ok: true }
+  | { ok: false; reason: "email-taken" | "name-taken" | "name-invalid" };
 
 export type NewRequester = { name: string; email: string; password: string };
 
@@ -98,10 +101,16 @@ export async function listUsers(ctx: AuthContext): Promise<UserSummary[]> {
  */
 export async function createRequester(ctx: AuthContext, input: NewRequester): Promise<CreateRequesterOutcome> {
   const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  if (!isValidSignInName(name)) return { ok: false, reason: "name-invalid" };
   if (await ctx.internalAdapter.findUserByEmail(email)) return { ok: false, reason: "email-taken" };
+  // Names are sign-in names, so they must be unique across every account, admins included.
+  const wanted = normalizeName(name);
+  const rows = await ctx.internalAdapter.listUsers(10_000, undefined, undefined, undefined);
+  if (rows.some((row) => normalizeName(row.name) === wanted)) return { ok: false, reason: "name-taken" };
 
   const user = await ctx.internalAdapter.createUser(
-    { email, name: input.name, role: "requester", emailVerified: false },
+    { email, name, role: "requester", emailVerified: false },
     { method: "email-password" },
   );
   try {

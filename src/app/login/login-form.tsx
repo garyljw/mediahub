@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-const GENERIC_ERROR = "Invalid email or password";
+const GENERIC_ERROR = "Invalid email, name or password";
 
 export function LoginForm() {
   const router = useRouter();
@@ -37,11 +37,13 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="flex w-full flex-col gap-4">
       <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
-        Email
+        Email or name
         <input
           name="email"
-          type="email"
-          autoComplete="email"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="off"
+          spellCheck={false}
           required
           className="rounded-md border border-input bg-transparent px-3 py-2 text-base font-normal"
         />

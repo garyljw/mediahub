@@ -29,6 +29,8 @@ function createAuth() {
         verification: schema.verification,
       },
     }),
+    // Names are sign-in names and must stay unique, so only an admin sets them (Settings → Users).
+    disabledPaths: ["/update-user"],
     emailAndPassword: {
       enabled: true,
       // Accounts are created by `npm run create-user` only. Admins sign in with Plex, not a password.
