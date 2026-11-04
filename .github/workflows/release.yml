@@ -311,7 +311,10 @@ jobs:
           $p = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs 'squat.log')") -Wait -PassThru
           if ($p.ExitCode -eq 0) { throw 'The installer accepted a data folder with a file owned by a standard user.' }
           if (Get-MediaHubService) { throw 'The installer created the service despite the planted data folder.' }
-          if (-not (Select-String -LiteralPath (Join-Path $logs 'squat.log') -Pattern 'not created by an administrator' -Quiet)) { throw 'The refusal message is missing from the Setup log.' }
+          if (-not (Select-String -LiteralPath (Join-Path $logs 'squat.log') -Pattern 'not created by an administrator' -Quiet)) {
+            Get-Content -LiteralPath (Join-Path $logs 'squat.log')
+            throw 'The refusal message is missing from the Setup log.'
+          }
           Remove-Item -LiteralPath $dataDir -Recurse -Force
           Remove-LocalUser -Name $squatter
 
