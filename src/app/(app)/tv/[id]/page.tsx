@@ -30,7 +30,7 @@ import {
 import { requirePageUser } from "@/server/authz";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
-import { toEpisodeWatched } from "@/server/merge/watched";
+import { seasonWatchedState, toEpisodeWatched } from "@/server/merge/watched";
 import { getSeriesEpisodeWatched } from "@/server/plex/watched";
 import { ArrRequestError } from "@/server/arr/request";
 import { getSeriesDetail, type SeasonRow, type SeriesDetail, type SeriesDetailPage } from "@/server/arr/series-detail";
@@ -77,10 +77,15 @@ function SeasonDetails({
   open: boolean;
   /** Admins get the monitor and pick buttons. Everyone gets the search button. */
   isAdmin: boolean;
-  /** Each episode's Plex watched state by Sonarr episode id. Null when there is no Watched column. */
+  /**
+   * Each episode's Plex watched state by Sonarr episode id. Null when there is no Watched column. The same map also
+   * gives the season's watched badge, so the badge appears only when the column does.
+   */
   episodeWatched: Map<number, WatchedState> | null;
 }) {
   const progress = seasonProgress(season);
+  const seasonWatched =
+    episodeWatched === null ? null : seasonWatchedState(season.episodes.map((episode) => episodeWatched.get(episode.id)));
   return (
     <details open={open} className="rounded-xl border bg-card">
       <summary className="flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -103,6 +108,7 @@ function SeasonDetails({
               <span className="tabular-nums">
                 {formatCount(season.episodeFileCount)} / {formatCount(season.episodeCount)} episodes
               </span>
+              {seasonWatched !== null && <WatchedBadge state={seasonWatched} />}
               <span className="tabular-nums text-muted-foreground">{formatCount(season.totalEpisodeCount)} total</span>
               <span className="tabular-nums text-muted-foreground">{formatSize(season.sizeOnDisk)}</span>
               <SeasonActivitySummary episodeIds={season.episodes.map((episode) => episode.id)} label={season.label} />

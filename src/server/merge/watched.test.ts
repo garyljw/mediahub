@@ -4,7 +4,15 @@ import { EpisodeItemsSchema, SectionItemsSchema, type PlexSectionItem } from "@/
 import movieSection from "./__fixtures__/plex-movie-section.json";
 import showSection from "./__fixtures__/plex-show-section.json";
 import episodeSection from "./__fixtures__/plex-show-episodes.json";
-import { episodeWatchedState, movieWatchedState, showWatchedState, toEpisodeWatched, toWatchedIndex, type EpisodeRef } from "./watched";
+import {
+  episodeWatchedState,
+  movieWatchedState,
+  seasonWatchedState,
+  showWatchedState,
+  toEpisodeWatched,
+  toWatchedIndex,
+  type EpisodeRef,
+} from "./watched";
 
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => "mediahub-data-fake-client-id" }));
 
@@ -248,5 +256,55 @@ describe("toEpisodeWatched", () => {
     const states = toEpisodeWatched(episodes, episodeItems);
     expect(states.has(8)).toBe(false);
     expect([...states.keys()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 7]);
+  });
+});
+
+describe("seasonWatchedState", () => {
+  it("is watched when every episode is watched", () => {
+    expect(seasonWatchedState(["watched", "watched"])).toBe("watched");
+  });
+
+  it("is partial for a mix of watched and unwatched", () => {
+    expect(seasonWatchedState(["watched", "unwatched"])).toBe("partial");
+  });
+
+  it("is partial when one episode is partly watched among unwatched ones", () => {
+    expect(seasonWatchedState(["unwatched", "partial", "unwatched"])).toBe("partial");
+  });
+
+  it("is partial when every episode is only partly watched, or partly watched mixed with watched", () => {
+    expect(seasonWatchedState(["partial", "partial"])).toBe("partial");
+    expect(seasonWatchedState(["watched", "partial"])).toBe("partial");
+  });
+
+  it("accepts any iterable, such as a Set", () => {
+    expect(seasonWatchedState(new Set<"watched">(["watched"]))).toBe("watched");
+  });
+
+  it("is unwatched when every episode is unwatched", () => {
+    expect(seasonWatchedState(["unwatched", "unwatched"])).toBe("unwatched");
+  });
+
+  it("ignores undefined entries", () => {
+    expect(seasonWatchedState(["watched", undefined])).toBe("watched");
+  });
+
+  it("is null when there are no episodes or none has a state", () => {
+    expect(seasonWatchedState([])).toBeNull();
+    expect(seasonWatchedState([undefined, undefined])).toBeNull();
+  });
+
+  it("matches the season 1 episodes of the Plex episode fixture", () => {
+    // Season 1 rows: 1 watched, 2 partial, 3 unwatched, 4 watched, 5 watched; 6 has no Plex match, so it is ignored.
+    const season1: EpisodeRef[] = [
+      { id: 1, tvdbId: 200001, seasonNumber: 1, episodeNumber: 1 },
+      { id: 2, tvdbId: 200002, seasonNumber: 1, episodeNumber: 2 },
+      { id: 3, tvdbId: 200003, seasonNumber: 1, episodeNumber: 3 },
+      { id: 4, tvdbId: null, seasonNumber: 1, episodeNumber: 4 },
+      { id: 5, tvdbId: 200777, seasonNumber: 1, episodeNumber: 4 },
+      { id: 6, tvdbId: 200009, seasonNumber: 1, episodeNumber: 2 },
+    ];
+    const states = toEpisodeWatched(season1, episodeItems);
+    expect(seasonWatchedState(season1.map((episode) => states.get(episode.id)))).toBe("partial");
   });
 });
