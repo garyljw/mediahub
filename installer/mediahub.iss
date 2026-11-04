@@ -68,7 +68,7 @@ begin
   Result := DataDir() + '\mediahub.env';
 end;
 
-// System tools from the native System32 folder (not the 32-bit redirected one).
+// System tools from System32. Setup runs in 64-bit install mode, so {sys} and Exec use the 64-bit System32.
 function SysTool(const Name: String): String;
 begin
   Result := ExpandConstant('{sys}') + '\' + Name;
@@ -78,7 +78,7 @@ end;
 function RunStep(const Description, Filename, Params: String; var Rc: Integer): Boolean;
 begin
   Log(Description + ': ' + Filename + ' ' + Params);
-  Result := ExecWithNativeSysDir(Filename, Params, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Result := Exec(Filename, Params, '', SW_HIDE, ewWaitUntilTerminated, Rc);
   Log(Description + ': exit code ' + IntToStr(Rc));
   Result := Result and (Rc = 0);
 end;
@@ -88,7 +88,7 @@ var
   Rc: Integer;
   Ok: Boolean;
 begin
-  Ok := ExecWithNativeSysDir(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Ok := Exec(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc);
   Result := Ok and (Rc = 0);
 end;
 
@@ -100,7 +100,7 @@ var
   Ok: Boolean;
 begin
   Result := False;
-  Ok := ExecAndCaptureOutputWithNativeSysDir(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
+  Ok := ExecAndCaptureOutput(SysTool('sc.exe'), 'query ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
   if not Ok then Exit;
   for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
     // The state line reads e.g. "STATE : 1  STOPPED". Only that line counts, and both the code and the name must match.
@@ -109,17 +109,10 @@ end;
 
 // The account the installed service runs as, e.g. "NT SERVICE\MediaHub" or "LocalSystem". Empty on failure.
 function ServiceAccount(): String;
-var
-  Rc, I: Integer;
-  Captured: TExecOutput;
-  Ok: Boolean;
 begin
-  Result := '';
-  Ok := ExecAndCaptureOutputWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Service | Where-Object Name -eq MediaHub | ForEach-Object StartName"', '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured);
-  if not Ok or (Rc <> 0) then Exit;
-  // The account is the last non-empty line, so a warning PowerShell prints first is ignored.
-  for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
-    if Trim(Captured.StdOut[I]) <> '' then Result := Trim(Captured.StdOut[I]);
+  // Read from the service's registry key rather than through PowerShell: no process, no modules to load.
+  if not RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\' + ServiceName, 'ObjectName', Result) then Result := '';
+  Result := Trim(Result);
 end;
 
 // Reads KEY=value from mediahub.env. Empty when the file or key is missing. Comment lines are skipped.
@@ -188,9 +181,20 @@ var
   Ok: Boolean;
   Cmd: String;
 begin
-  Cmd := '-NoProfile -NonInteractive -Command "if (Get-NetTCPConnection -State Listen -LocalPort ' + IntToStr(Port) + ' -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"';
-  Ok := ExecWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
-  Result := Ok and (Rc = 1);
+  // .NET only, no PowerShell modules (see check-data-owners.ps1). Exit code 5 means in use, so a PowerShell
+  // failure (exit code 1) is not mistaken for a busy port.
+  Cmd := '-NoProfile -NonInteractive -Command "foreach ($l in [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) { if ($l.Port -eq ' + IntToStr(Port) + ') { exit 5 } }; exit 0"';
+  // A check that can't run counts as in use, so Setup never installs onto a port it couldn't check.
+  Ok := Exec(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  if not Ok then
+  begin
+    Log('Port check for ' + IntToStr(Port) + ': PowerShell did not start.');
+    Result := True;
+    Exit;
+  end;
+  Log('Port check for ' + IntToStr(Port) + ': exit code ' + IntToStr(Rc));
+  // 5 means in use. Any other non-zero code means the check failed, which also counts as in use.
+  Result := Rc <> 0;
 end;
 
 // Time zone from Windows, via the bundled node.exe. Falls back to Europe/London.
@@ -219,7 +223,9 @@ end;
 // account lookups may not resolve, so those become SIDs.
 function AccountPrincipal(const Account: String): String;
 begin
-  if SameText(Account, 'NT AUTHORITY\LocalService') then Result := '*S-1-5-19'
+  // The Services app stores a local account as .\name, which account lookups don't accept.
+  if Copy(Account, 1, 2) = '.\' then Result := GetComputerNameString() + '\' + Copy(Account, 3, Length(Account))
+  else if SameText(Account, 'NT AUTHORITY\LocalService') then Result := '*S-1-5-19'
   else if SameText(Account, 'NT AUTHORITY\NetworkService') then Result := '*S-1-5-20'
   else Result := Account;
 end;
@@ -241,9 +247,12 @@ begin
   Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\check-data-owners.ps1') + '" -Path "' + DataDir() + '"';
   if Account <> '' then Params := Params + ' -ServiceAccount "' + Account + '"';
   Log('Check data folder owners: ' + Params);
-  if not ExecAndCaptureOutputWithNativeSysDir(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured) then
+  if not ExecAndCaptureOutput(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Rc, Captured) then
     Rc := -1;
   Log('Check data folder owners: exit code ' + IntToStr(Rc));
+  // PowerShell errors name paths and accounts only; the script never reads file contents.
+  for I := 0 to GetArrayLength(Captured.StdErr) - 1 do
+    if Trim(Captured.StdErr[I]) <> '' then Log('Check data folder owners: ' + Captured.StdErr[I]);
   if Rc = 0 then Exit;
   Detail := '';
   for I := 0 to GetArrayLength(Captured.StdOut) - 1 do
@@ -407,6 +416,15 @@ begin
   if not ForceDirectories(DataDir() + '\logs') then RaiseException('Could not create the logs folder.');
   // Locked before the settings file is written, so nobody else can add files to the folder from here on.
   if not LockDataDir() then RaiseException('Could not set permissions on ' + DataDir() + '.');
+  // Checked again now that only SYSTEM and Administrators can add to it: the folder may not have existed when
+  // PrepareToInstall checked, and a standard user could have created it during the file copy.
+  PostInstallError := CheckDataOwners();
+  if PostInstallError <> '' then
+  begin
+    Log('Error: ' + PostInstallError);
+    MsgBox(PostInstallError, mbError, MB_OK);
+    Exit;
+  end;
 
   // 2. Settings file: fresh install only. A repair or upgrade keeps the existing file.
   if not FileExists(EnvFile()) then
