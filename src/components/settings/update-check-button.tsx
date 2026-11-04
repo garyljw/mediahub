@@ -6,10 +6,12 @@ import { checkForUpdatesNow } from "@/app/(app)/settings/updates/actions";
 import { Button } from "@/components/ui/button";
 
 const POLL_MS = 15_000;
+// A check normally ends within a few minutes. Stop after 10 minutes, so a stuck status can't refresh forever.
+const MAX_POLLS = 40;
 
 /**
  * "Check for updates now". While a check is queued or running, the page refreshes every 15 seconds so the
- * server-side status shows up without a manual reload.
+ * server-side status shows up without a manual reload, for at most 10 minutes.
  */
 export function UpdateCheckButton({ queued, checking }: { queued: boolean; checking: boolean }) {
   const router = useRouter();
@@ -19,7 +21,12 @@ export function UpdateCheckButton({ queued, checking }: { queued: boolean; check
 
   useEffect(() => {
     if (!polling) return;
-    const id = setInterval(() => router.refresh(), POLL_MS);
+    let polls = 0;
+    const id = setInterval(() => {
+      polls += 1;
+      if (polls > MAX_POLLS) clearInterval(id);
+      else router.refresh();
+    }, POLL_MS);
     return () => clearInterval(id);
   }, [polling, router]);
 
@@ -33,7 +40,7 @@ export function UpdateCheckButton({ queued, checking }: { queued: boolean; check
 
   return (
     <div className="space-y-2">
-      <Button type="button" onClick={onClick} disabled={pending || queued}>
+      <Button type="button" onClick={onClick} disabled={pending || queued || checking}>
         Check for updates now
       </Button>
       {error && (

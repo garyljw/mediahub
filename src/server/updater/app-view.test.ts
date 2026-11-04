@@ -11,7 +11,7 @@ const config = vi.hoisted(() => ({
 
 vi.mock("@/server/env", () => ({ env: () => config }));
 
-import { APP_VERSION } from "@/server/app-version";
+import { appVersion } from "@/server/app-version";
 import { defaultStatus, type Status } from "./status";
 import { getUpdatesView, requestUpdateCheck, toUpdatesView } from "./app-view";
 
@@ -84,14 +84,14 @@ describe("file-backed view and request", () => {
 
   it("getUpdatesView is unavailable when the updates folder is not set", () => {
     config.MEDIAHUB_UPDATES_DIR = undefined;
-    expect(getUpdatesView()).toEqual({ available: false, runningVersion: APP_VERSION });
+    expect(getUpdatesView()).toEqual({ available: false, runningVersion: appVersion() });
   });
 
   it("getUpdatesView reads the status file and the queue", () => {
     writeFileSync(path.join(root, "status.json"), JSON.stringify(status({ latestVersion: "9.9.9" })));
     writeFileSync(path.join(requests, "check-test"), "");
     const view = getUpdatesView();
-    expect(view).toMatchObject({ available: true, runningVersion: APP_VERSION, latestVersion: "9.9.9", checkQueued: true });
+    expect(view).toMatchObject({ available: true, runningVersion: appVersion(), latestVersion: "9.9.9", checkQueued: true });
   });
 
   it("requestUpdateCheck is unavailable when the updates folder is not set", () => {

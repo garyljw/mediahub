@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { APP_VERSION } from "@/server/app-version";
+import { appVersion } from "@/server/app-version";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
 import { hasRequests } from "@/server/updater/requests";
@@ -62,11 +62,11 @@ export function toUpdatesView(
 export function getUpdatesView(): UpdatesView {
   const config = env();
   const dir = config.MEDIAHUB_UPDATES_DIR;
-  if (!dir) return { available: false, runningVersion: APP_VERSION };
+  if (!dir) return { available: false, runningVersion: appVersion() };
 
-  const status = readStatus(path.join(dir, "status.json"), APP_VERSION);
+  const status = readStatus(path.join(dir, "status.json"), appVersion());
   const queued = hasRequests(path.join(dir, "requests"));
-  return toUpdatesView(status, APP_VERSION, queued, config.DISPLAY_TIMEZONE);
+  return toUpdatesView(status, appVersion(), queued, config.DISPLAY_TIMEZONE);
 }
 
 /**

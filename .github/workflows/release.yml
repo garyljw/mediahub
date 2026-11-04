@@ -132,10 +132,17 @@ jobs:
       # Lint, typecheck and tests already ran on Linux in ci.yml before the merge. Windows minutes cost more,
       # so this job only builds the package and tests the installer.
       - run: npm ci
-      - run: npm run package
+      # build-info.json must carry the installer's version (with any -rc.N), because the updater compares it.
+      - name: Build the package
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run package -- --version $env:APP_VERSION
 
       - name: Check the bundled Node version
         shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
           $expected = "v$env:NODE_VERSION"
@@ -146,6 +153,7 @@ jobs:
           if ($built -ne $expected -or $bundled -ne $expected -or $info.node -ne $expected) {
             throw "Node version mismatch: expected $expected."
           }
+          if ($info.version -ne $env:APP_VERSION) { throw "build-info.json version $($info.version) is not $env:APP_VERSION." }
 
       - name: Download WinSW and verify it
         shell: pwsh
