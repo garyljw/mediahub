@@ -184,9 +184,17 @@ begin
   // .NET only, no PowerShell modules (see check-data-owners.ps1). Exit code 5 means in use, so a PowerShell
   // failure (exit code 1) is not mistaken for a busy port.
   Cmd := '-NoProfile -NonInteractive -Command "foreach ($l in [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) { if ($l.Port -eq ' + IntToStr(Port) + ') { exit 5 } }; exit 0"';
+  // A check that can't run counts as in use, so Setup never installs onto a port it couldn't check.
   Ok := Exec(SysTool('WindowsPowerShell\v1.0\powershell.exe'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  if not Ok then
+  begin
+    Log('Port check for ' + IntToStr(Port) + ': PowerShell did not start.');
+    Result := True;
+    Exit;
+  end;
   Log('Port check for ' + IntToStr(Port) + ': exit code ' + IntToStr(Rc));
-  Result := Ok and (Rc = 5);
+  // 5 means in use. Any other non-zero code means the check failed, which also counts as in use.
+  Result := Rc <> 0;
 end;
 
 // Time zone from Windows, via the bundled node.exe. Falls back to Europe/London.
@@ -215,7 +223,9 @@ end;
 // account lookups may not resolve, so those become SIDs.
 function AccountPrincipal(const Account: String): String;
 begin
-  if SameText(Account, 'NT AUTHORITY\LocalService') then Result := '*S-1-5-19'
+  // The Services app stores a local account as .\name, which account lookups don't accept.
+  if Copy(Account, 1, 2) = '.\' then Result := GetComputerNameString() + '\' + Copy(Account, 3, Length(Account))
+  else if SameText(Account, 'NT AUTHORITY\LocalService') then Result := '*S-1-5-19'
   else if SameText(Account, 'NT AUTHORITY\NetworkService') then Result := '*S-1-5-20'
   else Result := Account;
 end;

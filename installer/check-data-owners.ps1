@@ -25,19 +25,42 @@ if ($ServiceAccount -ne '' -and $ServiceAccount -ne 'LocalSystem') {
 }
 
 $sections = [System.Security.AccessControl.AccessControlSections]::Owner
-$items = @($Path) + @([System.IO.Directory]::GetFileSystemEntries($Path, '*', [System.IO.SearchOption]::AllDirectories))
-foreach ($item in $items) {
-  if ([System.IO.Directory]::Exists($item)) {
-    $security = [System.IO.Directory]::GetAccessControl($item, $sections)
-  } else {
-    $security = [System.IO.File]::GetAccessControl($item, $sections)
+
+function Refuse([string]$message) {
+  Write-Output $message
+  exit 3
+}
+
+# Walked by hand, so links are never followed: MediaHub creates no junctions or symbolic links, and one planted
+# here would report its target's owner, not its own. An item deleted during the walk (a log rolling over) is skipped.
+$pending = New-Object System.Collections.Stack
+$pending.Push($Path)
+while ($pending.Count -gt 0) {
+  $item = $pending.Pop()
+  try {
+    $attributes = [System.IO.File]::GetAttributes($item)
+    if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { Refuse "$item is a link (junction or symbolic link)" }
+    $isDir = ($attributes -band [System.IO.FileAttributes]::Directory) -ne 0
+    if ($isDir) {
+      $security = [System.IO.Directory]::GetAccessControl($item, $sections)
+    } else {
+      $security = [System.IO.File]::GetAccessControl($item, $sections)
+    }
+  } catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] {
+    continue
   }
   $owner = $security.GetOwner($sidType).Value
   # S-1-5-80-* are per-service accounts such as NT SERVICE\MediaHub. Only Windows services run as them.
   if ($trusted -notcontains $owner -and -not $owner.StartsWith('S-1-5-80-')) {
     try { $name = (New-Object System.Security.Principal.SecurityIdentifier($owner)).Translate([System.Security.Principal.NTAccount]).Value } catch { $name = $owner }
-    Write-Output "$item is owned by $name"
-    exit 3
+    Refuse "$item is owned by $name"
+  }
+  if ($isDir) {
+    try {
+      foreach ($child in [System.IO.Directory]::GetFileSystemEntries($item)) { $pending.Push($child) }
+    } catch [System.IO.DirectoryNotFoundException] {
+      continue
+    }
   }
 }
 exit 0
