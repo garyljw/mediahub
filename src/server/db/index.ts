@@ -79,6 +79,11 @@ export function db(): Db {
   return instance;
 }
 
+/** For the packaged launcher's update safety check only: the raw connection, without the up-to-date check. */
+export function openSqliteForMigration(): Database.Database {
+  return openSqlite();
+}
+
 /**
  * For db:migrate only. Opens the same file without the up-to-date check, because the
  * migrator is what brings it up to date.

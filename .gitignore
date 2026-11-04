@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+# The update-signing PUBLIC key, which the release workflow and a test need. The private key is only a GitHub secret.
+!installer/update-public-key.pem
 
 # debug
 npm-debug.log*

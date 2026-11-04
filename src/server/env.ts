@@ -26,6 +26,13 @@ const schema = z.object({
     (value) => (value === "" ? undefined : value),
     z.coerce.number().int().min(1).max(65535).default(7979),
   ),
+  // Overnight updates (03:00 to 04:00, PC time). Blank means the default, on. Only true or false (any case) is accepted.
+  MEDIAHUB_AUTO_UPDATE: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim().toLowerCase() || undefined : value),
+    z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  ),
+  // The updater's folder (C:\ProgramData\MediaHub\updates), set by the Windows service config. Unset elsewhere.
+  MEDIAHUB_UPDATES_DIR: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
   DISPLAY_TIMEZONE: z
     .string()
     .default("Europe/London")
@@ -48,6 +55,14 @@ export function env(): Env {
   }
   cached = result.data;
   return cached;
+}
+
+/**
+ * The Windows folder, for running the System32 tools by full path. Not configuration, but this file is the one
+ * place allowed to read process.env.
+ */
+export function systemRoot(): string {
+  return process.env.SystemRoot || "C:\\Windows";
 }
 
 /**

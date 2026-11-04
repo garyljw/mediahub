@@ -46,6 +46,17 @@ MediaHub is meant for a home network only. Don't expose it to the internet.
 ### Upgrading
 Run the newer installer. It stops the service, replaces the program files and starts the service again. Your settings, database and logs are kept, and `mediahub.env` is never rewritten. Running the same version again repairs an install in the same way.
 
+### Updates
+MediaHub checks GitHub every night between 03:00 and 04:00 (the PC's time). If there is a newer signed release, it installs it by itself. The MediaHub service is stopped for a minute or two while this happens.
+
+Before a new version changes the database, it saves a copy next to it (`mediahub.db.pre-update`). If the new version doesn't start, MediaHub puts back the previous version and that copy of the database, and it doesn't try that version again overnight.
+
+- To turn off the overnight check, set `MEDIAHUB_AUTO_UPDATE=false` in `C:\ProgramData\MediaHub\mediahub.env`. The updater reads the file at each check, so you don't need to restart the service.
+- The log is `C:\ProgramData\MediaHub\updates\updater.log` (open it as an administrator).
+- Installing a newer installer by hand still works, as described above.
+- Installing an older version by hand works only if the newer one didn't change the database. Otherwise MediaHub doesn't start and its log says why. Install the newer version again.
+- Release candidates (versions ending in `-rc.N`): an install of a release candidate also takes newer release candidates. An install of a normal release never takes a release candidate.
+
 ### Uninstalling
 Go to Settings → Apps → MediaHub → Uninstall. Your data is kept unless you answer Yes when asked to delete it; the default is No. A silent uninstall (`unins000.exe /VERYSILENT`) always keeps the data.
 

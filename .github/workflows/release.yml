@@ -7,6 +7,9 @@ name: Release
 #
 # The write token (contents: write) exists only in the publish job, which runs no npm code. The build job,
 # which runs npm ci and the project's scripts, has read-only access.
+#
+# The update signing key (UPDATE_SIGNING_KEY) is only in the `release` environment, which only v* tags reach. Only
+# the "Sign the update manifest" step in the publish job can read it. See docs/DEVELOPMENT.md, "Update signing".
 
 on:
   release:
@@ -166,6 +169,8 @@ jobs:
           Copy-Item -Path 'dist\mediahub' -Destination (Join-Path $stage 'app') -Recurse
           Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'winsw\WinSW-x64.exe') -Destination (Join-Path $stage 'service\MediaHub.exe')
           Copy-Item -Path 'installer\MediaHub.xml' -Destination (Join-Path $stage 'service\MediaHub.xml')
+          Copy-Item -Path 'installer\MediaHub-Updater.xml' -Destination (Join-Path $stage 'service\MediaHub-Updater.xml')
+          Copy-Item -Path 'installer\MediaHub-UpdateInstall.xml' -Destination (Join-Path $stage 'service\MediaHub-UpdateInstall.xml')
           Copy-Item -Path 'installer\mediahub-tool.cmd' -Destination (Join-Path $stage 'mediahub-tool.cmd')
           Get-ChildItem -Recurse -Path $stage | Select-Object -ExpandProperty FullName | Select-Object -First 200
 
@@ -273,6 +278,28 @@ jobs:
             return $false
           }
           function Get-MediaHubService { Get-CimInstance Win32_Service -Filter "Name='MediaHub'" }
+          # schtasks writes to stderr when the task is missing. Continue keeps that from stopping the step.
+          function Get-UpdaterTask([string]$name = 'MediaHub\Updater') {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+              $out = & "$env:SystemRoot\System32\schtasks.exe" /query /tn $name /xml 2>&1
+              return @{ Code = $LASTEXITCODE; Text = ($out | Out-String) }
+            } finally {
+              $ErrorActionPreference = $prev
+            }
+          }
+          function Assert-UpdaterTask {
+            foreach ($name in @('MediaHub\Updater', 'MediaHub\UpdateInstall')) {
+              $task = Get-UpdaterTask $name
+              if ($task.Code -ne 0) { throw "The $name task is missing (schtasks exit code $($task.Code))." }
+              if ($task.Text -notmatch '<UserId>S-1-5-18</UserId>') { throw "The $name task does not run as SYSTEM." }
+            }
+            # The install task must run node from the updates folder, never from the app folder it replaces.
+            if ((Get-UpdaterTask 'MediaHub\UpdateInstall').Text -notmatch [regex]::Escape("$dataDir\updates\run\node.exe")) {
+              throw 'The MediaHub\UpdateInstall task does not run node from the updates run folder.'
+            }
+          }
           function Invoke-Installer([string]$name) {
             $installArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs "$name.log")")
             $p = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
@@ -298,6 +325,10 @@ jobs:
             foreach ($sub in @('data', 'logs')) {
               if (-not (Test-Writes (Get-Entries (Join-Path $dataDir $sub) $account))) { throw "$account cannot write to $sub." }
             }
+            # The updater's folder is read-only for the service, except the requests folder ("check now" files).
+            $updates = Join-Path $dataDir 'updates'
+            if (Test-Writes (Get-Entries $updates $account)) { throw "$account can change the updates folder itself." }
+            if (-not (Test-Writes (Get-Entries (Join-Path $updates 'requests') $account))) { throw "$account cannot write to updates\requests." }
           }
 
           # A data folder planted by a standard user before the first install must be refused.
@@ -335,6 +366,13 @@ jobs:
             if ($svc.StartName -ne 'NT SERVICE\MediaHub') { throw "Unexpected service account: $($svc.StartName)." }
             if ($svc.State -ne 'Running') { throw "Service state after install: $($svc.State)." }
             Assert-DataAcl 'NT SERVICE\MediaHub'
+            Assert-UpdaterTask
+            $rollbackCopy = Join-Path $dataDir "updates\installers\MediaHub-Setup-$env:APP_VERSION.exe"
+            if (-not (Test-Path $rollbackCopy)) { throw "The rollback installer copy is missing: $rollbackCopy." }
+            # GitHub is reachable and its reply parses. No release has an update manifest yet, so this is up to date.
+            & "$appDir\node.exe" "--env-file=$envPath" "$appDir\app\tools\updater.mjs" --app-dir $appDir --data-dir $dataDir --check-only
+            if ($LASTEXITCODE -ne 0) { throw "updater --check-only exited with $LASTEXITCODE." }
+            if (-not (Test-Path (Join-Path $dataDir 'updates\status.json'))) { throw 'updater --check-only did not write updates\status.json.' }
             $rule = Get-NetFirewallRule -DisplayName 'MediaHub' -ErrorAction SilentlyContinue | Select-Object -First 1
             if (-not $rule) { throw 'Firewall rule MediaHub is missing.' }
             $portFilter = $rule | Get-NetFirewallPortFilter
@@ -351,6 +389,7 @@ jobs:
             if ($svc.StartName -ne 'NT AUTHORITY\LocalService') { throw "Upgrade changed the service account to $($svc.StartName)." }
             if ($svc.State -ne 'Running') { throw "Service state after upgrade: $($svc.State)." }
             Assert-DataAcl 'NT AUTHORITY\LocalService'
+            Assert-UpdaterTask
             if (-not (Test-Path $dbPath)) { throw 'The database is missing after upgrade.' }
 
             # Silent uninstall: the service and firewall rule go, the data stays.
@@ -363,6 +402,9 @@ jobs:
             if (Get-MediaHubService) { throw 'The MediaHub service is still present after uninstall.' }
             if (Get-NetFirewallRule -DisplayName 'MediaHub' -ErrorAction SilentlyContinue) { throw 'The firewall rule is still present after uninstall.' }
             if (-not (Test-Path $dbPath)) { throw 'The database was deleted by a silent uninstall.' }
+            if ((Get-UpdaterTask).Code -eq 0) { throw 'The MediaHub\Updater task is still present after uninstall.' }
+            if ((Get-UpdaterTask 'MediaHub\UpdateInstall').Code -eq 0) { throw 'The MediaHub\UpdateInstall task is still present after uninstall.' }
+            if (Test-Path (Join-Path $dataDir 'updates\installers')) { throw 'updates\installers is still present after uninstall.' }
             Write-Host 'Install, upgrade and uninstall checks passed.'
           } catch {
             Write-Host '::group::Installer, uninstaller and WinSW logs'
@@ -399,7 +441,9 @@ jobs:
     needs: [node, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The only job with a write token. It runs no project code, only gh.
+    # The only job with a write token. It runs no project code: only gh, openssl and jq. Only the signing step
+    # can read the update signing key, from the release environment.
+    environment: release
     permissions:
       contents: write
     env:
@@ -408,16 +452,45 @@ jobs:
       TAG: ${{ github.event.release.tag_name }}
       NODE_VERSION: ${{ needs.node.outputs.version }}
     steps:
+      - name: Check out the update public key
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Download the installer files
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installer
-          path: installer
+          # Not "installer": that is the checked-out folder with the public key in it.
+          path: installer-files
+
+      - name: Sign the update manifest
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          # Only release tags are signed, whatever the environment's tag rule says.
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then echo "Refusing to sign tag '$TAG'."; exit 1; fi
+          VERSION="${TAG#v}"
+          EXE="MediaHub-Setup-$VERSION.exe"
+          test -f "installer-files/$EXE"
+          # The hash is taken here, from the file this job uploads, not from the build job.
+          SHA=$(sha256sum "installer-files/$EXE" | cut -d' ' -f1)
+          SIZE=$(stat -c %s "installer-files/$EXE")
+          jq -cn --arg v "$VERSION" --arg i "$EXE" --arg s "$SHA" --argjson z "$SIZE" '{schema:1,product:"MediaHub",version:$v,installer:$i,sha256:$s,size:$z}' > installer-files/update-manifest.json
+          umask 077
+          KEY="$RUNNER_TEMP/update-key.pem"
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$KEY"
+          openssl pkeyutl -sign -inkey "$KEY" -rawin -in installer-files/update-manifest.json -out "$RUNNER_TEMP/sig.bin"
+          rm -f "$KEY"
+          # Checked against the public key in the repo, so a wrong secret fails here and nothing is published.
+          openssl pkeyutl -verify -pubin -inkey installer/update-public-key.pem -rawin -in installer-files/update-manifest.json -sigfile "$RUNNER_TEMP/sig.bin"
+          base64 -w0 "$RUNNER_TEMP/sig.bin" > installer-files/update-manifest.json.sig
 
       - name: Attach the files and note the bundled Node version
         run: |
           set -euo pipefail
-          gh release upload "$TAG" installer/* --clobber
+          gh release upload "$TAG" installer-files/* --clobber
           body=$(gh release view "$TAG" --json body --jq .body)
           if ! printf '%s\n' "$body" | grep -q "^Bundled Node "; then
             { printf '%s\n\n' "$body"; echo "Bundled Node $NODE_VERSION."; } > "$RUNNER_TEMP/notes.md"

@@ -6,6 +6,8 @@
   <executable>@APP@\node.exe</executable>
   <arguments>--env-file="@DATA@\mediahub.env" "@APP@\app\mediahub.mjs"</arguments>
   <workingdirectory>@DATA@</workingdirectory>
+  <!-- Read-only for the service. The launcher looks here for the updater's request to restore the database. -->
+  <env name="MEDIAHUB_UPDATES_DIR" value="@DATA@\updates"/>
   <logpath>@DATA@\logs</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
