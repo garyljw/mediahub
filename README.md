@@ -51,6 +51,8 @@ MediaHub checks GitHub every night between 03:00 and 04:00 (the PC's time). If t
 
 Before a new version changes the database, it saves a copy next to it (`mediahub.db.pre-update`). If the new version doesn't start, MediaHub puts back the previous version and that copy of the database, and it doesn't try that version again overnight.
 
+Admins can see the installed version, the last check and its result in Settings → Updates. "Check for updates now" there asks the updater to check within a few minutes, including versions it stopped retrying overnight.
+
 - To turn off the overnight check, set `MEDIAHUB_AUTO_UPDATE=false` in `C:\ProgramData\MediaHub\mediahub.env`. The updater reads the file at each check, so you don't need to restart the service.
 - The log is `C:\ProgramData\MediaHub\updates\updater.log` (open it as an administrator).
 - Installing a newer installer by hand still works, as described above.

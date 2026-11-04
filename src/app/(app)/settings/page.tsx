@@ -21,6 +21,11 @@ const SECTIONS = [
     title: "Users",
     description: "Add, reset and remove requester accounts.",
   },
+  {
+    href: "/settings/updates",
+    title: "Updates",
+    description: "Installed version and checking for a new release.",
+  },
 ];
 
 export default async function SettingsPage() {
