@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getServerIdentity: vi.fn(),
   getLibrarySections: vi.fn(),
   getSectionItems: vi.fn(),
+  getShowEpisodes: vi.fn(),
 }));
 
 vi.mock("./data-connection", () => ({ getPlexDataConnection: mocks.getPlexDataConnection }));
@@ -14,9 +15,10 @@ vi.mock("./server", () => ({
   getServerIdentity: mocks.getServerIdentity,
   getLibrarySections: mocks.getLibrarySections,
   getSectionItems: mocks.getSectionItems,
+  getShowEpisodes: mocks.getShowEpisodes,
 }));
 
-import { getWatchedIndex, resetWatchedCache } from "./watched";
+import { getSeriesEpisodeWatched, getWatchedIndex, resetWatchedCache } from "./watched";
 
 const TOKEN = "fake-plex-data-token-0123456789abcdef";
 const SERVER_ID = "fakefriendmachine0123456789abcdef0123";
@@ -43,8 +45,17 @@ function useHealthyServer() {
   mocks.getLibrarySections.mockResolvedValue(SECTIONS);
   mocks.getSectionItems.mockImplementation(async (_conn: unknown, _token: string, key: string) =>
     key === "1"
-      ? [{ guids: ["tmdb://900001"], viewCount: 1, viewOffset: 0, leafCount: 0, viewedLeafCount: 0 }]
-      : [{ guids: ["tvdb://100001"], viewCount: 0, viewOffset: 0, leafCount: 10, viewedLeafCount: 4 }],
+      ? [{ guids: ["tmdb://900001"], viewCount: 1, viewOffset: 0, leafCount: 0, viewedLeafCount: 0, ratingKey: null }]
+      : [
+          {
+            guids: ["tvdb://100001"],
+            viewCount: 0,
+            viewOffset: 0,
+            leafCount: 10,
+            viewedLeafCount: 4,
+            ratingKey: "2001",
+          },
+        ],
   );
 }
 
@@ -192,5 +203,86 @@ describe("getWatchedIndex: failures", () => {
   it("rethrows an error that is not a Plex request failure", async () => {
     mocks.getLibrarySections.mockRejectedValueOnce(new Error("database is locked"));
     await expect(getWatchedIndex()).rejects.toThrow("database is locked");
+  });
+});
+
+describe("getSeriesEpisodeWatched", () => {
+  const EPISODE_A = { guids: ["tvdb://100101"], season: 1, episode: 1, viewCount: 1, viewOffset: 0 };
+  const EPISODE_B = { guids: ["tvdb://100102"], season: 1, episode: 2, viewCount: 0, viewOffset: 0 };
+
+  beforeEach(() => {
+    mocks.getShowEpisodes.mockResolvedValue([EPISODE_A]);
+  });
+
+  it("returns null with no Plex call when there is no data connection", async () => {
+    useConnection(null);
+    await expect(getSeriesEpisodeWatched(100001)).resolves.toBeNull();
+    expect(mocks.getServerIdentity).not.toHaveBeenCalled();
+    expect(mocks.getShowEpisodes).not.toHaveBeenCalled();
+  });
+
+  it("returns null, with no identity or episode call, when the series is not in Plex", async () => {
+    await getWatchedIndex();
+    mocks.getServerIdentity.mockClear();
+
+    await expect(getSeriesEpisodeWatched(999999)).resolves.toBeNull();
+    expect(mocks.getServerIdentity).not.toHaveBeenCalled();
+    expect(mocks.getShowEpisodes).not.toHaveBeenCalled();
+  });
+
+  it("returns failed, with no episode call, when the section index failed", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.getServerIdentity.mockResolvedValue("someone-else-machine-id");
+
+    await expect(getSeriesEpisodeWatched(100001)).resolves.toBe("failed");
+    expect(mocks.getShowEpisodes).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("Plex watched: server identity did not match");
+  });
+
+  it("checks the identity again and never loads episodes from a different server", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await getWatchedIndex();
+    mocks.getServerIdentity.mockResolvedValue("someone-else-machine-id");
+
+    await expect(getSeriesEpisodeWatched(100001)).resolves.toBe("failed");
+    expect(mocks.getShowEpisodes).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("Plex episodes: server identity did not match");
+  });
+
+  it("loads every show that has the series' tvdb id, and flattens the episodes", async () => {
+    mocks.getSectionItems.mockImplementation(async (_conn: unknown, _token: string, key: string) =>
+      key === "2"
+        ? [
+            { guids: ["tvdb://100005"], viewCount: 0, viewOffset: 0, leafCount: 2, viewedLeafCount: 0, ratingKey: "7001" },
+            { guids: ["tvdb://100005"], viewCount: 0, viewOffset: 0, leafCount: 2, viewedLeafCount: 0, ratingKey: "7002" },
+          ]
+        : [],
+    );
+    mocks.getShowEpisodes.mockImplementation(async (_conn: unknown, _token: string, key: string) =>
+      key === "7001" ? [EPISODE_A] : [EPISODE_B],
+    );
+
+    await expect(getSeriesEpisodeWatched(100005)).resolves.toEqual([EPISODE_A, EPISODE_B]);
+    expect(mocks.getShowEpisodes.mock.calls.map((call) => call[2])).toEqual(["7001", "7002"]);
+    for (const call of mocks.getShowEpisodes.mock.calls) {
+      expect(call[0]).toEqual({ url: CONNECTION.url, pinAddress: CONNECTION.pinAddress });
+      expect(call[1]).toBe(TOKEN);
+    }
+  });
+
+  it("returns failed for a Plex request failure, logs only its message, and never the token or address", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.getShowEpisodes.mockRejectedValue(new PlexRequestError("Plex show episodes request failed: timed out", "timeout"));
+
+    await expect(getSeriesEpisodeWatched(100001)).resolves.toBe("failed");
+    expect(log).toHaveBeenCalledWith("Plex episodes: Plex show episodes request failed: timed out");
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).not.toContain(TOKEN);
+    expect(logged).not.toContain(CONNECTION.url);
+  });
+
+  it("rethrows an error that is not a Plex request failure", async () => {
+    mocks.getShowEpisodes.mockRejectedValue(new Error("database is locked"));
+    await expect(getSeriesEpisodeWatched(100001)).rejects.toThrow("database is locked");
   });
 });

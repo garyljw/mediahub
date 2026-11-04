@@ -1,0 +1,84 @@
+{
+  "MediaContainer": {
+    "size": 7,
+    "allowSync": false,
+    "identifier": "com.plexapp.plugins.library",
+    "librarySectionID": 2,
+    "librarySectionTitle": "TV Shows",
+    "librarySectionUUID": "fake-section-uuid-shows",
+    "mediaTagPrefix": "/system/bundle/media/flags/",
+    "mediaTagVersion": 1700000000,
+    "parentRatingKey": "2001",
+    "parentTitle": "Fake Finished Show",
+    "title1": "Fake Finished Show",
+    "title2": "Season 1",
+    "viewGroup": "episode",
+    "Metadata": [
+      {
+        "ratingKey": "3001",
+        "key": "/library/metadata/3001",
+        "parentRatingKey": "2001",
+        "grandparentRatingKey": "2001",
+        "title": "Fake Pilot",
+        "grandparentTitle": "Fake Finished Show",
+        "index": 1,
+        "parentIndex": 1,
+        "year": 2015,
+        "duration": 2700000,
+        "lastViewedAt": 1700000100,
+        "viewCount": 1,
+        "Guid": [{ "id": "tvdb://200001" }, { "id": "tmdb://400001" }, { "id": "imdb://tt0000201" }],
+        "Media": [{ "id": 5001, "duration": 2700000, "Part": [{ "id": 6001, "file": "/fake/path/s01e01.mkv" }] }]
+      },
+      {
+        "ratingKey": "3002",
+        "key": "/library/metadata/3002",
+        "title": "Fake Second Episode",
+        "index": 2,
+        "parentIndex": 1,
+        "viewOffset": 120000,
+        "Guid": [{ "id": "tvdb://200002" }]
+      },
+      {
+        "ratingKey": "3003",
+        "key": "/library/metadata/3003",
+        "title": "Fake Third Episode",
+        "index": 3,
+        "parentIndex": 1,
+        "Guid": [{ "id": "tvdb://200003" }]
+      },
+      {
+        "ratingKey": "3004",
+        "key": "/library/metadata/3004",
+        "title": "Fake Episode Without A Tvdb Guid",
+        "index": 4,
+        "parentIndex": 1,
+        "viewCount": 1,
+        "Guid": [{ "id": "tmdb://400004" }]
+      },
+      {
+        "ratingKey": "3005",
+        "key": "/library/metadata/3005",
+        "title": "Fake Duplicated Episode, Unwatched Copy",
+        "index": 1,
+        "parentIndex": 2,
+        "Guid": [{ "id": "tvdb://200005" }]
+      },
+      {
+        "ratingKey": "3006",
+        "key": "/library/metadata/3006",
+        "title": "Fake Duplicated Episode, Watched Copy",
+        "index": 1,
+        "parentIndex": 2,
+        "viewCount": 2,
+        "Guid": [{ "id": "tvdb://200005" }]
+      },
+      {
+        "ratingKey": "3007",
+        "key": "/library/metadata/3007",
+        "title": "Fake Episode With No Numbers",
+        "Guid": []
+      }
+    ]
+  }
+}

@@ -3,11 +3,20 @@ import { createHash } from "node:crypto";
 import { toWatchedIndex, type WatchedIndex } from "@/server/merge/watched";
 import { getPlexDataConnection, type PlexDataConnection } from "./data-connection";
 import { PlexRequestError } from "./errors";
-import { getLibrarySections, getSectionItems, getServerIdentity, type PlexSectionItem, type ServerConnection } from "./server";
+import {
+  getLibrarySections,
+  getSectionItems,
+  getServerIdentity,
+  getShowEpisodes,
+  type PlexEpisodeItem,
+  type PlexSectionItem,
+  type ServerConnection,
+} from "./server";
 
-// The watched index for the Home banners: one load of every movie and show section, cached in memory for 60 s.
-// Keyed by Plex user, so a future per-requester Plex user gets its own entry. Only the three-value states leave
-// this module (see merge/watched.ts); the ids, counts and token never do.
+// The watched index for the Home banners and the series page: one load of every movie and show section, cached in
+// memory for 60 s, plus a show's episodes on demand. Keyed by Plex user, so a future per-requester Plex user gets
+// its own entry. The index and episode lists hold Plex ratingKeys and guids, so they stay on the server: pages pass
+// only the three-value states (see merge/watched.ts) to the browser. The token never leaves this module's callers.
 
 export const DEFAULT_PLEX_USER = "default";
 const CACHE_TTL_MS = 60_000;
@@ -95,6 +104,42 @@ export async function getWatchedIndex(plexUser = DEFAULT_PLEX_USER): Promise<Wat
     if (inFlight.get(plexUser) === entry) inFlight.delete(plexUser);
   }).catch(() => {});
   return promise;
+}
+
+/**
+ * Every episode of one series in Plex, for the series page. Returns null when no Plex data connection is set up or the
+ * series isn't in Plex (no column, no message). Returns "failed" when Plex can't be reached or isn't the stored server. Like loadIndex, the server identity is checked before
+ * the token is sent. Not cached: the section index is, and one page visit makes one allLeaves call per matching show.
+ */
+export async function getSeriesEpisodeWatched(
+  tvdbId: number,
+  plexUser = DEFAULT_PLEX_USER,
+): Promise<PlexEpisodeItem[] | null | "failed"> {
+  const connection = getPlexDataConnection();
+  if (!connection) return null;
+  const index = await getWatchedIndex(plexUser);
+  if (index === null) return null;
+  if (index === "failed") return "failed";
+  const keys = index.showKeys.get(tvdbId);
+  if (!keys || keys.length === 0) return null;
+
+  const server: ServerConnection = { url: connection.url, pinAddress: connection.pinAddress };
+  try {
+    const identity = await getServerIdentity(server, { timeoutMs: IDENTITY_TIMEOUT_MS });
+    if (identity !== connection.serverId) {
+      console.error("Plex episodes: server identity did not match");
+      return "failed";
+    }
+    const lists = await Promise.all(keys.map((key) => getShowEpisodes(server, connection.token, key)));
+    return lists.flat();
+  } catch (error) {
+    if (error instanceof PlexRequestError) {
+      // PlexRequestError messages name the step and the kind only, so they are safe to log.
+      console.error(`Plex episodes: ${error.message}`);
+      return "failed";
+    }
+    throw error;
+  }
 }
 
 /** Forgets every cached and in-flight index. For tests only. */

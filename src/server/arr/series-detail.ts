@@ -34,6 +34,8 @@ export type EpisodeRow = {
   quality: string | null;
   /** The file's size in bytes, or 0 when there is no file. */
   size: number;
+  /** The episode's TVDB id when it is a positive integer, otherwise null. Used to match Plex's watched status. */
+  tvdbId: number | null;
 };
 
 export type SeasonRow = {
@@ -124,6 +126,7 @@ function toEpisodeRow(episode: EpisodeResource, id: number, episodeNumber: numbe
     monitored: episode.monitored ?? false,
     quality: file?.quality?.quality?.name ?? null,
     size: file?.size ?? 0,
+    tvdbId: positiveIdOrNull(episode.tvdbId),
   };
 }
 

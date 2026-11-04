@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { WATCHED_CLASS, WATCHED_LABEL, type WatchedState } from "@/components/home/home-items";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { metaLine, seriesRatingLine } from "@/components/library/detail-format";
@@ -28,8 +30,10 @@ import {
 import { requirePageUser } from "@/server/authz";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
+import { toEpisodeWatched } from "@/server/merge/watched";
+import { getSeriesEpisodeWatched } from "@/server/plex/watched";
 import { ArrRequestError } from "@/server/arr/request";
-import { getSeriesDetail, type SeasonRow, type SeriesDetailPage } from "@/server/arr/series-detail";
+import { getSeriesDetail, type SeasonRow, type SeriesDetail, type SeriesDetailPage } from "@/server/arr/series-detail";
 
 export const metadata = { title: "TV" };
 // Blocking route: the page waits for Sonarr before rendering, so no Suspense fallback is needed.
@@ -53,12 +57,19 @@ function seasonProgress(season: SeasonRow): number {
   return Math.min(100, Math.round((season.episodeFileCount / season.episodeCount) * 100));
 }
 
+/** The Plex watched badge for one episode, or a muted dash when Plex has no state for it. */
+function WatchedBadge({ state }: { state: WatchedState | undefined }) {
+  if (state === undefined) return <span className="text-muted-foreground">—</span>;
+  return <Badge className={WATCHED_CLASS[state]}>{WATCHED_LABEL[state]}</Badge>;
+}
+
 function SeasonDetails({
   seriesId,
   seriesTitle,
   season,
   open,
   isAdmin,
+  episodeWatched,
 }: {
   seriesId: number;
   seriesTitle: string;
@@ -66,6 +77,8 @@ function SeasonDetails({
   open: boolean;
   /** Admins get the monitor and pick buttons. Everyone gets the search button. */
   isAdmin: boolean;
+  /** Each episode's Plex watched state by Sonarr episode id. Null when there is no Watched column. */
+  episodeWatched: Map<number, WatchedState> | null;
 }) {
   const progress = seasonProgress(season);
   return (
@@ -132,6 +145,7 @@ function SeasonDetails({
                 <TableHead className={HEAD}>Title</TableHead>
                 <TableHead className={HEAD}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
+                {episodeWatched !== null && <TableHead className={HEAD}>Watched</TableHead>}
                 <TableHead className={`${HEAD} w-48`}>
                   <EpisodeActivityHead />
                 </TableHead>
@@ -167,6 +181,11 @@ function SeasonDetails({
                       {EPISODE_STATUS_LABEL[episode.status]}
                     </Badge>
                   </TableCell>
+                  {episodeWatched !== null && (
+                    <TableCell className={CELL}>
+                      <WatchedBadge state={episodeWatched.get(episode.id)} />
+                    </TableCell>
+                  )}
                   <EpisodeActivityCell
                     episodeId={episode.id}
                     name={`${season.label} episode ${episode.episodeNumber}`}
@@ -204,7 +223,38 @@ function localTime(iso: string | null): string {
   return iso === null ? "—" : formatLocalDateTime(iso, env().DISPLAY_TIMEZONE);
 }
 
-function SeriesView({ page, isAdmin }: { page: SeriesDetailPage; isAdmin: boolean }) {
+/**
+ * Each episode's Plex watched state. Null when there is no Plex connection, no TVDB id, or Plex doesn't list the
+ * series (no column, no message). "failed" when Plex can't be read, which shows a status line instead.
+ */
+async function episodeWatchedFor(detail: SeriesDetail): Promise<Map<number, WatchedState> | null | "failed"> {
+  if (detail.tvdbId === null) return null;
+  const plexEpisodes = await getSeriesEpisodeWatched(detail.tvdbId);
+  if (plexEpisodes === null || plexEpisodes === "failed") return plexEpisodes;
+  const episodes = detail.seasons.flatMap((season) =>
+    season.episodes.map((episode) => ({
+      id: episode.id,
+      tvdbId: episode.tvdbId,
+      seasonNumber: season.seasonNumber,
+      episodeNumber: episode.episodeNumber,
+    })),
+  );
+  return toEpisodeWatched(episodes, plexEpisodes);
+}
+
+function SeriesView({
+  page,
+  isAdmin,
+  episodeWatched,
+  watchFailed,
+}: {
+  page: SeriesDetailPage;
+  isAdmin: boolean;
+  /** Each episode's Plex watched state, or null to leave the Watched column out. */
+  episodeWatched: Map<number, WatchedState> | null;
+  /** True when Plex couldn't be read, so a status line says so. */
+  watchFailed: boolean;
+}) {
   const { detail, profiles } = page;
   // The newest season that isn't Specials starts open. Seasons arrive newest first.
   const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
@@ -236,6 +286,12 @@ function SeriesView({ page, isAdmin }: { page: SeriesDetailPage; isAdmin: boolea
         typeSection={
           <section aria-label="Seasons" className="space-y-3">
             <h2 className="text-lg font-semibold">Seasons</h2>
+            {watchFailed && (
+              <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+                <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+                Couldn&apos;t load watched status from Plex.
+              </p>
+            )}
             {detail.seasons.length === 0 ? (
               <p className="text-sm text-muted-foreground">No seasons.</p>
             ) : (
@@ -247,6 +303,7 @@ function SeriesView({ page, isAdmin }: { page: SeriesDetailPage; isAdmin: boolea
                   season={season}
                   open={season.seasonNumber === openSeason}
                   isAdmin={isAdmin}
+                  episodeWatched={episodeWatched}
                 />
               ))
             )}
@@ -316,5 +373,13 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
   }
 
   if (page === null) notFound();
-  return <SeriesView page={page} isAdmin={isAdmin} />;
+  const watched = await episodeWatchedFor(page.detail);
+  return (
+    <SeriesView
+      page={page}
+      isAdmin={isAdmin}
+      episodeWatched={watched === "failed" ? null : watched}
+      watchFailed={watched === "failed"}
+    />
+  );
 }

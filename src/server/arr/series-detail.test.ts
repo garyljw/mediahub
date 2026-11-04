@@ -291,6 +291,17 @@ describe("toSeriesDetail", () => {
     expect(episode?.airDate).toBe("2020-01-10");
   });
 
+  it("keeps an episode's TVDB id only when it is a positive integer", () => {
+    const [episode] = episodes.filter((e) => e.id === 102);
+    const withTvdb = (tvdbId: number | undefined) =>
+      detail({}, [{ ...episode, tvdbId }])?.seasons.find((s) => s.seasonNumber === 1)?.episodes[0].tvdbId;
+    expect(withTvdb(4566247)).toBe(4566247);
+    expect(withTvdb(0)).toBeNull();
+    expect(withTvdb(-3)).toBeNull();
+    expect(withTvdb(1.5)).toBeNull();
+    expect(withTvdb(undefined)).toBeNull();
+  });
+
   it("drops an air date that isn't a plain YYYY-MM-DD", () => {
     const [episode] = episodes.filter((e) => e.id === 102);
     const odd = detail({}, [{ ...episode, airDate: "Jan 17 2020" }])?.seasons.find((s) => s.seasonNumber === 1);
@@ -356,6 +367,7 @@ describe("toSeriesDetail", () => {
         monitored: true,
         quality: null,
         size: 0,
+        tvdbId: null,
       },
     ]);
   });

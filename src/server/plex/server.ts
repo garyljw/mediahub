@@ -39,6 +39,7 @@ export const SectionItemsSchema = z
             viewOffset: z.number().nullish(),
             leafCount: z.number().nullish(),
             viewedLeafCount: z.number().nullish(),
+            ratingKey: z.string().nullish(),
           }),
         )
         .nullish(),
@@ -51,6 +52,7 @@ export const SectionItemsSchema = z
       viewOffset: item.viewOffset ?? 0,
       leafCount: item.leafCount ?? 0,
       viewedLeafCount: item.viewedLeafCount ?? 0,
+      ratingKey: item.ratingKey ?? null,
     })),
   );
 const SectionsSchema = z.object({
@@ -246,6 +248,53 @@ export type PlexSectionItem = {
   leafCount: number;
   /** Shows: the number of episodes watched. */
   viewedLeafCount: number;
+  /** Plex's id for the item, used to load a show's episodes. Never sent to the browser. */
+  ratingKey: string | null;
+};
+
+// One episode from a show's allLeaves reply. Zod drops every other key (title, Media, ratingKey, ...).
+export const EpisodeItemsSchema = z
+  .object({
+    MediaContainer: z.object({
+      Metadata: z
+        .array(
+          z.object({
+            parentIndex: z.number().nullish(),
+            index: z.number().nullish(),
+            viewCount: z.number().nullish(),
+            viewOffset: z.number().nullish(),
+            Guid: z.array(z.object({ id: z.string() })).nullish(),
+          }),
+        )
+        .nullish(),
+    }),
+  })
+  .transform((reply): PlexEpisodeItem[] =>
+    (reply.MediaContainer.Metadata ?? []).map((item) => ({
+      guids: (item.Guid ?? []).map((guid) => guid.id),
+      season: integerOrNull(item.parentIndex),
+      episode: integerOrNull(item.index),
+      viewCount: item.viewCount ?? 0,
+      viewOffset: item.viewOffset ?? 0,
+    })),
+  );
+
+function integerOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+}
+
+/** One episode of a show, reduced to the guids, numbers and watch counts the watched status uses. */
+export type PlexEpisodeItem = {
+  /** Guids such as "tvdb://4566247" or "tmdb://919274", exactly as Plex lists them. */
+  guids: string[];
+  /** The season number (Plex's parentIndex), or null when Plex lists none. */
+  season: number | null;
+  /** The episode number (Plex's index), or null when Plex lists none. */
+  episode: number | null;
+  /** How many times it was watched. 0 when never watched. */
+  viewCount: number;
+  /** The resume position in ms. 0 when not started. */
+  viewOffset: number;
 };
 
 /**
@@ -260,6 +309,20 @@ export async function getSectionItems(
   return plexServerFetch("Plex library items", SectionItemsSchema, {
     conn,
     path: `/library/sections/${encodeURIComponent(sectionKey)}/all?includeGuids=1`,
+    token,
+    timeoutMs: 15_000,
+    maxBytes: SECTION_ITEMS_MAX_BYTES,
+  });
+}
+
+/**
+ * Every episode of one show (its ratingKey from the section listing), with guids and watch counts. The ratingKey is
+ * encoded into the path.
+ */
+export async function getShowEpisodes(conn: ServerConnection, token: string, ratingKey: string): Promise<PlexEpisodeItem[]> {
+  return plexServerFetch("Plex show episodes", EpisodeItemsSchema, {
+    conn,
+    path: `/library/metadata/${encodeURIComponent(ratingKey)}/allLeaves?includeGuids=1`,
     token,
     timeoutMs: 15_000,
     maxBytes: SECTION_ITEMS_MAX_BYTES,
