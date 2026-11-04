@@ -241,7 +241,9 @@ export function PlexConnectionForm({
   return (
     <div className="space-y-3">
       <p className="text-sm">
-        Connected to {serverName ?? "Plex"} at <span className="font-mono">{url}</span>.
+        Connected to {serverName ?? "Plex"}.
+        {/* Only the name is shown (Gary's choice). Saved URLs are built server-side, so plain http is always "http://". */}
+        {url?.startsWith("http://") ? <span className="ml-1 text-muted-foreground">Not encrypted.</span> : null}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={test} disabled={pending}>
