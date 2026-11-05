@@ -58,6 +58,13 @@ export function env(): Env {
 }
 
 /**
+ * A copy of this process's environment, to pass on to a child process. It is not configuration: read config with env().
+ */
+export function processEnvironment(): NodeJS.ProcessEnv {
+  return { ...process.env };
+}
+
+/**
  * The Windows folder, for running the System32 tools by full path. Not configuration, but this file is the one
  * place allowed to read process.env.
  */

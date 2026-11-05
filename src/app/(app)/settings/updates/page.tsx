@@ -60,7 +60,7 @@ export default async function UpdatesPage() {
           )}
           {view.checkQueued && (
             <p role="status" className="text-sm">
-              A check is queued. The updater picks it up within a few minutes.
+              A check is queued. The updater picks it up within a minute.
             </p>
           )}
 

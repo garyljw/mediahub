@@ -19,10 +19,11 @@ export interface System {
   runInstaller(exe: string, logFile: string): Promise<number>;
   /** True when the installed build-info reports `expectVersion` and the login page answers 200 within the timeout. */
   waitHealthy(expectVersion: string, timeoutMs: number): Promise<boolean>;
-  /** Creates the MediaHub\Updater and MediaHub\UpdateInstall scheduled tasks from the templates in the app folder. */
-  registerTask(): Promise<void>;
-  /** Starts the MediaHub\UpdateInstall task, which runs stage 2 from the run folder. */
-  startInstallTask(): Promise<void>;
+  /**
+   * Starts <UPD>\run\node.exe with updater.mjs --stage2 outside this process tree, so stopping the service can't kill it.
+   * Throws when the process could not be started.
+   */
+  startStage2(): Promise<void>;
 }
 
 export interface Net {
@@ -46,7 +47,9 @@ export interface UpdaterContext {
 /** The file in the updates folder that asks the launcher to restore its pre-update database backup. */
 export const RESTORE_MARKER_NAME = "restore-db.json";
 
-// Longer than the UpdateInstall task's one-hour time limit, so a live stage 2 always holds a fresh lock.
+// Longer than a stage 2 run can take, so a live stage 2 always holds a fresh lock. Stage 2 stops the service (up to
+// about 3 minutes, see system.ts), runs the installer (15-minute limit), waits for the new version (2 minutes), and
+// if it rolls back, does the same again. That is about 40 minutes at most.
 const LOCK_MAX_AGE_MS = 70 * 60 * 1000;
 const HEALTH_TIMEOUT_MS = 120_000;
 const MANIFEST_MAX_BYTES = 64 * 1024;
@@ -184,8 +187,8 @@ export interface Stage1Options {
 }
 
 /**
- * Stage 1 as the scheduled task runs it. Returns "launch" once the lock is taken, the run folder (with
- * job.json) is ready and the MediaHub\UpdateInstall task has been started; this process then exits.
+ * Stage 1, run by the launcher (see scripts/launcher.ts). Returns "launch" once the lock is taken, the run folder
+ * (with job.json) is ready and stage 2 has been started; this process then exits.
  * --check-only always checks, never installs and never launches.
  */
 export async function runStage1(ctx: UpdaterContext, options: Stage1Options): Promise<Stage1Result> {
@@ -200,7 +203,7 @@ export async function runStage1(ctx: UpdaterContext, options: Stage1Options): Pr
     // No updater is running. Leftovers from the last update go: the run folder (a copy of node.exe and an
     // installer) can't be removed by the stage 2 that runs from it.
     // The restore marker is left alone: it expires by itself (see src/server/db/update-safety.ts).
-    // Best effort: a stage 2 that has just removed the lock may still be re-registering the tasks from run\node.exe.
+    // Best effort: a stage 2 that has just removed the lock may still be running from run\node.exe.
     try {
       if (existsSync(p.run)) rmSync(p.run, { recursive: true, force: true });
     } catch (error) {
@@ -236,8 +239,8 @@ export async function runStage1(ctx: UpdaterContext, options: Stage1Options): Pr
   if (outcome.kind === "failed") return { kind: "failed" };
   if (options.checkOnly) return { kind: "checked" };
 
-  // Stage 2 runs from a copy of node and this script, so the app folder can be replaced under it. It runs as
-  // its own scheduled task (MediaHub\UpdateInstall), so this process can exit and release <APP>\node.exe.
+  // Stage 2 runs from a copy of node and this script, so the app folder can be replaced under it. It is started
+  // outside this process (see startStage2), so this process can exit and release <APP>\node.exe.
   const { update } = outcome;
   rmSync(p.run, { recursive: true, force: true });
   mkdirSync(p.run, { recursive: true });
@@ -260,17 +263,17 @@ export async function runStage1(ctx: UpdaterContext, options: Stage1Options): Pr
   writeFileSync(path.join(p.run, JOB_FILE), `${JSON.stringify(job, null, 2)}\n`);
   // wx: fails if another updater already holds the lock.
   writeFileSync(p.lock, `${ctx.now().toISOString()}\n`, { flag: "wx" });
-  // Marked before the task starts, so a stage 2 that never runs shows up as interrupted once the lock is stale.
+  // Marked before stage 2 starts, so a stage 2 that never runs shows up as interrupted once the lock is stale.
   const status = readStatus(p.status, ctx.installedVersion);
   status.state = "installing";
   writeStatus(p.status, status);
   try {
-    await ctx.system.startInstallTask();
+    await ctx.system.startStage2();
   } catch (error) {
-    ctx.log(`Could not start the install task: ${errorMessage(error)}`);
+    ctx.log(`Could not start the install step: ${errorMessage(error)}`);
     rmSync(p.lock, { force: true });
     status.state = "idle";
-    setResult(status, "failed", update.version, `Update ${update.version} was downloaded but the install task did not start. Nothing was changed.`, ctx.now());
+    setResult(status, "failed", update.version, `Update ${update.version} was downloaded but the install step did not start. Nothing was changed.`, ctx.now());
     writeStatus(p.status, status);
     return { kind: "failed" };
   }
@@ -328,8 +331,8 @@ export interface Stage2Args {
 
 /**
  * Asks the launcher of the version being restored to put back its own pre-update database backup (see
- * src/server/db/update-safety.ts). The updater runs as SYSTEM and never touches the data folder, which the
- * service account can write to: file operations there as SYSTEM could be redirected with links.
+ * src/server/db/update-safety.ts). The updater never touches the data folder itself. The service account can write
+ * to parts of it when the service doesn't run as LocalSystem, and file operations there could be redirected with links.
  */
 function writeRestoreMarker(ctx: UpdaterContext): void {
   writeFileSync(paths(ctx.updDir).restoreMarker, `${JSON.stringify({ createdAt: ctx.now().toISOString() })}\n`);
@@ -351,12 +354,9 @@ export async function runStage2(ctx: UpdaterContext, args: Stage2Args): Promise<
     status.state = "idle";
     writeStatus(p.status, status);
   };
-  // Re-registering the task may stop the running task instance, which includes this process. So it is the
-  // last thing done, after the status is written and the lock removed (see the comment in mediahub.iss).
-  let reRegister = false;
   let serviceStopped = false;
   try {
-    // 1. Defence in depth: the task checked this already, but the installer is what runs next.
+    // 1. Defence in depth: stage 1 checked this already, but the installer is what runs next.
     try {
       const manifest = verifyManifest(readFileSync(args.manifestPath), readFileSync(args.sigPath, "utf8"), ctx.publicKeyPem, v);
       const installer = await sha256File(args.installerPath);
@@ -382,7 +382,6 @@ export async function runStage2(ctx: UpdaterContext, args: Stage2Args): Promise<
     // 3. Install the new version.
     const code = await runInstallerSafe(ctx, args.installerPath, path.join(ctx.updDir, `install-${v}.log`));
     if (code === 0 && (await ctx.system.waitHealthy(v, HEALTH_TIMEOUT_MS))) {
-      reRegister = true;
       status.installedVersion = v;
       status.latestVersion = v;
       status.skipped = status.skipped.filter((s) => s !== v);
@@ -393,7 +392,6 @@ export async function runStage2(ctx: UpdaterContext, args: Stage2Args): Promise<
     // 4. Roll back.
     ctx.log(`Update ${v} did not come up (installer exit code ${code}). Rolling back.`);
     const old = ctx.installedVersion;
-    reRegister = true;
     let restored = false;
     if (args.rollbackInstallerPath) {
       await ctx.system.stopService().catch((e: unknown) => ctx.log(`Stop before rollback failed: ${errorMessage(e)}`));
@@ -422,15 +420,11 @@ export async function runStage2(ctx: UpdaterContext, args: Stage2Args): Promise<
     if (serviceStopped) {
       await ctx.system.startService().catch((e: unknown) => ctx.log(`Could not start the service: ${errorMessage(e)}`));
     }
-    reRegister = true;
     finish("failed", v, `Update to ${v} stopped unexpectedly. Check updater.log in the updates folder.`);
   } finally {
     rmSync(p.downloads, { recursive: true, force: true });
     rmSync(p.restoreMarker, { force: true });
     rmSync(p.lock, { force: true });
-    if (reRegister) {
-      await ctx.system.registerTask().catch((e: unknown) => ctx.log(`Could not register the update task: ${errorMessage(e)}`));
-    }
   }
 }
 

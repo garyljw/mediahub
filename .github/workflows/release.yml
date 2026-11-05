@@ -177,8 +177,6 @@ jobs:
           Copy-Item -Path 'dist\mediahub' -Destination (Join-Path $stage 'app') -Recurse
           Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'winsw\WinSW-x64.exe') -Destination (Join-Path $stage 'service\MediaHub.exe')
           Copy-Item -Path 'installer\MediaHub.xml' -Destination (Join-Path $stage 'service\MediaHub.xml')
-          Copy-Item -Path 'installer\MediaHub-Updater.xml' -Destination (Join-Path $stage 'service\MediaHub-Updater.xml')
-          Copy-Item -Path 'installer\MediaHub-UpdateInstall.xml' -Destination (Join-Path $stage 'service\MediaHub-UpdateInstall.xml')
           Copy-Item -Path 'installer\mediahub-tool.cmd' -Destination (Join-Path $stage 'mediahub-tool.cmd')
           Get-ChildItem -Recurse -Path $stage | Select-Object -ExpandProperty FullName | Select-Object -First 200
 
@@ -298,15 +296,10 @@ jobs:
               $ErrorActionPreference = $prev
             }
           }
-          function Assert-UpdaterTask {
+          # Updates run from the launcher, not from scheduled tasks: neither task may exist.
+          function Assert-NoUpdaterTask {
             foreach ($name in @('MediaHub\Updater', 'MediaHub\UpdateInstall')) {
-              $task = Get-UpdaterTask $name
-              if ($task.Code -ne 0) { throw "The $name task is missing (schtasks exit code $($task.Code))." }
-              if ($task.Text -notmatch '<UserId>S-1-5-18</UserId>') { throw "The $name task does not run as SYSTEM." }
-            }
-            # The install task must run node from the updates folder, never from the app folder it replaces.
-            if ((Get-UpdaterTask 'MediaHub\UpdateInstall').Text -notmatch [regex]::Escape("$dataDir\updates\run\node.exe")) {
-              throw 'The MediaHub\UpdateInstall task does not run node from the updates run folder.'
+              if ((Get-UpdaterTask $name).Code -eq 0) { throw "The $name scheduled task exists. Updates must not use scheduled tasks." }
             }
           }
           # Runs Setup or the uninstaller with a time limit. A plain -Wait has none, so a hidden dialog hung the job until
@@ -336,11 +329,15 @@ jobs:
           function Test-Writes($entries) {
             @($entries | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.FileSystemRights.ToString() -match 'Modify|Write|FullControl|ChangePermissions|TakeOwnership' }).Count -gt 0
           }
-          function Assert-DataAcl([string]$account) {
+          # The data folder must not inherit, and must grant nothing to users or everyone.
+          function Assert-DataLocked {
             $acl = Get-Acl -LiteralPath $dataDir
             if (@($acl.Access | Where-Object { $_.IsInherited }).Count -gt 0) { throw 'The data folder still inherits permissions.' }
             $broad = @($acl.Access | Where-Object { $_.IdentityReference.Value -match 'BUILTIN\\Users|Authenticated Users|Everyone|CREATOR OWNER' })
             if ($broad.Count -gt 0) { throw 'The data folder grants BUILTIN\Users, CREATOR OWNER or wider.' }
+          }
+          function Assert-DataAcl([string]$account) {
+            Assert-DataLocked
             $root = Get-Entries $dataDir $account
             if ($root.Count -eq 0) { throw "No entry for $account on the data folder." }
             if (Test-Writes $root) { throw "$account can change the data folder itself." }
@@ -395,10 +392,11 @@ jobs:
             if (-not (Wait-Login 60)) { throw 'First install: /login did not return 200 within 60 s.' }
             $svc = Get-MediaHubService
             if (-not $svc) { throw 'The MediaHub service is missing after install.' }
-            if ($svc.StartName -ne 'NT SERVICE\MediaHub') { throw "Unexpected service account: $($svc.StartName)." }
+            if ($svc.StartName -ne 'LocalSystem') { throw "Unexpected service account: $($svc.StartName)." }
             if ($svc.State -ne 'Running') { throw "Service state after install: $($svc.State)." }
-            Assert-DataAcl 'NT SERVICE\MediaHub'
-            Assert-UpdaterTask
+            # A LocalSystem install grants no service account access, so only the locked-down folder is checked.
+            Assert-DataLocked
+            Assert-NoUpdaterTask
             $rollbackCopy = Join-Path $dataDir "updates\installers\MediaHub-Setup-$env:APP_VERSION.exe"
             if (-not (Test-Path $rollbackCopy)) { throw "The rollback installer copy is missing: $rollbackCopy." }
             # GitHub is reachable and its reply parses. No release has an update manifest yet, so this is up to date.
@@ -421,7 +419,7 @@ jobs:
             if ($svc.StartName -ne 'NT AUTHORITY\LocalService') { throw "Upgrade changed the service account to $($svc.StartName)." }
             if ($svc.State -ne 'Running') { throw "Service state after upgrade: $($svc.State)." }
             Assert-DataAcl 'NT AUTHORITY\LocalService'
-            Assert-UpdaterTask
+            Assert-NoUpdaterTask
             if (-not (Test-Path $dbPath)) { throw 'The database is missing after upgrade.' }
 
             # Silent uninstall: the service and firewall rule go, the data stays.

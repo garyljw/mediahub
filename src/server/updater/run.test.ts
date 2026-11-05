@@ -48,11 +48,8 @@ function fakeSystem(state: Fake): System {
       state.calls.push(`healthy:${expectVersion}`);
       return state.healthy.get(expectVersion) ?? false;
     },
-    async registerTask() {
-      state.calls.push("register");
-    },
-    async startInstallTask() {
-      state.calls.push("start-install-task");
+    async startStage2() {
+      state.calls.push("start-stage2");
     },
   };
 }
@@ -163,7 +160,6 @@ describe("runStage2", () => {
     expect(status.installedVersion).toBe(NEW);
     expect(status.skipped).toEqual([]);
     expect(status.state).toBe("idle");
-    expect(fake.calls).toContain("register");
     expect(markerSeen.get(`MediaHub-Setup-${NEW}.exe`)).toBe(false);
     expectDataUntouched();
     expect(existsSync(path.join(updDir, "downloads"))).toBe(false);
@@ -220,24 +216,7 @@ describe("runStage2", () => {
     expect(fake.calls.some((call) => call.startsWith("install:MediaHub-Setup-1.0.0"))).toBe(false);
     expect(existsSync(markerPath())).toBe(false);
     expectDataUntouched();
-    expect(fake.calls.at(-2)).toBe("start");
-    expect(fake.calls.at(-1)).toBe("register");
-  });
-
-  it("re-registers the task last, after the lock is gone", async () => {
-    fake.onInstall = migratingInstaller;
-    const lock = path.join(updDir, "update.lock");
-    writeFileSync(lock, "");
-    let lockAtRegister: boolean | undefined;
-    const original = ctx.system.registerTask;
-    ctx.system.registerTask = async () => {
-      lockAtRegister = existsSync(lock);
-      await original();
-    };
-    await runStage2(ctx, args);
-    expect(fake.calls.at(-1)).toBe("register");
-    expect(lockAtRegister).toBe(false);
-    expect(statusNow().lastResult?.kind).toBe("installed");
+    expect(fake.calls.at(-1)).toBe("start");
   });
 
   it("starts the service again when something unexpected fails after it was stopped", async () => {
@@ -453,7 +432,7 @@ describe("runStage1 with an update available", () => {
     return { checkOnly: false, autoUpdate: true, scriptPath: script };
   };
 
-  it("prepares the run folder and job, marks installing, and starts the install task", async () => {
+  it("prepares the run folder and job, marks installing, and starts stage 2", async () => {
     expect(await runStage1(ctx, options())).toEqual({ kind: "launch" });
     const job = readJob(updDir);
     expect(job.version).toBe(NEW);
@@ -461,18 +440,18 @@ describe("runStage1 with an update available", () => {
     expect(existsSync(path.join(updDir, "run", "node.exe"))).toBe(true);
     expect(existsSync(path.join(updDir, "update.lock"))).toBe(true);
     expect(statusNow().state).toBe("installing");
-    expect(fake.calls).toEqual(["start-install-task"]);
+    expect(fake.calls).toEqual(["start-stage2"]);
   });
 
-  it("reports a failure and frees the lock when the install task won't start", async () => {
-    ctx.system.startInstallTask = async () => {
-      throw new Error("schtasks failed");
+  it("reports a failure and frees the lock when stage 2 won't start", async () => {
+    ctx.system.startStage2 = async () => {
+      throw new Error("WMI failed");
     };
     expect(await runStage1(ctx, options())).toEqual({ kind: "failed" });
     const status = statusNow();
     expect(status.state).toBe("idle");
     expect(status.lastResult?.kind).toBe("failed");
-    expect(status.lastResult?.message).toContain("install task did not start");
+    expect(status.lastResult?.message).toContain("install step did not start");
     expect(existsSync(path.join(updDir, "update.lock"))).toBe(false);
   });
 });
