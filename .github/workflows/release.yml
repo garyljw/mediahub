@@ -260,6 +260,7 @@ jobs:
 
       - name: Install, upgrade and uninstall on the runner
         shell: pwsh
+        timeout-minutes: 20
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -308,10 +309,24 @@ jobs:
               throw 'The MediaHub\UpdateInstall task does not run node from the updates run folder.'
             }
           }
+          # Runs Setup or the uninstaller with a time limit. A plain -Wait has none, so a hidden dialog hung the job until
+          # its 40-minute limit with no log. On a timeout the process tree is killed and the run's log is printed.
+          function Invoke-Timed([string]$file, [string]$name, [int]$seconds = 300) {
+            $log = Join-Path $logs "$name.log"
+            $p = Start-Process -FilePath $file -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$log") -PassThru
+            $null = $p.Handle  # keep the handle, so ExitCode is available after exit
+            if (-not $p.WaitForExit($seconds * 1000)) {
+              & "$env:SystemRoot\System32\taskkill.exe" /T /F /PID $p.Id 2>&1 | Out-Null
+              # Out-Host: plain output would go into the caller's variable and be lost with the throw.
+              if (Test-Path -LiteralPath $log) { Write-Host "--- $name.log"; Get-Content -LiteralPath $log | Out-Host }
+              throw "$name did not finish within $seconds seconds."
+            }
+            $p.WaitForExit()
+            return [int]$p.ExitCode
+          }
           function Invoke-Installer([string]$name) {
-            $installArgs = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs "$name.log")")
-            $p = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
-            if ($p.ExitCode -ne 0) { throw "$name exited with $($p.ExitCode)." }
+            $code = Invoke-Timed $installer $name
+            if ($code -ne 0) { throw "$name exited with $code." }
           }
           # Compares names without spaces: LocalService is "NT AUTHORITY\LocalService" in WMI and "NT AUTHORITY\LOCAL SERVICE" in ACLs.
           function Get-Entries([string]$path, [string]$account) {
@@ -352,12 +367,21 @@ jobs:
           $checkCode = $LASTEXITCODE
           Write-Host "Owner check exit code $checkCode`: $check"
           if ($checkCode -ne 3) { throw 'The owner check did not refuse the planted file (expected exit code 3).' }
-          $p = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs 'squat.log')") -Wait -PassThru
-          if ($p.ExitCode -eq 0) { throw 'The installer accepted a data folder with a file owned by a standard user.' }
+          $squatCode = Invoke-Timed $installer 'squat'
+          if ($squatCode -eq 0) { throw 'The installer accepted a data folder with a file owned by a standard user.' }
           if (Get-MediaHubService) { throw 'The installer created the service despite the planted data folder.' }
           if (-not (Select-String -LiteralPath (Join-Path $logs 'squat.log') -Pattern 'not created by an administrator' -Quiet)) {
             Get-Content -LiteralPath (Join-Path $logs 'squat.log')
             throw 'The refusal message is missing from the Setup log.'
+          }
+          # The refusal must come from PrepareToInstall, before any program files are copied.
+          if (Test-Path -LiteralPath (Join-Path $appDir 'app')) {
+            Get-Content -LiteralPath (Join-Path $logs 'squat.log')
+            throw 'Setup copied program files before refusing the planted data folder.'
+          }
+          if (-not (Select-String -LiteralPath (Join-Path $logs 'squat.log') -Pattern 'Refused:' -SimpleMatch -Quiet)) {
+            Get-Content -LiteralPath (Join-Path $logs 'squat.log')
+            throw 'The Setup log has no Refused: line from PrepareToInstall.'
           }
           Remove-Item -LiteralPath $dataDir -Recurse -Force
           Remove-LocalUser -Name $squatter
@@ -403,8 +427,8 @@ jobs:
             # Silent uninstall: the service and firewall rule go, the data stays.
             $uninst = Join-Path $appDir 'unins000.exe'
             if (-not (Test-Path $uninst)) { throw "$uninst not found." }
-            $p = Start-Process -FilePath $uninst -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $logs 'uninstall.log')") -Wait -PassThru
-            if ($p.ExitCode -ne 0) { throw "Uninstall exited with $($p.ExitCode)." }
+            $code = Invoke-Timed $uninst 'uninstall'
+            if ($code -ne 0) { throw "Uninstall exited with $code." }
             $deadline = (Get-Date).AddSeconds(30)
             while ((Get-MediaHubService) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
             if (Get-MediaHubService) { throw 'The MediaHub service is still present after uninstall.' }
