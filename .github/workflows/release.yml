@@ -294,6 +294,9 @@ jobs:
               return @{ Code = $LASTEXITCODE; Text = ($out | Out-String) }
             } finally {
               $ErrorActionPreference = $prev
+              # A missing task is often the expected answer. The runner ends a pwsh step with the last program's exit
+              # code, so schtasks' 1 for "not found" would otherwise fail a step whose checks all passed.
+              $global:LASTEXITCODE = 0
             }
           }
           # Updates run from the launcher, not from scheduled tasks: neither task may exist.
