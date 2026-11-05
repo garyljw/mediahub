@@ -456,7 +456,8 @@ begin
   if PostInstallError <> '' then
   begin
     Log('Error: ' + PostInstallError);
-    MsgBox(PostInstallError, mbError, MB_OK);
+    // Plain MsgBox is not suppressed by /SUPPRESSMSGBOXES and would hang a silent install (including the updater's).
+    SuppressibleMsgBox(PostInstallError, mbError, MB_OK, IDOK);
     Exit;
   end;
 
@@ -574,7 +575,7 @@ begin
   if PostInstallError <> '' then
   begin
     Log('Error: ' + PostInstallError);
-    MsgBox(PostInstallError, mbError, MB_OK);
+    SuppressibleMsgBox(PostInstallError, mbError, MB_OK, IDOK);
   end;
 end;
 
