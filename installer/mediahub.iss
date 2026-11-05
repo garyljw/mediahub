@@ -42,10 +42,6 @@ Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recurse
 Source: "{#SourceDir}\service\MediaHub.exe"; DestDir: "{app}\service"; Flags: ignoreversion
 ; Template: rewritten with the real paths in [Code] after the files are copied.
 Source: "{#SourceDir}\service\MediaHub.xml"; DestDir: "{app}\service"; Flags: ignoreversion
-; Template for the MediaHub\Updater scheduled task: filled in like MediaHub.xml and registered in CurStepChanged.
-Source: "{#SourceDir}\service\MediaHub-Updater.xml"; DestDir: "{app}\service"; Flags: ignoreversion
-; Template for the MediaHub\UpdateInstall task (started by the updater to install a verified update).
-Source: "{#SourceDir}\service\MediaHub-UpdateInstall.xml"; DestDir: "{app}\service"; Flags: ignoreversion
 Source: "{#SourceDir}\mediahub-tool.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
@@ -418,16 +414,6 @@ begin
   Result := SaveStringsToUTF8FileWithoutBOM(Path, Lines, False);
 end;
 
-// True when Setup was started by the updater (with /UPDATER). The updater then registers the update task itself.
-function IsUpdaterRun(): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  for I := 1 to ParamCount do
-    if SameText(ParamStr(I), '/UPDATER') then Result := True;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Rc: Integer;
@@ -482,10 +468,8 @@ begin
     Log('Wrote the settings file.');
   end;
 
-  // 3. Fill the placeholders in the WinSW config and the updater task template with the real paths.
+  // 3. Fill the placeholders in the WinSW config with the real paths.
   if not FillTemplate(XmlPath) then RaiseException('Could not write ' + XmlPath + '.');
-  if not FillTemplate(ExpandConstant('{app}\service\MediaHub-Updater.xml')) then RaiseException('Could not write the update task template.');
-  if not FillTemplate(ExpandConstant('{app}\service\MediaHub-UpdateInstall.xml')) then RaiseException('Could not write the update install task template.');
 
   // 4. Install the service on a fresh install only. An existing service keeps its account and settings.
   if not ServiceExists() then
@@ -537,23 +521,15 @@ begin
       PostInstallError := 'Could not add the firewall rule (exit code ' + IntToStr(Rc) + ').';
   end;
 
+  // Scheduled tasks from earlier builds, which updated through them. MediaHub now updates itself. Result ignored.
+  RunStep('Remove an old update task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\Updater" /f', Rc);
+  RunStep('Remove an old update install task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\UpdateInstall" /f', Rc);
+
   // 7. Start. WinSW reads MediaHub.xml each time the service starts, so this also picks up the rewritten config.
   if (PostInstallError = '') and not RunStep('Start the service', Exe, 'start', Rc) then
     PostInstallError := 'MediaHub is installed but did not start (exit code ' + IntToStr(Rc) + '). See the logs in ' + DataDir() + '\logs.';
 
-  // 8. Update tasks: MediaHub\Updater (every minute: checks and downloads) and MediaHub\UpdateInstall (started
-  // by the updater: installs). Not registered when the updater runs this installer (/UPDATER): the updater, which
-  // runs inside MediaHub\UpdateInstall, registers both itself afterwards, last of all. It is not known whether
-  // re-registering a task stops a running instance of it.
-  if (PostInstallError = '') and not IsUpdaterRun() then
-  begin
-    if not RunStep('Register the update task', SysTool('schtasks.exe'), '/create /tn "MediaHub\Updater" /xml "' + ExpandConstant('{app}') + '\service\MediaHub-Updater.xml" /f', Rc) then
-      PostInstallError := 'MediaHub is running, but the update task could not be created (exit code ' + IntToStr(Rc) + ').'
-    else if not RunStep('Register the update install task', SysTool('schtasks.exe'), '/create /tn "MediaHub\UpdateInstall" /xml "' + ExpandConstant('{app}') + '\service\MediaHub-UpdateInstall.xml" /f', Rc) then
-      PostInstallError := 'MediaHub is running, but the update install task could not be created (exit code ' + IntToStr(Rc) + ').';
-  end;
-
-  // 9. A copy of this installer, kept for rollback: the updater runs it if an update fails to start. Only after a
+  // 8. A copy of this installer, kept for rollback: the updater runs it if an update fails to start. Only after a
   // successful install. A failure here is only logged, because a missing copy must not fail the install.
   if PostInstallError = '' then
   begin
@@ -617,7 +593,8 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    // The update task goes first, so nothing starts the updater while the service is being removed. Result ignored.
+    // Earlier test builds registered these scheduled tasks. Current installs don't create them, so these deletes only
+    // clean up after those builds. Their results are ignored.
     RunStep('Remove the update task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\Updater" /f', Rc);
     RunStep('Remove the update install task', SysTool('schtasks.exe'), '/delete /tn "MediaHub\UpdateInstall" /f', Rc);
     // Program files the updater keeps in the data folder. Removed even on a silent uninstall, because they are not

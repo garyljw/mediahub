@@ -1,11 +1,15 @@
 // Packaged auto-updater, bundled to dist/mediahub/tools/updater.mjs by scripts/package.mjs.
 // It must not import the database: the updater runs from its own copy of node.exe in the updates folder.
 //
-// The MediaHub\Updater scheduled task runs it as SYSTEM every minute:
+// The launcher (scripts/launcher.ts, the service's own process) runs stage 1 about once a minute when it is due:
 //   node --env-file=<config> tools/updater.mjs --app-dir <APP> --data-dir <DATA>
+// Stage 1 checks GitHub and downloads a verified update when one is due. It then copies node and this script into
+// <DATA>\updates\run, leaves run\job.json there, and starts stage 2 through WMI (see startStage2 in
+// src/server/updater/system.ts). Stage 2 runs as:
+//   node --env-file=<DATA>\mediahub.env <DATA>\updates\run\updater.mjs --stage2 --app-dir <APP> --data-dir <DATA>
+// It runs outside the service's process tree, so it survives the service being stopped. Stage 1 then exits, so
+// <APP>\node.exe is free. Nothing in Task Scheduler is used.
 // --check-only checks GitHub once, writes the status file, and never installs (the release workflow uses it).
-// --stage2: the MediaHub\UpdateInstall task runs a copy of node and this script from <DATA>\updates\run with it,
-// once stage 1 has left run\job.json there and started that task. Stage 1 then exits, so <APP>\node.exe is free.
 //
 // This is the only file that reads paths from the command line. The config comes from env().
 
@@ -48,7 +52,7 @@ async function main(): Promise<number> {
     updDir,
     installedVersion: readInstalledVersion(appDir),
     publicKeyPem: UPDATE_PUBLIC_KEY_PEM,
-    system: createWindowsSystem(appDir),
+    system: createWindowsSystem(appDir, dataDir),
     net: { fetchReleases, download },
     log: createLogger(path.join(updDir, "updater.log")),
     now: () => new Date(),

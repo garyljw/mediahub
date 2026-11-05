@@ -18,9 +18,6 @@
   <onfailure action="restart" delay="10 sec"/>
   <resetfailure>1 hour</resetfailure>
   <stoptimeout>15 sec</stoptimeout>
-  <!-- Used only on a fresh install. An upgrade keeps whatever account the service already runs as. -->
-  <serviceaccount>
-    <domain>NT SERVICE</domain>
-    <user>MediaHub</user>
-  </serviceaccount>
+  <!-- No serviceaccount: a fresh install runs the service as LocalSystem, which MediaHub needs to install its own
+       updates. An upgrade keeps whatever account the service already runs as. -->
 </service>

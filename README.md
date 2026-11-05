@@ -38,7 +38,7 @@ MediaHub is meant for a home network only. Don't expose it to the internet.
 ### Where things are
 - **Program files:** `C:\Program Files\MediaHub`. This holds the app, the Node runtime it runs on and the service wrapper. Nothing personal is kept here.
 - **Settings, database, logs and image cache:** `C:\ProgramData\MediaHub` (`mediahub.env`, `data\`, `logs\`).
-  - Only Administrators and SYSTEM can change this folder. The MediaHub service can read it, and it can write only to `data\` and `logs\`.
+  - Only Administrators and SYSTEM can change this folder. By default the MediaHub service runs as SYSTEM, so it can change everything in the folder. If you give the service another account, that account can read the folder and write only to `data\`, `logs\` and the update requests folder.
   - If the folder already exists and holds something a non-administrator created, the installer refuses to continue, because someone could have planted settings there.
 - **Firewall:** a rule named `MediaHub` allows the port on **Private** networks only. Your Windows network profile must be set to Private.
 - **Service:** MediaHub runs as a Windows service named MediaHub. It starts with Windows and restarts if it stops unexpectedly.
@@ -51,7 +51,7 @@ MediaHub checks GitHub every night between 03:00 and 04:00 (the PC's time). If t
 
 Before a new version changes the database, it saves a copy next to it (`mediahub.db.pre-update`). If the new version doesn't start, MediaHub puts back the previous version and that copy of the database, and it doesn't try that version again overnight.
 
-Admins can see the installed version, the last check and its result in Settings → Updates. "Check for updates now" there asks the updater to check within a few minutes, including versions it stopped retrying overnight.
+Admins can see the installed version, the last check and its result in Settings → Updates. "Check for updates now" there asks the updater to check within a minute, including versions it stopped retrying overnight.
 
 - To turn off the overnight check, set `MEDIAHUB_AUTO_UPDATE=false` in `C:\ProgramData\MediaHub\mediahub.env`. The updater reads the file at each check, so you don't need to restart the service.
 - The log is `C:\ProgramData\MediaHub\updates\updater.log` (open it as an administrator).
@@ -63,9 +63,9 @@ Admins can see the installed version, the last check and its result in Settings 
 Go to Settings → Apps → MediaHub → Uninstall. Your data is kept unless you answer Yes when asked to delete it; the default is No. A silent uninstall (`unins000.exe /VERYSILENT`) always keeps the data.
 
 ### Running the service as your own account (optional)
-By default the service runs as the built-in low-privilege account `NT SERVICE\MediaHub`. To use a Windows account of your own:
+By default the service runs as the built-in `LocalSystem` account, which has full administrator rights on this PC. MediaHub installs its own updates, so it needs that. To use a Windows account of your own:
 
-1. Open the Services app (services.msc). Go to MediaHub → Properties → Log On → "This account", and enter the account and its password. Windows gives the account the "Log on as a service" right when you set it here. The account doesn't need administrator rights.
+1. Open the Services app (services.msc). Go to MediaHub → Properties → Log On → "This account", and enter the account and its password. Windows gives the account the "Log on as a service" right when you set it here. MediaHub doesn't need administrator rights to run, but self-updates need the service to run as `LocalSystem` or as an administrator account. With any other account, MediaHub can't install updates.
 2. Run the same MediaHub installer again as administrator. It keeps the account, gives it access to `C:\ProgramData\MediaHub` and starts the service.
 
 Until you do step 2, the service can't read its settings and won't start.
