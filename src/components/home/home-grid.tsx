@@ -272,9 +272,14 @@ export const HomeTile = memo(function HomeTile({
       draggable={false}
       className="group block rounded-lg select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      {/* The hover ring and glow sit inside the poster: the grid's content-visibility clips anything drawn outside a tile. */}
-      <div className="relative overflow-hidden rounded-md transition-transform group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100 [&_img]:pointer-events-none after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:opacity-0 after:shadow-[inset_0_0_0_2px_var(--primary),inset_0_0_36px_-4px_var(--glow)] after:transition-opacity group-hover:after:opacity-100 group-focus-visible:after:opacity-100">
+      <div className="relative overflow-hidden rounded-md [&_img]:pointer-events-none [&_img]:transition-transform [&_img]:duration-300 group-hover:[&_img]:scale-[1.05] motion-reduce:[&_img]:transition-none motion-reduce:group-hover:[&_img]:scale-100">
         <PosterTile src={item.posterSrc} />
+        {/* The grid's content-visibility clips anything drawn outside a tile, so on hover the frame stays put: the picture zooms
+            inside it and the ring and glow are inset. z-10 puts the ring over the badges. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 rounded-md opacity-0 poster-glow transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
         {showFocusMarker && item.inFocus && (
           <span className="absolute top-1.5 left-1.5 rounded bg-brand glow-brand p-1 text-white">
             <Bookmark aria-hidden className="size-3" />

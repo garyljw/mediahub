@@ -94,6 +94,13 @@
   background-image: var(--brand-gradient);
 }
 
+/* Neon ring and inner glow over a hovered poster. Inset, because the Home grid clips anything drawn outside a tile. */
+@utility poster-glow {
+  box-shadow:
+    inset 0 0 0 2px var(--primary),
+    inset 0 0 36px -4px var(--glow);
+}
+
 /* Soft neon glow under brand-coloured elements. */
 @utility glow-brand {
   box-shadow: 0 6px 22px -6px var(--glow);
