@@ -8,7 +8,7 @@ import { Backdrop } from "@/components/poster/backdrop";
 import { PosterTile } from "@/components/poster/poster";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
-import { PosterWash } from "@/components/poster/poster-wash";
+import { PosterWash, PosterWashLayer } from "@/components/poster/poster-wash";
 
 export type ItemPageProps = {
   title: string;
@@ -65,6 +65,8 @@ export function ItemPageLayout({
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         {backdropSrc !== null && <Backdrop src={backdropSrc} />}
+        {/* The poster's glow inside the card too: over the backdrop, behind the text. */}
+        <PosterWashLayer />
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
           {/* self-start keeps the box at the poster's own height (a flex row would stretch it to the text column), so the tilt
               and shadow fit the poster. Every poster tilts; the shadow takes the poster's colour only when it has a wash. */}
