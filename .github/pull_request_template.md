@@ -8,6 +8,10 @@
 - Tier: High / Low
 - Reviews: /code-review (level: low / medium / n/a, rounds: _) · /security-review (yes / n/a)
 
+## Upstream calls
+<!-- Any Radarr, Sonarr, Plex, plex.tv or TMDB/TVDB endpoint, or parameter of one, that MediaHub didn't use before. For each: method and path (placeholder hosts and ids only), the documentation read, and whether it was confirmed against a live server. If it wasn't, note that Gary agreed and why. -->
+- None / list
+
 ## Testing
 <!-- Commands run and their results, plus anything you checked by hand. Say what was NOT verified. -->
 
