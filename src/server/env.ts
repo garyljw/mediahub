@@ -33,6 +33,24 @@ const schema = z.object({
   ),
   // The updater's folder (C:\ProgramData\MediaHub\updates), set by the Windows service config. Unset elsewhere.
   MEDIAHUB_UPDATES_DIR: z.preprocess((value) => (value === "" ? undefined : value), z.string().optional()),
+  // Keeps the Plex collections for Movie Focus and TV Focus in step with MediaHub. Blank means true. Only true or false
+  // (any case) is accepted. A copy that shares a Plex server with another (such as a development copy) sets it to false,
+  // so it never creates or changes those collections.
+  MEDIAHUB_PLEX_FOCUS_SYNC: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim().toLowerCase() || undefined : value),
+    z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  ),
+  // Names this copy's Plex collections, e.g. "dev" gives "Movie Focus (dev)" and "TV Focus (dev)", which aren't pinned to
+  // Home. For a second copy that shares a Plex server, so its collections don't clash with the real ones. Blank is unset.
+  MEDIAHUB_PLEX_FOCUS_TEST_NAME: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() || undefined : value),
+    z
+      .string()
+      .min(1)
+      .max(20)
+      .regex(/^[A-Za-z0-9 _-]+$/, "must be 1 to 20 letters, digits, spaces, - or _")
+      .optional(),
+  ),
   DISPLAY_TIMEZONE: z
     .string()
     .default("Europe/London")

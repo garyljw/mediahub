@@ -10,6 +10,7 @@ import { PlexRequestError } from "@/server/plex/errors";
 // Each test gets a fresh in-memory database with the real migrations applied, so the Focus list and the stored
 // collection are real rows. Plex, the watched index and the Arr lists are mocked.
 const testDb = vi.hoisted(() => ({ current: undefined as BetterSQLite3Database<typeof schema> | undefined }));
+const envState = vi.hoisted(() => ({ focusSync: true, testName: undefined as string | undefined }));
 const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   getPlexDataConnection: vi.fn(),
@@ -28,6 +29,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/server/db", () => ({ db: () => testDb.current }));
+vi.mock("@/server/env", () => ({
+  env: () => ({ MEDIAHUB_PLEX_FOCUS_SYNC: envState.focusSync, MEDIAHUB_PLEX_FOCUS_TEST_NAME: envState.testName }),
+}));
 vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataConnection: mocks.getPlexDataConnection }));
 vi.mock("@/server/plex/watched", () => ({ getWatchedIndex: mocks.getWatchedIndex }));
@@ -114,6 +118,8 @@ beforeEach(() => {
     .run();
   testDb.current = instance;
   resetFocusSyncForTests();
+  envState.focusSync = true;
+  envState.testName = undefined;
 
   mocks.getPlexDataConnection.mockReturnValue(CONNECTION);
   mocks.getServerIdentity.mockResolvedValue(SERVER_ID);
@@ -174,7 +180,7 @@ describe("the first sync", () => {
       title: "Movie Focus",
       sectionKey: "1",
     });
-    expect(JSON.parse(storedValue()!)).toEqual({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "900", setUp: true });
+    expect(JSON.parse(storedValue()!)).toEqual({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "900", setUp: true, testName: null });
     expect(mocks.setCollectionCustomOrder).toHaveBeenCalledWith(SERVER, TOKEN, "900");
     expect(mocks.pinCollectionToHome).toHaveBeenCalledWith(SERVER, TOKEN, "1", "900");
 
@@ -205,7 +211,7 @@ describe("set-up retry", () => {
   it("keeps the collection unfinished when the pin fails, and the next sync pins it without creating another", async () => {
     mocks.pinCollectionToHome.mockRejectedValueOnce(new PlexRequestError("Plex hub pin request failed: HTTP 500", "http", 500));
     await syncFocusToPlex("movie");
-    expect(JSON.parse(storedValue()!)).toEqual({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "900", setUp: false });
+    expect(JSON.parse(storedValue()!)).toEqual({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "900", setUp: false, testName: null });
     expect(mocks.addCollectionItem).not.toHaveBeenCalled();
 
     mocks.getCollectionItemKeys.mockResolvedValueOnce([]).mockResolvedValueOnce(["11", "12"]);
@@ -406,5 +412,84 @@ describe("requests", () => {
     syncFocusIfStale();
     // The series kind was just requested, so only the movie kind is asked for.
     expect(mocks.after).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("sync turned off", () => {
+  it.each(["movie", "series"] as const)("makes no Plex or Arr call and writes nothing for %s", async (kind) => {
+    envState.focusSync = false;
+    addToFocus("series", 9, "u1");
+    await syncFocusToPlex(kind);
+    expect(mocks.getPlexDataConnection).not.toHaveBeenCalled();
+    expect(mocks.getServerIdentity).not.toHaveBeenCalled();
+    expect(mocks.listMovies).not.toHaveBeenCalled();
+    expect(mocks.listSeries).not.toHaveBeenCalled();
+    expect(mocks.getWatchedIndex).not.toHaveBeenCalled();
+    expect(mocks.createCollection).not.toHaveBeenCalled();
+    expect(mocks.deleteCollection).not.toHaveBeenCalled();
+    expect(storedValue(kind === "movie" ? MOVIE_KEY : "plex.focusCollection.series")).toBeUndefined();
+  });
+
+  it("does not run a sync after a change, and records no request time", () => {
+    vi.useFakeTimers();
+    envState.focusSync = false;
+    requestFocusSync("movie");
+    syncFocusIfStale();
+    expect(mocks.after).not.toHaveBeenCalled();
+
+    // Once sync is back on, the first visit asks for both kinds: no request time was recorded while it was off.
+    envState.focusSync = true;
+    syncFocusIfStale();
+    expect(mocks.after).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("test name", () => {
+  it("titles the collections with the test name, sets the custom order, and does not pin them to Home", async () => {
+    envState.testName = "dev";
+    await syncFocusToPlex("movie");
+    expect(mocks.createCollection).toHaveBeenCalledWith(SERVER, TOKEN, { kind: "movie", title: "Movie Focus (dev)", sectionKey: "1" });
+    expect(mocks.setCollectionCustomOrder).toHaveBeenCalledWith(SERVER, TOKEN, "900");
+    expect(mocks.pinCollectionToHome).not.toHaveBeenCalled();
+    expect(JSON.parse(storedValue()!)).toEqual({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "900", setUp: true, testName: "dev" });
+    expect(mocks.addCollectionItem.mock.calls.map((call) => call[2].itemKey)).toEqual(["11", "12"]);
+  });
+
+  it("never edits the real collection from a copy with a test name, and makes its own instead", async () => {
+    storedRecord({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "800", setUp: true, testName: null });
+    envState.testName = "dev";
+    await syncFocusToPlex("movie");
+    expect(mocks.getCollectionItemKeys).not.toHaveBeenCalledWith(SERVER, TOKEN, "800");
+    expect(mocks.removeCollectionItem).not.toHaveBeenCalledWith(SERVER, TOKEN, "800", expect.anything());
+    expect(mocks.deleteCollection).not.toHaveBeenCalled();
+    expect(mocks.createCollection).toHaveBeenCalledWith(SERVER, TOKEN, { kind: "movie", title: "Movie Focus (dev)", sectionKey: "1" });
+    expect(JSON.parse(storedValue()!)).toMatchObject({ collectionKey: "900", testName: "dev" });
+  });
+
+  it("never adopts a test collection once the test name is removed, and makes a real, pinned one", async () => {
+    storedRecord({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "800", setUp: true, testName: "dev" });
+    await syncFocusToPlex("movie");
+    expect(mocks.getCollectionItemKeys).not.toHaveBeenCalledWith(SERVER, TOKEN, "800");
+    expect(mocks.createCollection).toHaveBeenCalledWith(SERVER, TOKEN, { kind: "movie", title: "Movie Focus", sectionKey: "1" });
+    expect(mocks.pinCollectionToHome).toHaveBeenCalledWith(SERVER, TOKEN, "1", "900");
+    expect(JSON.parse(storedValue()!)).toMatchObject({ collectionKey: "900", testName: null });
+  });
+
+  it("reads a record saved before the test name was stored as the real collection", async () => {
+    storedRecord({ serverId: SERVER_ID, sectionKey: "1", collectionKey: "800", setUp: true });
+    mocks.getCollectionItemKeys.mockResolvedValueOnce(["11", "12"]).mockResolvedValueOnce(["11", "12"]);
+    await syncFocusToPlex("movie");
+    expect(mocks.createCollection).not.toHaveBeenCalled();
+    expect(mocks.getCollectionItemKeys).toHaveBeenCalledWith(SERVER, TOKEN, "800");
+  });
+
+  it("titles the series collection with the test name too", async () => {
+    envState.testName = "dev";
+    addToFocus("series", 9, "u1");
+    mocks.listSeries.mockResolvedValue({ rows: [{ id: 9, tvdbId: 555 }], profiles: [] });
+    mocks.getWatchedIndex.mockResolvedValue(watchedIndex({}, { 555: [{ sectionKey: "2", ratingKey: "77" }] }));
+    await syncFocusToPlex("series");
+    expect(mocks.createCollection).toHaveBeenCalledWith(SERVER, TOKEN, { kind: "series", title: "TV Focus (dev)", sectionKey: "2" });
+    expect(mocks.pinCollectionToHome).not.toHaveBeenCalled();
   });
 });
