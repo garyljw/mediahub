@@ -42,13 +42,43 @@ export type HomeItem = {
 
 export type HomeKind = "all" | "movie" | "series";
 
-export type HomeFilter = { kind: HomeKind; search: string };
+/** The watch-status filter: "any" keeps every item, otherwise one Plex watched state. */
+export type HomeWatchFilter = "any" | WatchedState;
 
-/** Keeps the items of one kind (or all kinds) that match the search. An empty search matches everything. */
+/** Chip labels for the watch-status filter, in display order. */
+export const WATCH_FILTER_CHIPS: { value: HomeWatchFilter; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "unwatched", label: "Unwatched" },
+  { value: "partial", label: "Partly watched" },
+  { value: "watched", label: "Watched" },
+];
+
+export type HomeFilter = {
+  kind: HomeKind;
+  search: string;
+  /**
+   * Missing or "any" keeps every item. Otherwise only items with that Plex state; items Plex doesn't know (watched null)
+   * never match a specific state.
+   */
+  watched?: HomeWatchFilter;
+};
+
+/**
+ * Keeps the items of one kind (or all kinds) that match the search and the watch-status filter. An empty search matches
+ * everything, and a missing or "any" watch filter keeps every watched state.
+ */
 export function filterHomeItems(items: HomeItem[], filter: HomeFilter): HomeItem[] {
   return items.filter(
-    (item) => (filter.kind === "all" || item.kind === filter.kind) && matchesTitleOrYear(item, filter.search),
+    (item) =>
+      (filter.kind === "all" || item.kind === filter.kind) &&
+      matchesTitleOrYear(item, filter.search) &&
+      (filter.watched === undefined || filter.watched === "any" || item.watched === filter.watched),
   );
+}
+
+/** True when at least one title has a Plex watched state, i.e. Plex is connected and answered. */
+export function hasWatchData(items: HomeItem[]): boolean {
+  return items.some((item) => item.watched !== null);
 }
 
 // Movies sort before series when everything else ties.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareHomeItems, filterHomeItems, type HomeItem } from "./home-items";
+import { compareHomeItems, filterHomeItems, hasWatchData, type HomeItem } from "./home-items";
 
 function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: HomeItem["kind"] }): HomeItem {
   return {
@@ -61,6 +61,72 @@ describe("filterHomeItems", () => {
   it("matches part of a year", () => {
     // "202" is inside both 2021 and 2024.
     expect(titles(filterHomeItems(items, { kind: "all", search: "202" }))).toEqual(["Harbour Watch", "Night Circuit"]);
+  });
+});
+
+describe("filterHomeItems watch status", () => {
+  const watchItems: HomeItem[] = [
+    item({ kind: "movie", id: 1, title: "Harbour Lights", watched: "unwatched" }),
+    item({ kind: "series", id: 2, title: "Harbour Watch", watched: "partial" }),
+    item({ kind: "movie", id: 3, title: "Night Circuit", watched: "watched" }),
+    item({ kind: "series", id: 4, title: "Glass Orchard", watched: null }),
+    item({ kind: "movie", id: 5, title: "Harbour Fields", watched: "watched" }),
+  ];
+
+  it("keeps everything for any, and when the watch filter is omitted", () => {
+    expect(filterHomeItems(watchItems, { kind: "all", search: "", watched: "any" })).toHaveLength(5);
+    expect(filterHomeItems(watchItems, { kind: "all", search: "" })).toHaveLength(5);
+  });
+
+  it("keeps only items in each specific watched state", () => {
+    expect(titles(filterHomeItems(watchItems, { kind: "all", search: "", watched: "unwatched" }))).toEqual([
+      "Harbour Lights",
+    ]);
+    expect(titles(filterHomeItems(watchItems, { kind: "all", search: "", watched: "partial" }))).toEqual([
+      "Harbour Watch",
+    ]);
+    expect(titles(filterHomeItems(watchItems, { kind: "all", search: "", watched: "watched" }))).toEqual([
+      "Night Circuit",
+      "Harbour Fields",
+    ]);
+  });
+
+  it("excludes items Plex doesn't know from a specific state", () => {
+    const withNull = filterHomeItems(watchItems, { kind: "all", search: "", watched: "unwatched" });
+    expect(titles(withNull)).not.toContain("Glass Orchard");
+    expect(titles(filterHomeItems(watchItems, { kind: "all", search: "glass", watched: "watched" }))).toEqual([]);
+  });
+
+  it("combines the watch filter with the kind and the search", () => {
+    expect(titles(filterHomeItems(watchItems, { kind: "movie", search: "", watched: "watched" }))).toEqual([
+      "Night Circuit",
+      "Harbour Fields",
+    ]);
+    expect(titles(filterHomeItems(watchItems, { kind: "series", search: "", watched: "watched" }))).toEqual([]);
+    expect(titles(filterHomeItems(watchItems, { kind: "all", search: "harbour", watched: "watched" }))).toEqual([
+      "Harbour Fields",
+    ]);
+  });
+});
+
+describe("hasWatchData", () => {
+  it("is false for an empty list", () => {
+    expect(hasWatchData([])).toBe(false);
+  });
+
+  it("is false when every title has a null watched state", () => {
+    expect(hasWatchData([item({ kind: "movie", id: 1, title: "A" }), item({ kind: "series", id: 2, title: "B" })])).toBe(
+      false,
+    );
+  });
+
+  it("is true when one title has a watched state", () => {
+    expect(
+      hasWatchData([
+        item({ kind: "movie", id: 1, title: "A" }),
+        item({ kind: "series", id: 2, title: "B", watched: "unwatched" }),
+      ]),
+    ).toBe(true);
   });
 });
 

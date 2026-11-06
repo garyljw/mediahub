@@ -10,7 +10,7 @@ MediaHub is a hobby project. It started as an experiment in building a web app w
 - **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release.
 - **Queue:** what is downloading, with remove and force import.
 - **Calendar and History** for both Radarr and Sonarr.
-- **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes.
+- **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes. On Home, the **Any / Unwatched / Partly watched / Watched** chips show only titles in that state. Titles that aren't in Plex appear only under **Any**.
 - **Two roles:**
   - *Admins* can do everything. They sign in with the Plex account that owns your Plex server.
   - *Requesters* can browse, search, add (with the admin's defaults), start release searches, manage the Focus lists, and view the queue, calendar and history. They can't delete, edit, change monitoring or open Settings. They sign in with a name or email and password.
