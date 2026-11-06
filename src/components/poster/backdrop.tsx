@@ -30,7 +30,7 @@ export function Backdrop({ src }: { src: string }) {
         onError={onError}
         className={cn(
           "absolute inset-0 size-full object-cover transition-opacity duration-300 motion-reduce:transition-none",
-          loaded ? "opacity-40" : "opacity-0",
+          loaded ? "opacity-20" : "opacity-0",
         )}
       />
       <div aria-hidden className="absolute inset-0 bg-linear-to-t from-background via-background/80 to-background/30" />
