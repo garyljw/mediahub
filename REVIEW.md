@@ -23,6 +23,15 @@ These are covered by lint, so don't report them by hand:
 - every `(app)` page starting with `await requirePageUser(...)` and allowing the roles listed in `PAGE_ROLES`, which `src/app/(app)/pages-auth.test.ts` checks. That test catches a forgotten or wrong check, not a deliberate bypass of the test itself, such as shadowing or aliasing the name. Don't report ways to fool it. The guard targets mistakes; a deliberate bypass would stand out in the diff under review.
 - every server action anywhere in `src/` (a `"use server"` file export) starting with `await requireRole(...)`, or the `try` form whose catch returns or throws, with `PUBLIC_ACTIONS` (sign-out only) as the one exception, and no inline `"use server"` functions, which `src/app/server-actions-auth.test.ts` checks. The same limits as the pages guard above apply.
 
+## New upstream calls
+If the diff calls an upstream endpoint, or a parameter of one, that MediaHub didn't use before (Radarr, Sonarr, Plex, plex.tv, TMDB/TVDB), check that the brief or the PR's "Upstream calls" section lists each call, the documentation read for it, and whether it was confirmed against a live server. Report as **Important**:
+- a new call missing from that list;
+- a call in the code that differs from the listed one (path, method, parameters);
+- a call the list marks as not confirmed live, unless the list notes that Gary agreed;
+- real hosts, IPs or server ids in the list instead of placeholders.
+
+If the review has neither the brief nor the PR description, read the PR with `gh pr view`. If there's no PR yet, say in the summary that this check couldn't be done.
+
 ## How to report
 - **Every finding needs evidence.** Give a file and line, and a concrete scenario (input or state, then the wrong outcome). Don't guess from a function name or a file name.
 - **Tag each finding:**
