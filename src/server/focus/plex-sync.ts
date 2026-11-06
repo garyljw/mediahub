@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { FOCUS_KINDS, FOCUS_NAME, type FocusKind } from "@/components/focus/focus-kinds";
+import { env } from "@/server/env";
 import { listMovies } from "@/server/arr/movies";
 import { listSeries } from "@/server/arr/series";
 import { ArrRequestError } from "@/server/arr/request";
@@ -40,6 +41,10 @@ const StoredCollection = z.object({
   sectionKey: KEY,
   collectionKey: KEY,
   setUp: z.boolean(),
+  // The test name the collection was made under (MEDIAHUB_PLEX_FOCUS_TEST_NAME), or null for the real collection. A
+  // record saved before this field existed is a real one. A collection made under another name is not used (see
+  // readStored), so a test copy never edits the real collection and the real copy never adopts a test one.
+  testName: z.string().nullable().default(null),
 });
 type StoredCollection = z.infer<typeof StoredCollection>;
 
@@ -54,12 +59,31 @@ const lastRequested = new Map<FocusKind, number>();
 type RunState = { running: boolean; again: boolean };
 const runs = new Map<FocusKind, RunState>();
 
+/**
+ * False when this copy's settings turn Focus sync off (MEDIAHUB_PLEX_FOCUS_SYNC=false). Then nothing is requested, read
+ * or written in Plex. env() is read once per process, so a change needs a restart.
+ */
+function syncEnabled(): boolean {
+  return env().MEDIAHUB_PLEX_FOCUS_SYNC;
+}
+
+/**
+ * The title of a new collection. A test name tells a second copy's collections apart, e.g. "TV Focus (dev)". The title
+ * is only set when the collection is made. A change of test name makes a new collection instead (see readStored).
+ */
+function collectionTitle(kind: FocusKind, testName: string | null): string {
+  return testName ? `${FOCUS_NAME[kind]} (${testName})` : FOCUS_NAME[kind];
+}
+
 function settingKey(kind: FocusKind): string {
   return `plex.focusCollection.${kind}`;
 }
 
-/** The stored collection for this kind, or null when none is stored or it belongs to a different server. */
-function readStored(kind: FocusKind, serverId: string): StoredCollection | null {
+/**
+ * The stored collection for this kind, or null when none is stored, it belongs to a different server, or it was made
+ * under a different test name. Null means a new collection is made; the other one is left in Plex untouched.
+ */
+function readStored(kind: FocusKind, serverId: string, testName: string | null): StoredCollection | null {
   const raw = db().select().from(setting).where(eq(setting.key, settingKey(kind))).get()?.value;
   if (!raw) return null;
   let json: unknown;
@@ -69,7 +93,7 @@ function readStored(kind: FocusKind, serverId: string): StoredCollection | null 
     return null;
   }
   const parsed = StoredCollection.safeParse(json);
-  if (!parsed.success || parsed.data.serverId !== serverId) return null;
+  if (!parsed.success || parsed.data.serverId !== serverId || parsed.data.testName !== testName) return null;
   return parsed.data;
 }
 
@@ -112,12 +136,15 @@ function sameKeys(actual: readonly string[], wanted: readonly string[]): boolean
  * else) for the caller to log. Writes happen only after the server identity check passes.
  */
 async function syncOnce(kind: FocusKind): Promise<"done" | "skipped"> {
+  // Checked first, so a copy with sync off reads and writes nothing, here or in Plex.
+  if (!syncEnabled()) return "done";
+  const testName = env().MEDIAHUB_PLEX_FOCUS_TEST_NAME ?? null;
   const connection = getPlexDataConnection();
   if (!connection) return "done";
   const server: ServerConnection = { url: connection.url, pinAddress: connection.pinAddress };
   const token = connection.token;
 
-  let stored = readStored(kind, connection.serverId);
+  let stored = readStored(kind, connection.serverId, testName);
   const ids = listFocusIds(kind);
   if (ids.length === 0 && stored === null) return "done";
 
@@ -164,11 +191,11 @@ async function syncOnce(kind: FocusKind): Promise<"done" | "skipped"> {
     if (plan === null) return "done";
     const collectionKey = await createCollection(server, token, {
       kind: kind === "movie" ? "movie" : "series",
-      title: FOCUS_NAME[kind],
+      title: collectionTitle(kind, testName),
       sectionKey: plan.sectionKey,
     });
     // Saved at once, so a later failure in this sync doesn't leave a collection MediaHub has forgotten.
-    stored = { serverId: connection.serverId, sectionKey: plan.sectionKey, collectionKey, setUp: false };
+    stored = { serverId: connection.serverId, sectionKey: plan.sectionKey, collectionKey, setUp: false, testName };
     saveStored(kind, stored);
     collection = { collectionKey, current: [] };
   }
@@ -176,7 +203,8 @@ async function syncOnce(kind: FocusKind): Promise<"done" | "skipped"> {
   // Custom order and the Home pin, for a new collection or one whose set-up failed part way in an earlier sync.
   if (stored && !stored.setUp) {
     await setCollectionCustomOrder(server, token, stored.collectionKey);
-    await pinCollectionToHome(server, token, stored.sectionKey, stored.collectionKey);
+    // A test-name collection stays unpinned, so it doesn't sit on Home beside the real lists.
+    if (!testName) await pinCollectionToHome(server, token, stored.sectionKey, stored.collectionKey);
     saveStored(kind, { ...stored, setUp: true });
   }
 
@@ -248,6 +276,7 @@ export async function syncFocusToPlex(kind: FocusKind): Promise<void> {
 
 /** Asks for a sync after a Focus change. The work runs after the response, so the change isn't held up by Plex. */
 export function requestFocusSync(kind: FocusKind): void {
+  if (!syncEnabled()) return;
   lastRequested.set(kind, Date.now());
   after(() => syncFocusToPlex(kind));
 }
@@ -258,6 +287,7 @@ export function requestFocusSync(kind: FocusKind): void {
  * in Plex since the last sync are added.
  */
 export function syncFocusIfStale(): void {
+  if (!syncEnabled()) return;
   const now = Date.now();
   for (const kind of FOCUS_KINDS) {
     const last = lastRequested.get(kind);

@@ -13,6 +13,9 @@ How changes are planned, reviewed and merged is in [CLAUDE.md](../CLAUDE.md) and
 
 Sign-up is disabled. Admins come from Plex setup, and requesters come from Settings → Users or the script in "Managing users from a dev checkout" below.
 
+## Focus sync in a dev copy
+The dev copy shares Gary's Plex server with the installed copy, so it must not write the same Focus collections. In `.env.local`, either set `MEDIAHUB_PLEX_FOCUS_SYNC=false` to leave Plex alone, or set `MEDIAHUB_PLEX_FOCUS_TEST_NAME=dev` to sync to separate "Movie Focus (dev)" and "TV Focus (dev)" collections, which aren't pinned to Home. Restart `npm run dev` after changing either.
+
 ## Self-contained package
 `npm run package` builds `dist/mediahub/`, a folder that runs MediaHub with only a Node binary: no repo, no `npm install`, no dev tools. Copy it anywhere and run it with your config file:
 
