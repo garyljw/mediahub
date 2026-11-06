@@ -11,11 +11,14 @@ export const WATCHED_LABEL: Record<WatchedState, string> = {
   watched: "Watched",
 };
 
-/** The banner colour for each watched state. Amber gets black text for contrast. */
+/**
+ * The banner and badge colour for each watched state. Unwatched gets the brand gradient (the state worth noticing),
+ * partly watched the gradient's purple end, and watched steps back to a dim translucent bar.
+ */
 export const WATCHED_CLASS: Record<WatchedState, string> = {
-  unwatched: "bg-emerald-600 text-white",
-  partial: "bg-amber-500 text-black",
-  watched: "bg-red-600 text-white",
+  unwatched: "bg-brand text-white",
+  partial: "bg-[var(--brand-to)] text-white",
+  watched: "bg-black/60 text-white/80 backdrop-blur-sm",
 };
 
 /** One tile on the Home grid. `key` is needed because movie and series ids can collide. */
