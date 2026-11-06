@@ -34,6 +34,8 @@ export type HomeItem = {
   href: string;
   posterSrc: string | null;
   badge: { label: string; className: string };
+  /** True when there is something to watch: a movie with its file, or a series with at least one episode file. The tile shows the poster in greyscale otherwise. */
+  onDisk: boolean;
   /** The Plex watched state, or null when the item isn't in Plex (or Plex isn't connected). */
   watched: WatchedState | null;
   /** True when the title is in its Focus list (Movie Focus for movies, TV Focus for series). */

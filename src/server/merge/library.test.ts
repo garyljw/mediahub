@@ -184,3 +184,24 @@ describe("toHomeItems: Focus membership", () => {
     expect(items.every((item) => item.inFocus === false)).toBe(true);
   });
 });
+
+describe("toHomeItems: on disk", () => {
+  const movieWith = (status: MovieRow["status"]) => toHomeItems([{ ...movies[0], status }], [], null)[0];
+  const seriesWith = (episodeFileCount: number) =>
+    toHomeItems([], [{ ...series[0], episodeFileCount }], null)[0];
+
+  it("is true for a downloaded movie and false for a missing or unreleased one", () => {
+    expect(movieWith("downloaded").onDisk).toBe(true);
+    expect(movieWith("missing").onDisk).toBe(false);
+    expect(movieWith("unreleased").onDisk).toBe(false);
+  });
+
+  it("is false for a series with no episode files", () => {
+    expect(seriesWith(0).onDisk).toBe(false);
+  });
+
+  it("is true for a series with at least one episode file, even when incomplete", () => {
+    expect(seriesWith(1).onDisk).toBe(true);
+    expect(seriesWith(3).onDisk).toBe(true);
+  });
+});
