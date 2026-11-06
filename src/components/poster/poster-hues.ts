@@ -13,7 +13,7 @@ const COLOURFUL_SHARE_MIN = 0.08;
  * Or this share of vivid pixels: a mostly grey poster with one strong accent (a blue eye, a red logo) still gets a wash
  * in the accent's colour.
  */
-const VIVID_CHROMA_MIN = 0.1;
+const VIVID_CHROMA_MIN = 0.06;
 const VIVID_SHARE_MIN = 0.01;
 const BINS = 24;
 const BIN_DEGREES = 360 / BINS;
@@ -71,7 +71,7 @@ function circularMean(samples: { h: number; w: number }[]): number {
  * colourful when its chroma is at least 0.04 and its lightness is between 0.2 and 0.92. Colourful pixels go into 24
  * hue bins of 15 degrees, weighted by chroma. h1 is the mean hue of the heaviest bin. h2 is the mean hue of the
  * heaviest bin at least 45 degrees away from h1, or h1 + 40 when no bin qualifies. Returns null when fewer than 8% of
- * the opaque pixels are colourful and fewer than 1% are vivid (chroma of at least 0.1).
+ * the opaque pixels are colourful and fewer than 1% are vivid (chroma of at least 0.06).
  */
 export function pickPosterHues(data: Uint8ClampedArray): PosterHues | null {
   let opaque = 0;
