@@ -6,6 +6,7 @@ import { QueueView } from "@/components/queue/queue-view";
 import type { QueueFailures } from "@/components/queue/queue-rows";
 
 export const metadata = { title: "Queue" };
+// The page waits for Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 /**

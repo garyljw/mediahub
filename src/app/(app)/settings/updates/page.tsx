@@ -3,6 +3,7 @@ import { getUpdatesView } from "@/server/updater/app-view";
 import { UpdateCheckButton } from "@/components/settings/update-check-button";
 
 export const metadata = { title: "Updates" };
+// The page reads the saved update state before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 export default async function UpdatesPage() {

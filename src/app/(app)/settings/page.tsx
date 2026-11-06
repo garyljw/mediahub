@@ -3,6 +3,7 @@ import { requirePageUser } from "@/server/authz";
 import { getPlexAdminConfig } from "@/server/plex/admin-config";
 
 export const metadata = { title: "Settings" };
+// The page reads its settings before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 const SECTIONS = [

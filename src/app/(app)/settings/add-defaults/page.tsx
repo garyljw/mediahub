@@ -13,6 +13,7 @@ import { getMovieAddDefaults, getSeriesAddDefaults } from "@/server/settings/add
 import { AddDefaultsForm, type DefaultsFolder, type DefaultsProfile } from "@/components/settings/add-defaults-form";
 
 export const metadata = { title: "Add defaults" };
+// The page waits for Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 const NAMES: Record<ArrApp, string> = { radarr: "Radarr", sonarr: "Sonarr" };

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { HomeGrid } from "@/components/home/home-grid";
 
 export const metadata = { title: "Home" };
-// Blocking route: the page waits for both apps before rendering, so no Suspense fallback is needed.
+// The page waits for Radarr, Sonarr and Plex before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 export default async function HomePage() {

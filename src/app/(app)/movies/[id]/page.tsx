@@ -14,7 +14,7 @@ import { getMovieDetail, type MovieDetailPage } from "@/server/arr/movie-detail"
 import type { MovieCredits } from "@/server/arr/movie-credits";
 
 export const metadata = { title: "Movies" };
-// Blocking route: the page waits for Radarr before rendering, so no Suspense fallback is needed.
+// The page waits for Radarr before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 // Plain digits only, and a positive id. Anything else is not a movie, so it gets the not-found page.

@@ -4,6 +4,7 @@ import { listUsers } from "@/server/users";
 import { UsersManager, type UserRow } from "@/components/settings/users-manager";
 
 export const metadata = { title: "Users" };
+// The page waits for the user list before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 export default async function UsersPage() {

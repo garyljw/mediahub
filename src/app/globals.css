@@ -111,6 +111,40 @@
   box-shadow: 0 6px 22px -6px var(--glow);
 }
 
+/* Loading placeholder: a muted block with a light band sweeping across it. No sweep when the user prefers reduced motion. */
+@utility skeleton {
+  background: var(--muted);
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--background) 55%, transparent),
+      transparent
+    );
+    animation: skeleton-shimmer 1.3s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      animation: none;
+      display: none;
+    }
+  }
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @layer base {
   * {
     border-color: var(--border);

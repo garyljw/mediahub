@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { formatDay, formatGridDay, formatRange } from "@/components/library/format";
 
 export const metadata = { title: "Calendar" };
-// Blocking route: the page waits for Radarr and Sonarr before rendering, so no Suspense fallback is needed.
+// The page waits for Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 const VIEW_SCHEMA = z.enum(CALENDAR_VIEWS);

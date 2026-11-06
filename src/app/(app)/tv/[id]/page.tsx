@@ -36,7 +36,7 @@ import { ArrRequestError } from "@/server/arr/request";
 import { getSeriesDetail, type SeasonRow, type SeriesDetail, type SeriesDetailPage } from "@/server/arr/series-detail";
 
 export const metadata = { title: "TV" };
-// Blocking route: the page waits for Sonarr before rendering, so no Suspense fallback is needed.
+// The page waits for Sonarr and Plex before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 // Plain digits only, and a positive id. Anything else is not a series, so it gets the not-found page.
