@@ -64,8 +64,18 @@ describe("pickPosterHues", () => {
     expect(circularDistance(hues!.h1, RED_HUE)).toBeLessThanOrEqual(5);
   });
 
-  it("returns null when only 5% of the opaque pixels are colourful", () => {
-    expect(pickPosterHues(two(95, [128, 128, 128, 255], 5, [255, 0, 0, 255]))).toBeNull();
+  it("returns null when only 5% of the opaque pixels are colourful and none are vivid", () => {
+    expect(pickPosterHues(two(95, [128, 128, 128, 255], 5, [150, 118, 118, 255]))).toBeNull();
+  });
+
+  it("gives the accent's hue for a grey poster with a small vivid blue accent", () => {
+    const hues = pickPosterHues(two(985, [128, 128, 128, 255], 15, [0, 0, 255, 255]));
+    expect(hues).not.toBeNull();
+    expect(circularDistance(hues!.h1, BLUE_HUE)).toBeLessThanOrEqual(5);
+  });
+
+  it("returns null when the vivid accent is under 1% of the poster", () => {
+    expect(pickPosterHues(two(995, [128, 128, 128, 255], 5, [0, 0, 255, 255]))).toBeNull();
   });
 
   it("returns null when there are no opaque pixels", () => {

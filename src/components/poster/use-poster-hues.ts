@@ -23,12 +23,13 @@ export function usePosterHues(src: string | null): PosterHues | null {
         img.src = src;
         await img.decode();
         const canvas = document.createElement("canvas");
-        canvas.width = 24;
-        canvas.height = 36;
+        // 48x72 keeps small accents (an eye, a logo) as more than a pixel or two.
+        canvas.width = 48;
+        canvas.height = 72;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0, 24, 36);
-          hues = pickPosterHues(ctx.getImageData(0, 0, 24, 36).data);
+          ctx.drawImage(img, 0, 0, 48, 72);
+          hues = pickPosterHues(ctx.getImageData(0, 0, 48, 72).data);
         }
       } catch {
         hues = null;

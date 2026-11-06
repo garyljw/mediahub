@@ -9,6 +9,12 @@ const L_MIN = 0.2;
 const L_MAX = 0.92;
 /** A poster needs at least this share of colourful pixels, or it gets no wash (black-and-white or muted). */
 const COLOURFUL_SHARE_MIN = 0.08;
+/**
+ * Or this share of vivid pixels: a mostly grey poster with one strong accent (a blue eye, a red logo) still gets a wash
+ * in the accent's colour.
+ */
+const VIVID_CHROMA_MIN = 0.1;
+const VIVID_SHARE_MIN = 0.01;
 const BINS = 24;
 const BIN_DEGREES = 360 / BINS;
 /** The second hue must sit at least this far (circular distance) from the first. */
@@ -65,10 +71,11 @@ function circularMean(samples: { h: number; w: number }[]): number {
  * colourful when its chroma is at least 0.04 and its lightness is between 0.2 and 0.92. Colourful pixels go into 24
  * hue bins of 15 degrees, weighted by chroma. h1 is the mean hue of the heaviest bin. h2 is the mean hue of the
  * heaviest bin at least 45 degrees away from h1, or h1 + 40 when no bin qualifies. Returns null when fewer than 8% of
- * the opaque pixels are colourful.
+ * the opaque pixels are colourful and fewer than 1% are vivid (chroma of at least 0.1).
  */
 export function pickPosterHues(data: Uint8ClampedArray): PosterHues | null {
   let opaque = 0;
+  let vivid = 0;
   const colourful: { h: number; w: number; bin: number }[] = [];
 
   for (let i = 0; i + 3 < data.length; i += 4) {
@@ -77,10 +84,12 @@ export function pickPosterHues(data: Uint8ClampedArray): PosterHues | null {
     const { l, c, h } = srgbToOklch(data[i], data[i + 1], data[i + 2]);
     if (c >= CHROMA_MIN && l >= L_MIN && l <= L_MAX) {
       colourful.push({ h, w: c, bin: Math.floor(h / BIN_DEGREES) % BINS });
+      if (c >= VIVID_CHROMA_MIN) vivid++;
     }
   }
 
-  if (opaque === 0 || colourful.length < COLOURFUL_SHARE_MIN * opaque) return null;
+  if (opaque === 0) return null;
+  if (colourful.length < COLOURFUL_SHARE_MIN * opaque && vivid < VIVID_SHARE_MIN * opaque) return null;
 
   const weights = new Array<number>(BINS).fill(0);
   for (const p of colourful) weights[p.bin] += p.w;
