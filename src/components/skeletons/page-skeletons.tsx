@@ -177,7 +177,7 @@ export function FocusSkeleton({ kind }: { kind: FocusKind }) {
       <LoadingStatus />
       <h1 className="text-2xl font-semibold tracking-tight">{FOCUS_NAME[kind]}</h1>
       <Skeleton className="h-9 w-full sm:max-w-sm" />
-      <PosterGridSkeleton count={12} />
+      <PosterGridSkeleton count={6} />
     </div>
   );
 }
