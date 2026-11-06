@@ -4,7 +4,7 @@ import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-opti
 import { AddSearch } from "@/components/add/add-search";
 
 export const metadata = { title: "Add" };
-// Blocking route: an admin's page waits for Radarr and Sonarr before rendering, so no Suspense fallback is needed.
+// The page waits for Radarr and Sonarr (admins only) before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 export default async function AddPage() {

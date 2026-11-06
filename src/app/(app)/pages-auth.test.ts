@@ -77,7 +77,7 @@ function startsWithPageCheck(source: string): boolean {
 // The role policy for every page. A new page must be added here, so its roles are a deliberate choice.
 const BOTH = ["admin", "requester"];
 const PAGE_ROLES: Record<string, string[]> = {
-  "page.tsx": BOTH,
+  "(home)/page.tsx": BOTH,
   "add/page.tsx": BOTH,
   "movies/page.tsx": BOTH,
   "tv/page.tsx": BOTH,

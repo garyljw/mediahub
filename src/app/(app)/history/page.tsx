@@ -12,6 +12,7 @@ import {
 } from "@/components/history/history-params";
 
 export const metadata = { title: "History" };
+// The page waits for Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 export default async function HistoryPage({

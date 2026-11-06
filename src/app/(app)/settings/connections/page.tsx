@@ -6,6 +6,7 @@ import { ConnectionForm } from "@/components/settings/connection-form";
 import { PlexConnectionForm } from "@/components/settings/plex-connection-form";
 
 export const metadata = { title: "Connections" };
+// The page reads the saved connections before rendering; loading.tsx shows a placeholder meanwhile.
 export const instant = false;
 
 const APPS: { app: ArrApp; name: string }[] = [
