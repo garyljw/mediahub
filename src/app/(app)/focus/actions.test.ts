@@ -18,7 +18,10 @@ const mocks = vi.hoisted(() => ({
   addSeries: vi.fn(),
   getSeriesAddDefaults: vi.fn(),
   titleSearch: vi.fn(),
+  requestFocusSync: vi.fn(),
 }));
+
+vi.mock("@/server/focus/plex-sync", () => ({ requestFocusSync: mocks.requestFocusSync }));
 
 vi.mock("@/server/authz", () => {
   class AuthzError extends Error {
@@ -479,5 +482,54 @@ describe("addNewToFocus", () => {
     });
     expect(mocks.addMovie).not.toHaveBeenCalled();
     expect(mocks.addToFocus).not.toHaveBeenCalled();
+  });
+});
+
+describe("Plex sync requests", () => {
+  it("asks for a sync after a successful add to the list", async () => {
+    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
+  });
+
+  it("asks for a sync after a remove that removed rows, but not one that removed nothing", async () => {
+    mocks.removeFromFocus.mockReturnValueOnce(2);
+    expect(await removeFocusItems({ kind: "series", ids: [1, 2] })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
+
+    mocks.requestFocusSync.mockClear();
+    mocks.removeFromFocus.mockReturnValueOnce(0);
+    expect(await removeFocusItems({ kind: "series", ids: [9] })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
+  });
+
+  it("asks for a sync after a reorder", async () => {
+    // An earlier test made reorderFocus throw; clearAllMocks keeps that implementation, so reset it here.
+    mocks.reorderFocus.mockReset();
+    expect(await reorderFocusItems({ kind: "movie", ids: [3, 1] })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
+  });
+
+  it("asks for a sync after a title is added to the list by add-new", async () => {
+    expect(await addNewToFocus({ kind: "series", add: { tvdbId: 81189 } })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
+  });
+
+  it("does not ask for a sync when the add-new title reached the app but not the list", async () => {
+    mocks.addToFocus.mockImplementation(() => {
+      throw new FocusLimitError();
+    });
+    expect((await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).ok).toBe(false);
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for a sync when the change is refused, invalid or stale", async () => {
+    mocks.requireRole.mockRejectedValueOnce(new AuthzError(403));
+    await addFocusItem({ kind: "movie", id: 4 });
+    await reorderFocusItems({ kind: "movie", ids: [1, 1] });
+    mocks.reorderFocus.mockImplementationOnce(() => {
+      throw new FocusOrderError();
+    });
+    await reorderFocusItems({ kind: "movie", ids: [1] });
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 });

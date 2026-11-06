@@ -7,7 +7,21 @@ const mocks = vi.hoisted(() => ({ httpsRequest: vi.fn() }));
 vi.mock("node:https", () => ({ request: mocks.httpsRequest }));
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => CLIENT_ID }));
 
-import { getLibrarySections, getSectionItems, getServerIdentity, getShowEpisodes, pinnedLookup } from "./server";
+import {
+  addCollectionItem,
+  createCollection,
+  deleteCollection,
+  getCollectionItemKeys,
+  getLibrarySections,
+  getSectionItems,
+  getServerIdentity,
+  getShowEpisodes,
+  moveCollectionItem,
+  pinCollectionToHome,
+  pinnedLookup,
+  removeCollectionItem,
+  setCollectionCustomOrder,
+} from "./server";
 import { PlexRequestError } from "./errors";
 
 const CLIENT_ID = "mediahub-data-fake-client-id";
@@ -384,5 +398,131 @@ describe("getShowEpisodes", () => {
       }),
     );
     await expect(getShowEpisodes(PLAIN, TOKEN, "2001")).rejects.toMatchObject({ kind: "invalid" });
+  });
+});
+
+describe("Focus collection writes", () => {
+  const COLLECTION = "900";
+  const MACHINE = "fakemachineid0123456789abcdef0123456789";
+
+  /** The method and URL of the last fetch call, with the headers it carried. */
+  function lastCall() {
+    const [url, init] = fetchMock.mock.calls.at(-1) as [URL, RequestInit];
+    return { url: String(url), init, headers: init.headers as Record<string, string> };
+  }
+
+  it("creates a movie collection in a section, with its ratingKey from the reply", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { Metadata: [{ ratingKey: COLLECTION, title: "Movie Focus" }] } }));
+    await expect(createCollection(PLAIN, TOKEN, { kind: "movie", title: "Movie Focus", sectionKey: "1" })).resolves.toBe(COLLECTION);
+
+    const call = lastCall();
+    expect(call.init.method).toBe("POST");
+    expect(call.url).toBe("http://192.168.10.5:32400/library/collections?type=1&title=Movie+Focus&smart=0&sectionId=1");
+    expect(call.url).not.toContain(TOKEN);
+    expect(call.headers["X-Plex-Token"]).toBe(TOKEN);
+  });
+
+  it("uses type 2 for a show collection", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { Metadata: [{ ratingKey: COLLECTION }] } }));
+    await createCollection(PLAIN, TOKEN, { kind: "series", title: "TV Focus", sectionKey: "2" });
+    expect(lastCall().url).toContain("type=2");
+  });
+
+  it("rejects a create reply with no collection", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0 } }));
+    await expect(createCollection(PLAIN, TOKEN, { kind: "movie", title: "Movie Focus", sectionKey: "1" })).rejects.toMatchObject({
+      kind: "invalid",
+    });
+  });
+
+  it("returns the item keys in collection order, and an empty list when Metadata is absent", async () => {
+    fetchMock.mockResolvedValueOnce(json({ MediaContainer: { Metadata: [{ ratingKey: "11" }, { ratingKey: "12" }] } }));
+    await expect(getCollectionItemKeys(PLAIN, TOKEN, COLLECTION)).resolves.toEqual(["11", "12"]);
+    expect(lastCall().url).toBe("http://192.168.10.5:32400/library/collections/900/children");
+
+    fetchMock.mockResolvedValueOnce(json({ MediaContainer: { size: 0 } }));
+    await expect(getCollectionItemKeys(PLAIN, TOKEN, COLLECTION)).resolves.toEqual([]);
+  });
+
+  it("returns null when the collection is gone (HTTP 404)", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    await expect(getCollectionItemKeys(PLAIN, TOKEN, COLLECTION)).resolves.toBeNull();
+  });
+
+  it("adds an item by a server:// uri in one query value, with the token in the header only", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 200 }));
+    await addCollectionItem(PLAIN, TOKEN, { collectionKey: COLLECTION, machineId: MACHINE, itemKey: "11" });
+
+    const call = lastCall();
+    expect(call.init.method).toBe("PUT");
+    expect(call.url).toBe(
+      `http://192.168.10.5:32400/library/collections/900/items?uri=${encodeURIComponent(`server://${MACHINE}/com.plexapp.plugins.library/library/metadata/11`)}`,
+    );
+    expect(call.url).not.toContain(TOKEN);
+    expect(call.headers["X-Plex-Token"]).toBe(TOKEN);
+  });
+
+  it("removes an item with a DELETE on the item path", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 200 }));
+    await removeCollectionItem(PLAIN, TOKEN, COLLECTION, "11");
+    expect(lastCall()).toMatchObject({ url: "http://192.168.10.5:32400/library/collections/900/items/11" });
+    expect(lastCall().init.method).toBe("DELETE");
+  });
+
+  it("moves an item after another, or to the front when after is null", async () => {
+    fetchMock.mockImplementation(async () => new Response("", { status: 200 }));
+    await moveCollectionItem(PLAIN, TOKEN, COLLECTION, "12", "11");
+    expect(lastCall().url).toBe("http://192.168.10.5:32400/library/collections/900/items/12/move?after=11");
+    expect(lastCall().init.method).toBe("PUT");
+
+    await moveCollectionItem(PLAIN, TOKEN, COLLECTION, "12", null);
+    expect(lastCall().url).toBe("http://192.168.10.5:32400/library/collections/900/items/12/move");
+  });
+
+  it("sets the custom sort", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 200 }));
+    await setCollectionCustomOrder(PLAIN, TOKEN, COLLECTION);
+    expect(lastCall().url).toBe("http://192.168.10.5:32400/library/collections/900/prefs?collectionSort=2");
+  });
+
+  it("pins the collection with the pin call, then moves its hub to the top with one encoded identifier", async () => {
+    fetchMock.mockImplementation(async () => new Response("", { status: 200 }));
+    await pinCollectionToHome(PLAIN, TOKEN, "1", COLLECTION);
+
+    expect(fetchMock.mock.calls).toHaveLength(2);
+    const [pin, move] = fetchMock.mock.calls.map((call) => [String((call as [URL])[0]), (call as [URL, RequestInit])[1]] as const);
+    expect(pin?.[0]).toBe("http://192.168.10.5:32400/hubs/sections/1/manage?metadataItemId=900&promotedToOwnHome=1");
+    expect(pin?.[1].method).toBe("POST");
+    expect(move?.[0]).toBe(
+      `http://192.168.10.5:32400/hubs/sections/1/manage/${encodeURIComponent("custom.collection.1.900")}/move`,
+    );
+    expect(move?.[1].method).toBe("PUT");
+  });
+
+  it("deletes a collection, and treats a 404 as already deleted", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }));
+    await deleteCollection(PLAIN, TOKEN, COLLECTION);
+    expect(lastCall()).toMatchObject({ url: "http://192.168.10.5:32400/library/collections/900" });
+    expect(lastCall().init.method).toBe("DELETE");
+
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 404 }));
+    await expect(deleteCollection(PLAIN, TOKEN, COLLECTION)).resolves.toBeUndefined();
+  });
+
+  it("still fails on any other status for a delete, and names the step only", async () => {
+    fetchMock.mockResolvedValue(new Response("secret", { status: 500 }));
+    const error = (await deleteCollection(PLAIN, TOKEN, COLLECTION).catch((e: unknown) => e)) as PlexRequestError;
+    expect(error).toMatchObject({ kind: "http", status: 500 });
+    expect(error.message).toBe("Plex collection delete request failed: HTTP 500");
+  });
+
+  it("sends a write over pinned https with the token in the header only", async () => {
+    const mock = fakeHttps({ status: 200, body: "" });
+    await removeCollectionItem(PINNED, TOKEN, COLLECTION, "11");
+    const [url, options] = mock.mock.calls[0] as [URL, Record<string, unknown>];
+    expect(url.pathname).toBe("/library/collections/900/items/11");
+    expect(options.method).toBe("DELETE");
+    expect(options.headers).toMatchObject({ "X-Plex-Token": TOKEN });
+    expect(url.toString()).not.toContain(TOKEN);
   });
 });

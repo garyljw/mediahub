@@ -7,12 +7,20 @@ export type { WatchedState } from "@/components/home/home-items";
 // Pure: turns Plex library items into a watched state per TMDB id (movies) and TVDB id (series), and Plex episodes
 // into a state per Sonarr episode. No I/O here.
 
+/** A library item's id in Plex: its section and its ratingKey. Never sent to the browser. */
+export type PlexItemKey = { sectionKey: string; ratingKey: string };
+
+/** A library item with the key of the section it came from. */
+export type SectionedItem = PlexSectionItem & { sectionKey: string };
+
 /** The watched state of one id, by TMDB id (movies) and TVDB id (series). */
 export type WatchedIndex = {
   movies: Map<number, WatchedState>;
   series: Map<number, WatchedState>;
   /** TVDB series id -> the ratingKey of every Plex show listing it, so its episodes can be loaded. */
   showKeys: Map<number, string[]>;
+  /** TMDB id and TVDB id -> the item keys of every Plex item listing it, in the order Plex listed them. */
+  itemKeys: { movie: Map<number, PlexItemKey[]>; series: Map<number, PlexItemKey[]> };
 };
 
 /** The Sonarr fields the episode match needs. */
@@ -66,23 +74,43 @@ function keepMostWatched<K>(map: Map<K, WatchedState>, key: K, state: WatchedSta
   if (existing === undefined || RANK[state] > RANK[existing]) map.set(key, state);
 }
 
+/** Records an item key under an id, once per item (the same item listed twice is kept once). */
+function addItemKey<K>(map: Map<K, PlexItemKey[]>, id: K, key: PlexItemKey): void {
+  const keys = map.get(id) ?? [];
+  if (!keys.some((known) => known.sectionKey === key.sectionKey && known.ratingKey === key.ratingKey)) keys.push(key);
+  map.set(id, keys);
+}
+
 /**
  * Pure: builds the index from every movie section's items and every show section's items. An item with no matching
  * guid is skipped; an item with several is indexed under each. The same id in several items keeps the most watched state.
- * A show with no episodes has no state, so its ratingKey is not recorded either.
+ * A show with no episodes has no state, so its episode key is not recorded either, but its item key is (a collection
+ * can hold it). An item with no ratingKey has no item key, but still counts for its state.
  */
-export function toWatchedIndex(movieItems: PlexSectionItem[], showItems: PlexSectionItem[]): WatchedIndex {
-  const index: WatchedIndex = { movies: new Map(), series: new Map(), showKeys: new Map() };
+export function toWatchedIndex(movieItems: SectionedItem[], showItems: SectionedItem[]): WatchedIndex {
+  const index: WatchedIndex = {
+    movies: new Map(),
+    series: new Map(),
+    showKeys: new Map(),
+    itemKeys: { movie: new Map(), series: new Map() },
+  };
 
   for (const item of movieItems) {
     const state = movieWatchedState(item);
-    for (const tmdbId of idsFromGuids(item.guids, TMDB_GUID)) keepMostWatched(index.movies, tmdbId, state);
+    for (const tmdbId of idsFromGuids(item.guids, TMDB_GUID)) {
+      keepMostWatched(index.movies, tmdbId, state);
+      if (item.ratingKey !== null) addItemKey(index.itemKeys.movie, tmdbId, { sectionKey: item.sectionKey, ratingKey: item.ratingKey });
+    }
   }
 
   for (const item of showItems) {
     const state = showWatchedState(item);
-    if (state === null) continue;
     for (const tvdbId of idsFromGuids(item.guids, TVDB_GUID)) {
+      if (item.ratingKey !== null) {
+        addItemKey(index.itemKeys.series, tvdbId, { sectionKey: item.sectionKey, ratingKey: item.ratingKey });
+      }
+      // A show with no episodes has no state, and its episode key is not recorded either.
+      if (state === null) continue;
       keepMostWatched(index.series, tvdbId, state);
       if (item.ratingKey === null) continue;
       const keys = index.showKeys.get(tvdbId) ?? [];

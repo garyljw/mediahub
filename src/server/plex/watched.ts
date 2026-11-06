@@ -9,7 +9,6 @@ import {
   getServerIdentity,
   getShowEpisodes,
   type PlexEpisodeItem,
-  type PlexSectionItem,
   type ServerConnection,
 } from "./server";
 
@@ -56,13 +55,17 @@ async function loadIndex(connection: PlexDataConnection): Promise<WatchedIndex |
     const wanted = sections.filter((section) => section.type === "movie" || section.type === "show");
     const loaded = await Promise.all(
       wanted.map(async (section) => ({
+        key: section.key,
         type: section.type,
         items: await getSectionItems(server, connection.token, section.key),
       })),
     );
 
-    const movieItems: PlexSectionItem[] = loaded.filter((s) => s.type === "movie").flatMap((s) => s.items);
-    const showItems: PlexSectionItem[] = loaded.filter((s) => s.type === "show").flatMap((s) => s.items);
+    // Each item carries its section key, so the index can say which section a collection item lives in.
+    const inSection = (type: string) =>
+      loaded.filter((s) => s.type === type).flatMap((s) => s.items.map((item) => ({ ...item, sectionKey: s.key })));
+    const movieItems = inSection("movie");
+    const showItems = inSection("show");
     return toWatchedIndex(movieItems, showItems);
   } catch (error) {
     if (error instanceof PlexRequestError) {
