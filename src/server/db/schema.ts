@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
@@ -95,4 +96,21 @@ export const setting = sqliteTable("setting", {
   updatedAt: timestamp("updated_at").notNull(),
 });
 
-export const schema = { user, session, account, verification, setting };
+// Household-wide, hand-ordered Focus lists. `kind` says which app the Arr id belongs to, so a Radarr id and a
+// Sonarr id can share a number. `position` is 0-based within the kind.
+export const focusItem = sqliteTable(
+  "focus_item",
+  {
+    kind: text("kind", { enum: ["movie", "series"] }).notNull(),
+    arrId: integer("arr_id").notNull(),
+    position: integer("position").notNull(),
+    addedBy: text("added_by").references(() => user.id, { onDelete: "set null" }),
+    addedAt: timestamp("added_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kind, t.arrId] }),
+    check("focus_item_kind_check", sql.raw(`${t.kind.name} IN ('movie', 'series')`)),
+  ],
+);
+
+export const schema = { user, session, account, verification, setting, focusItem };

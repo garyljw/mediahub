@@ -11,6 +11,7 @@ function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: 
     posterSrc: null,
     badge: { label: "Missing", className: "" },
     watched: null,
+    inFocus: false,
     ...overrides,
   };
 }

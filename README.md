@@ -13,7 +13,15 @@ MediaHub is a hobby project. It started as an experiment in building a web app w
 - **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes.
 - **Two roles:**
   - *Admins* can do everything. They sign in with the Plex account that owns your Plex server.
-  - *Requesters* can browse, search, add (with the admin's defaults), start release searches, and view the queue, calendar and history. They can't delete, edit, change monitoring or open Settings. They sign in with a name or email and password.
+  - *Requesters* can browse, search, add (with the admin's defaults), start release searches, manage the Focus lists, and view the queue, calendar and history. They can't delete, edit, change monitoring or open Settings. They sign in with a name or email and password.
+
+## Focus lists
+Focus lists are two short, household-wide lists you order by hand: **Movie Focus** (movies only) and **TV Focus** (series only). Everyone who can sign in sees the same lists.
+
+- **Adding and removing:** on Home, right-click a poster, or press and hold it on a touch screen, and choose **Add to Movie Focus** or **Add to TV Focus**. The same menu offers **Remove from** once a title is in its list. A small bookmark on a poster marks a title that is in a list.
+- **Reordering:** open **Movie Focus** or **TV Focus** from the sidebar. Drag a poster to move it. On a touch screen, press and hold, then drag. With a keyboard, focus a poster, press Space, move with the arrow keys, then press Space or Enter. Or use the **⋯** button on a poster for **Move to front**, **Move earlier**, **Move later**, **Move to end** and **Remove from Focus**. A tap or click still opens the title.
+- **Who can change them:** admins and requesters can add, remove and reorder. The order is saved as soon as you drop a poster, and everyone sees it on their next load.
+- **Deleted titles:** if a title in a Focus list is no longer in Radarr or Sonarr, the list shows a notice with a **Remove them** button (or **Remove it** for one title). Nothing is removed until you press it, and the notice doesn't appear when the app can't be reached.
 
 MediaHub is meant for a home network only. Don't expose it to the internet.
 

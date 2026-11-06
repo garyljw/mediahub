@@ -1,7 +1,7 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
-import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
+import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { MinimumAvailability } from "@/components/movies/movie-edit";
@@ -204,4 +204,21 @@ export async function getMoviePoster(movieId: number): Promise<Uint8Array<ArrayB
 /** Radarr's backdrop (fanart) for one movie, as JPEG bytes, through the disk image cache. */
 export async function getMovieBackdrop(movieId: number): Promise<Uint8Array<ArrayBuffer>> {
   return cachedArrImage("radarr", "backdrop", movieId, () => fetchMovieBackdrop(movieId));
+}
+
+/**
+ * True when Radarr has the movie with this id, false when it answers 404. Any other failure (ArrRequestError) propagates,
+ * so a Radarr outage is never read as "the movie is gone".
+ */
+export async function movieExists(movieId: number): Promise<boolean> {
+  const client = radarrClient();
+  try {
+    const movie = await arrRequest("Radarr movie", (signal) =>
+      client.GET("/api/v3/movie/{id}", { params: { path: { id: movieId } }, signal }),
+    );
+    return Boolean(movie);
+  } catch (error) {
+    if (error instanceof ArrRequestError && error.status === 404) return false;
+    throw error;
+  }
 }

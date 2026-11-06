@@ -39,6 +39,7 @@ import {
   getMoviePoster,
   listMovies,
   listQualityProfiles,
+  movieExists,
   refreshMovies,
   searchMovieReleases,
   toMovieRows,
@@ -723,5 +724,28 @@ describe("refreshMovies", () => {
     expect(error.message).toBe("Radarr movie refresh command request failed: HTTP 500");
     expect(error.message).not.toContain(FAKE_KEY);
     expect(error.message).not.toContain("radarr.test");
+  });
+});
+
+describe("movieExists", () => {
+  it("is true when Radarr has the movie, and asks for that id with the key in a header", async () => {
+    fetchMock.mockResolvedValue(json({ id: 7, title: "Fake Film" }));
+    expect(await movieExists(7)).toBe(true);
+    const req = requestAt(0);
+    expect(new URL(req.url).pathname).toBe("/api/v3/movie/7");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+  });
+
+  it("is false when Radarr answers 404", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    expect(await movieExists(7)).toBe(false);
+  });
+
+  it("propagates other failures instead of reporting the movie as gone", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 500 }));
+    const error = await rejectionOf(movieExists(7));
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).status).toBe(500);
   });
 });

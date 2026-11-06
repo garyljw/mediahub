@@ -1,0 +1,10 @@
+[
+  { "name": "accepts a reordering", "current": [10, 20, 30], "ordered": [30, 10, 20], "expected": [30, 10, 20] },
+  { "name": "accepts the same order", "current": [10, 20], "ordered": [10, 20], "expected": [10, 20] },
+  { "name": "accepts an empty list", "current": [], "ordered": [], "expected": [] },
+  { "name": "refuses a missing id", "current": [10, 20, 30], "ordered": [10, 20], "expected": null },
+  { "name": "refuses an extra id", "current": [10, 20], "ordered": [10, 20, 30], "expected": null },
+  { "name": "refuses a duplicate in place of an id", "current": [10, 20], "ordered": [10, 10], "expected": null },
+  { "name": "refuses an id from another list", "current": [10, 20], "ordered": [10, 99], "expected": null },
+  { "name": "refuses a stale list that has one id fewer", "current": [10, 20, 30], "ordered": [30, 20], "expected": null }
+]
