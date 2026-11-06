@@ -104,6 +104,7 @@ For the times you can't use the web page, `mediahub-tool.cmd` in the install fol
 ## Troubleshooting
 - **The page won't load from another device:** check that the Windows network profile is Private, and that the firewall rule exists (`netsh advfirewall firewall show rule name="MediaHub"`).
 - **The service won't start:** look at `MediaHub.err.log` and `MediaHub.out.log` in `C:\ProgramData\MediaHub\logs` (open them as an administrator). If you changed the service's account, run the installer again (see [above](#running-the-service-as-your-own-account-optional)).
+- **A page says "Something went wrong":** press **Try again**. If it shows an error code, search for that code in `MediaHub.err.log` in `C:\ProgramData\MediaHub\logs` (open it as an administrator) to see what failed.
 - **"Port is already in use" during install:** another program uses that port. Pick a different one.
 
 ## Licence
