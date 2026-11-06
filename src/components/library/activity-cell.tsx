@@ -53,7 +53,7 @@ export function ActivityCell({ name, activity }: { name: string; activity: Queue
           aria-valuenow={activity.progress}
           className="mt-1 h-1 w-24 overflow-hidden rounded bg-muted"
         >
-          <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+          <div className="h-full bg-brand" style={{ width: `${activity.progress}%` }} />
         </div>
       )}
       {activity.messages.length > 0 && (

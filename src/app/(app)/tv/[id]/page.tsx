@@ -102,7 +102,7 @@ function SeasonDetails({
               aria-valuenow={progress}
               className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
             >
-              <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
+              <div className="h-full bg-brand" style={{ width: `${progress}%` }} />
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               <span className="tabular-nums">

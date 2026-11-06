@@ -158,7 +158,7 @@ export function HomeGrid({
                 className={cn(
                   CHIP_CLASS,
                   kind === chip.kind
-                    ? "border-transparent bg-primary text-primary-foreground"
+                    ? "border-transparent bg-brand text-primary-foreground glow-brand"
                     : "border-border bg-background text-foreground hover:bg-accent",
                 )}
               >
@@ -272,10 +272,11 @@ export const HomeTile = memo(function HomeTile({
       draggable={false}
       className="group block rounded-lg select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <div className="relative overflow-hidden rounded-md transition-transform group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100 [&_img]:pointer-events-none">
+      {/* The hover ring and glow sit inside the poster: the grid's content-visibility clips anything drawn outside a tile. */}
+      <div className="relative overflow-hidden rounded-md transition-transform group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100 [&_img]:pointer-events-none after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:opacity-0 after:shadow-[inset_0_0_0_2px_var(--primary),inset_0_0_28px_-6px_var(--glow)] after:transition-opacity group-hover:after:opacity-100 group-focus-visible:after:opacity-100">
         <PosterTile src={item.posterSrc} />
         {showFocusMarker && item.inFocus && (
-          <span className="absolute top-1.5 left-1.5 rounded bg-black/65 p-1 text-white">
+          <span className="absolute top-1.5 left-1.5 rounded bg-brand glow-brand p-1 text-white">
             <Bookmark aria-hidden className="size-3" />
             <span className="sr-only">In {FOCUS_NAME[item.kind]}</span>
           </span>
@@ -294,7 +295,7 @@ export const HomeTile = memo(function HomeTile({
             // Sits above the watched banner, so both stay visible.
             className={cn("absolute inset-x-0 h-1.5 bg-black/50", item.watched ? "bottom-5" : "bottom-0")}
           >
-            <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+            <div className="h-full bg-brand" style={{ width: `${activity.progress}%` }} />
           </div>
         )}
         {item.watched && (
