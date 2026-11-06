@@ -291,7 +291,11 @@ export function FocusAdd({
                 const label = resultLabel(hit);
                 const idBase = `${fieldId}-${key}`;
                 return (
-                  <li key={key} className="p-3" {...posterPreview.rowHandlers(key, hit.posterSrc)}>
+                  <li key={key} className="p-3" {...posterPreview.rowHandlers(key, hit.posterSrc, {
+                    title: hit.title,
+                    kind,
+                    peek: hit.year === null && hit.overview === "" ? null : { year: hit.year, genres: [], overview: hit.overview },
+                  })}>
                     <div className="flex items-start gap-3">
                       <Poster src={hit.posterSrc} />
                       <div className="min-w-0 flex-1" data-poster-anchor>

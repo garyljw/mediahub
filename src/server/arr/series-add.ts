@@ -7,6 +7,7 @@ import { ArrRequestError, arrRequest, getList } from "./request";
 import { positiveIdOrNull } from "./detail-fields";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
 import type { components as SonarrComponents } from "./generated/sonarr";
+import { cutOverview } from "@/server/merge/peek";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
 
@@ -35,8 +36,6 @@ export type SeriesAdd = {
   searchForMissingEpisodes: boolean;
 };
 
-/** Longest overview sent to the browser, in code points (so an emoji is never cut in half). Longer text is cut and ends with an ellipsis. */
-const MAX_OVERVIEW = 300;
 /** Most search hits returned. Sonarr can return many; the dialog only needs a short list. */
 const MAX_RESULTS = 20;
 
@@ -116,14 +115,12 @@ export function toSeriesLookupResults(series: SeriesResource[]): SeriesLookupRes
     if (results.length >= MAX_RESULTS) break;
     if (typeof entry.tvdbId !== "number" || !(entry.tvdbId > 0)) continue;
     if (!entry.title) continue;
-    // Array.from splits by code point, so the cut and the length check never split a surrogate pair.
-    const overviewChars = Array.from(entry.overview ?? "");
     results.push({
       tvdbId: entry.tvdbId,
       title: entry.title,
       year: yearOrNull(entry.year),
       network: entry.network || null,
-      overview: overviewChars.length > MAX_OVERVIEW ? `${overviewChars.slice(0, MAX_OVERVIEW - 1).join("")}…` : overviewChars.join(""),
+      overview: cutOverview(entry.overview),
       // Sonarr's lookup fills in the library id for a series already in the library, so no separate library
       // fetch is needed. A missing or zero id means it is not in the library.
       inLibrary: typeof entry.id === "number" && entry.id > 0,

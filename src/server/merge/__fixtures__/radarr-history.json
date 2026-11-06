@@ -14,7 +14,7 @@
       "downloadUrl": "http://indexer.test/getnzb?t=get&apikey=SECRET",
       "nzbInfoUrl": "http://indexer.test/details/1?apikey=SECRET"
     },
-    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "overview": "A made-up film for tests.", "genres": ["Thriller", "Drama", "Mystery", "Crime"], "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
   },
   {
     "id": 2,
@@ -54,7 +54,7 @@
     "date": "2026-11-01T08:00:00Z",
     "eventType": "movieFileRenamed",
     "data": {},
-    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "overview": "A made-up film for tests.", "genres": ["Thriller", "Drama", "Mystery", "Crime"], "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
   },
   {
     "id": 6,
@@ -97,7 +97,7 @@
     "date": "2026-10-29T10:00:00Z",
     "eventType": "movieFolderImported",
     "data": {},
-    "movie": { "id": 101, "title": "Starfall", "year": 2026, "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
+    "movie": { "id": 101, "title": "Starfall", "year": 2026, "overview": "A made-up film for tests.", "genres": ["Thriller", "Drama", "Mystery", "Crime"], "images": [{ "coverType": "poster", "url": "https://image.test/starfall.jpg" }] }
   },
   {
     "id": 11,

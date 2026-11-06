@@ -176,7 +176,11 @@ export function HistoryView({
               const detailsId = `history-details-${entry.key}`;
               return (
                 <Fragment key={entry.key}>
-                  <TableRow {...posterPreview.rowHandlers(entry.key, entry.posterSrc)}>
+                  <TableRow {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
+              title: entry.title,
+              kind: entry.kind === "movie" ? "movie" : "series",
+              peek: entry.peek,
+            })}>
                     <TableCell className={`${CELL} whitespace-nowrap text-muted-foreground`}>{entry.when}</TableCell>
                     <TableCell className={CELL}>
                       <Poster src={entry.posterSrc} />

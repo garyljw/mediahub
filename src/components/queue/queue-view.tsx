@@ -157,7 +157,11 @@ export function QueueView({
               const Icon = ACTIVITY_ICON[row.state];
               return (
                 <Fragment key={row.key}>
-                  <TableRow {...posterPreview.rowHandlers(row.key, row.posterSrc)}>
+                  <TableRow {...posterPreview.rowHandlers(row.key, row.posterSrc, {
+                      title: row.title,
+                      kind: row.kind === "movie" ? "movie" : "series",
+                      peek: row.peek,
+                    })}>
                     <TableCell className={CELL}>
                       <Poster src={row.posterSrc} />
                     </TableCell>

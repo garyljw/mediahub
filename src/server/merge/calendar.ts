@@ -6,6 +6,7 @@ import { TITLE_COLLATOR } from "@/components/library/list";
 import { episodeStatus } from "./episode-status";
 import { isCalendarDate, utcDateOf } from "./calendar-dates";
 import { hasPoster } from "./images";
+import { toPeek, type Peek } from "./peek";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 type EpisodeResource = SonarrComponents["schemas"]["EpisodeResource"];
@@ -35,6 +36,8 @@ export type CalendarEntry = {
   status: CalendarStatus;
   /** MediaHub's own poster route, only when the item has a poster. */
   posterSrc: string | null;
+  /** The hover card's facts (year, genres, overview) for the movie or series, or null when there is nothing to show. */
+  peek: Peek | null;
   /** Episodes link to their series page. Movies have no page, so null. */
   href: string | null;
 };
@@ -99,6 +102,7 @@ function movieEntries(movie: MovieResource, from: string, to: string, today: str
         releaseType,
         status: movieStatus(movie, date, today),
         posterSrc,
+        peek: toPeek(movie),
         href: null,
       },
       sortKey,
@@ -151,6 +155,7 @@ function episodeEntry(
       // The series page calls a not-yet-aired episode "unaired". The calendar uses "upcoming" for both kinds.
       status: status === "unaired" ? "upcoming" : status,
       posterSrc: hasPoster(series.images) ? `/api/tv/${episode.seriesId}/poster` : null,
+      peek: toPeek(series),
       href: `/tv/${episode.seriesId}`,
     },
     sortKey: (series.sortTitle || series.title).toLowerCase(),

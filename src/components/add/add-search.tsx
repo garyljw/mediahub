@@ -252,7 +252,11 @@ export function AddSearch({
             const idBase = `${fieldId}-${item.key}`;
 
             return (
-              <li key={item.key} className="p-3" {...posterPreview.rowHandlers(item.key, item.posterSrc)}>
+              <li key={item.key} className="p-3" {...posterPreview.rowHandlers(item.key, item.posterSrc, {
+                title: item.title,
+                kind: item.kind,
+                peek: item.year === null && item.overview === "" ? null : { year: item.year, genres: [], overview: item.overview },
+              })}>
                 <div className="flex items-start gap-3">
                   <Poster src={item.posterSrc} />
                   <div className="min-w-0 flex-1" data-poster-anchor>

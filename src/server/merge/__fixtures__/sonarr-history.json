@@ -16,7 +16,7 @@
       "nzbInfoUrl": "http://indexer.test/details/1?apikey=SECRET"
     },
     "episode": { "id": 301, "seriesId": 201, "seasonNumber": 2, "episodeNumber": 5, "title": "Tidewater", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 2,
@@ -28,7 +28,7 @@
     "eventType": "downloadFolderImported",
     "data": { "downloadClientName": "qBittorrent" },
     "episode": { "id": 302, "seriesId": 201, "seasonNumber": 1, "episodeNumber": 1, "title": "Pilot", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 3,
@@ -40,7 +40,7 @@
     "eventType": "seriesFolderImported",
     "data": {},
     "episode": { "id": 303, "seriesId": 201, "seasonNumber": 1, "episodeNumber": 2, "title": "Second", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 4,
@@ -64,7 +64,7 @@
     "eventType": "episodeFileDeleted",
     "data": { "reason": "Upgraded" },
     "episode": { "id": 305, "seriesId": 201, "seasonNumber": 1, "episodeNumber": 3, "title": "Third", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 6,
@@ -76,7 +76,7 @@
     "eventType": "episodeFileRenamed",
     "data": {},
     "episode": { "id": 306, "seriesId": 201, "seasonNumber": 1, "episodeNumber": 4, "title": "Fourth", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 7,
@@ -88,7 +88,7 @@
     "eventType": "downloadIgnored",
     "data": { "message": "Ignored by the user" },
     "episode": { "id": 307, "seriesId": 201, "seasonNumber": 1, "episodeNumber": 5, "title": "Fifth", "images": [] },
-    "series": { "id": 201, "title": "Harbour Lights", "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [{ "coverType": "poster", "url": "https://image.test/harbour.jpg" }] }
   },
   {
     "id": 8,
@@ -123,7 +123,7 @@
     "date": "2026-10-31T08:00:00Z",
     "eventType": "grabbed",
     "data": {},
-    "series": { "id": 201, "title": "Harbour Lights", "images": [] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [] }
   },
   {
     "id": 11,
@@ -133,6 +133,6 @@
     "date": "yesterday",
     "eventType": "grabbed",
     "data": {},
-    "series": { "id": 201, "title": "Harbour Lights", "images": [] }
+    "series": { "id": 201, "title": "Harbour Lights", "year": 2021, "overview": "A made-up show for tests.", "genres": ["Drama", "Mystery"], "images": [] }
   }
 ]
