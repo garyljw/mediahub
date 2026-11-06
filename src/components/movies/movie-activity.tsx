@@ -41,7 +41,7 @@ export function MovieActivity({ movieId, title }: { movieId: number; title: stri
           aria-valuenow={activity.progress}
           className="h-1 w-48 overflow-hidden rounded bg-muted"
         >
-          <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+          <div className="h-full bg-brand" style={{ width: `${activity.progress}%` }} />
         </div>
       )}
       {activity.messages.length > 0 && <p className="text-xs text-muted-foreground">{activity.messages[0]}</p>}

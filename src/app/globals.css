@@ -5,48 +5,58 @@
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.875rem;
+  --background: oklch(0.975 0.012 285);
+  --foreground: oklch(0.22 0.07 275);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.07 275);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.22 0.07 275);
+  --primary: oklch(0.58 0.25 18);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.945 0.022 285);
+  --secondary-foreground: oklch(0.22 0.07 275);
+  --muted: oklch(0.945 0.022 285);
+  --muted-foreground: oklch(0.5 0.05 278);
+  --accent: oklch(0.93 0.03 300);
+  --accent-foreground: oklch(0.22 0.07 275);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.9 0.025 285);
+  --input: oklch(0.9 0.025 285);
+  --ring: oklch(0.6 0.2 340);
+  --sidebar: oklch(0.96 0.018 285);
+  --brand-from: oklch(0.58 0.25 18);
+  --brand-to: oklch(0.52 0.26 302);
+  --brand-gradient: linear-gradient(120deg, var(--brand-from), var(--brand-to));
+  --glow: oklch(0.6 0.25 340 / 45%);
 }
 
 /* Dark tokens sit under :root inside the media query, so they apply without a .dark class. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: oklch(0.175 0.055 272);
+    --foreground: oklch(0.96 0.015 285);
+    --card: oklch(0.215 0.06 272);
+    --card-foreground: oklch(0.96 0.015 285);
+    --popover: oklch(0.215 0.06 272);
+    --popover-foreground: oklch(0.96 0.015 285);
+    --primary: oklch(0.66 0.24 18);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.27 0.065 274);
+    --secondary-foreground: oklch(0.96 0.015 285);
+    --muted: oklch(0.27 0.065 274);
+    --muted-foreground: oklch(0.74 0.05 280);
+    --accent: oklch(0.3 0.08 285);
+    --accent-foreground: oklch(0.96 0.015 285);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --border: oklch(0.72 0.12 285 / 16%);
+    --input: oklch(0.72 0.12 285 / 22%);
+    --ring: oklch(0.65 0.22 340);
+    --sidebar: oklch(0.15 0.05 272);
+    --brand-from: oklch(0.62 0.25 20);
+    --brand-to: oklch(0.58 0.27 303);
+    --brand-gradient: linear-gradient(120deg, var(--brand-from), var(--brand-to));
+    --glow: oklch(0.65 0.28 335 / 65%);
   }
 }
 
@@ -69,12 +79,31 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage);
+}
+
+/* The brand gradient as a background (buttons, active nav, chips, progress bars). */
+@utility bg-brand {
+  background-image: var(--brand-gradient);
+}
+
+/* Neon ring and inner glow over a hovered poster. Inset, because the Home grid clips anything drawn outside a tile. */
+@utility poster-glow {
+  box-shadow:
+    inset 0 0 0 2px var(--primary),
+    inset 0 0 36px -4px var(--glow);
+}
+
+/* Soft neon glow under brand-coloured elements. */
+@utility glow-brand {
+  box-shadow: 0 6px 22px -6px var(--glow);
 }
 
 @layer base {
@@ -85,5 +114,10 @@
   body {
     background: var(--background);
     color: var(--foreground);
+  }
+
+  h1,
+  h2 {
+    font-family: var(--font-display);
   }
 }

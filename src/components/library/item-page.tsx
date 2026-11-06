@@ -69,7 +69,7 @@ export function ItemPageLayout({
             <PosterTile src={posterSrc} />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
               {title}
               {year !== null && <span className="ml-2 font-normal text-muted-foreground">{year}</span>}
             </h1>

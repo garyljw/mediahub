@@ -158,7 +158,7 @@ export function HomeGrid({
                 className={cn(
                   CHIP_CLASS,
                   kind === chip.kind
-                    ? "border-transparent bg-primary text-primary-foreground"
+                    ? "border-transparent bg-brand text-primary-foreground glow-brand"
                     : "border-border bg-background text-foreground hover:bg-accent",
                 )}
               >
@@ -272,10 +272,16 @@ export const HomeTile = memo(function HomeTile({
       draggable={false}
       className="group block rounded-lg select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <div className="relative overflow-hidden rounded-md transition-transform group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100 [&_img]:pointer-events-none">
+      <div className="relative overflow-hidden rounded-md [&_img]:pointer-events-none [&_img]:transition-transform [&_img]:duration-300 group-hover:[&_img]:scale-[1.05] motion-reduce:[&_img]:transition-none motion-reduce:group-hover:[&_img]:scale-100">
         <PosterTile src={item.posterSrc} />
+        {/* The grid's content-visibility clips anything drawn outside a tile, so on hover the frame stays put: the picture zooms
+            inside it and the ring and glow are inset. z-10 puts the ring over the badges. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 rounded-md opacity-0 poster-glow transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
         {showFocusMarker && item.inFocus && (
-          <span className="absolute top-1.5 left-1.5 rounded bg-black/65 p-1 text-white">
+          <span className="absolute top-1.5 left-1.5 rounded bg-brand glow-brand p-1 text-white">
             <Bookmark aria-hidden className="size-3" />
             <span className="sr-only">In {FOCUS_NAME[item.kind]}</span>
           </span>
@@ -294,7 +300,7 @@ export const HomeTile = memo(function HomeTile({
             // Sits above the watched banner, so both stay visible.
             className={cn("absolute inset-x-0 h-1.5 bg-black/50", item.watched ? "bottom-5" : "bottom-0")}
           >
-            <div className="h-full bg-primary" style={{ width: `${activity.progress}%` }} />
+            <div className="h-full bg-brand" style={{ width: `${activity.progress}%` }} />
           </div>
         )}
         {item.watched && (
