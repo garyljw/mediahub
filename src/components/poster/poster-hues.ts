@@ -1,7 +1,11 @@
 // Picks the two main hues of a poster for the page wash. Pure functions only: the browser side (drawing the poster
 // onto a small canvas) lives in use-poster-hues.ts, so this file can be tested with plain pixel arrays.
 
-export type PosterHues = { h1: number; h2: number };
+/** `pale` marks the stand-in wash for a black-and-white poster, which the page shows at lower strength. */
+export type PosterHues = { h1: number; h2: number; pale?: boolean };
+
+/** The wash for a black-and-white or muted poster: a pale electric blue, like a softer version of a blue-toned poster. */
+export const MONOCHROME_HUES: PosterHues = { h1: 245, h2: 265, pale: true };
 
 const ALPHA_MIN = 128;
 const CHROMA_MIN = 0.04;

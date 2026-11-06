@@ -6,8 +6,9 @@ import { usePosterHues } from "./use-poster-hues";
 
 /**
  * Washes the top of a movie or series page with the poster's own two main colours. The glow fills the content area
- * above and around the children. It fades in once the hues are known. With no hues (no poster, a failed image, or a
- * black-and-white poster) it stays invisible, and the page looks as it did before. The hues go on the wrapper as
+ * above and around the children. It fades in once the hues are known. A black-and-white poster gets a
+ * paler wash in electric blue. With no hues (no poster, or a failed image) it stays invisible, and the page looks as
+ * it did before. The hues go on the wrapper as
  * --h1 and --h2, so children can use them too, and `data-washed` marks that a wash is showing.
  */
 export function PosterWash({
@@ -32,7 +33,7 @@ export function PosterWash({
         aria-hidden
         className={cn(
           "pointer-events-none absolute -z-10 -top-6 -inset-x-4 h-[40rem] md:-inset-x-8 poster-wash transition-opacity duration-700 motion-reduce:transition-none",
-          hues ? "opacity-100" : "opacity-0",
+          hues === null ? "opacity-0" : hues.pale ? "opacity-55" : "opacity-100",
         )}
       />
       {children}

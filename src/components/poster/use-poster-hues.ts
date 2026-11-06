@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { pickPosterHues, type PosterHues } from "./poster-hues";
+import { MONOCHROME_HUES, pickPosterHues, type PosterHues } from "./poster-hues";
 
 /**
  * The poster's two main hues, read in the browser from `src` (MediaHub's own poster route, so the canvas is never
  * tainted). The poster is drawn onto a small canvas and sampled. Null while it is read, and when there is no src, the
- * image fails, or the poster is black-and-white. The result is keyed to its src, so an old src's result never shows.
+ * image fails. A black-and-white poster gets MONOCHROME_HUES, a pale blue. The result is keyed to its src, so an old src's result never shows.
  */
 export function usePosterHues(src: string | null): PosterHues | null {
   const [keyed, setKeyed] = useState<{ src: string; hues: PosterHues | null } | null>(null);
@@ -29,7 +29,8 @@ export function usePosterHues(src: string | null): PosterHues | null {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.drawImage(img, 0, 0, 48, 72);
-          hues = pickPosterHues(ctx.getImageData(0, 0, 48, 72).data);
+          // A poster that read fine but has no colour of its own gets the pale blue stand-in.
+          hues = pickPosterHues(ctx.getImageData(0, 0, 48, 72).data) ?? MONOCHROME_HUES;
         }
       } catch {
         hues = null;
