@@ -15,7 +15,16 @@ import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/fo
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
-import { filterHomeItems, WATCHED_CLASS, WATCHED_LABEL, type HomeItem, type HomeKind } from "./home-items";
+import {
+  filterHomeItems,
+  hasWatchData,
+  WATCH_FILTER_CHIPS,
+  WATCHED_CLASS,
+  WATCHED_LABEL,
+  type HomeItem,
+  type HomeKind,
+  type HomeWatchFilter,
+} from "./home-items";
 
 const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
   { kind: "all", label: "All" },
@@ -24,6 +33,14 @@ const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
 ];
 
 const CHIP_CLASS = "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
+
+/** A filter chip's classes, selected or not. Shared by the kind and watch-status chips so they stay alike. */
+function chipClass(selected: boolean): string {
+  return cn(
+    CHIP_CLASS,
+    selected ? "border-transparent bg-brand text-primary-foreground glow-brand" : "border-border bg-background text-foreground hover:bg-accent",
+  );
+}
 
 /**
  * The Home poster grid: movies and TV together, with instant search and a kind filter. Read-only. Each tile
@@ -42,6 +59,7 @@ export function HomeGrid({
 }) {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
+  const [watchFilter, setWatchFilter] = useState<HomeWatchFilter>("any");
   const [focusError, setFocusError] = useState<string | null>(null);
   // The tile the open menu is for, by key. Set on the grid's own context-menu or touch-press event (see below).
   const [menuKey, setMenuKey] = useState<string | null>(null);
@@ -87,8 +105,17 @@ export function HomeGrid({
   );
   const shownByKey = useMemo(() => new Map(shown.map((item) => [item.key, item])), [shown]);
   const menuTarget = menuKey === null ? undefined : shownByKey.get(menuKey);
-  const filtered = useMemo(() => filterHomeItems(shown, { kind, search: deferredSearch }), [shown, kind, deferredSearch]);
-  const filtering = kind !== "all" || deferredSearch.trim() !== "";
+  // The watch filter only shows when Plex data is present. If that data goes away, the filter stops applying, so the
+  // grid can't empty itself with no chip showing why.
+  const showWatchFilter = useMemo(() => hasWatchData(items), [items]);
+  // Reset to "any" when the chips hide, so a choice can't silently re-apply when Plex data comes back.
+  if (!showWatchFilter && watchFilter !== "any") setWatchFilter("any");
+  const activeWatch: HomeWatchFilter = showWatchFilter ? watchFilter : "any";
+  const filtered = useMemo(
+    () => filterHomeItems(shown, { kind, search: deferredSearch, watched: activeWatch }),
+    [shown, kind, deferredSearch, activeWatch],
+  );
+  const filtering = kind !== "all" || deferredSearch.trim() !== "" || activeWatch !== "any";
   // An empty grid with a failed app in view is explained by the page's error, not by "No matches".
   const failedInView = unavailable.some((failed) => kind === "all" || kind === failed);
 
@@ -155,17 +182,30 @@ export function HomeGrid({
                 type="button"
                 aria-pressed={kind === chip.kind}
                 onClick={() => setKind(chip.kind)}
-                className={cn(
-                  CHIP_CLASS,
-                  kind === chip.kind
-                    ? "border-transparent bg-brand text-primary-foreground glow-brand"
-                    : "border-border bg-background text-foreground hover:bg-accent",
-                )}
+                className={chipClass(kind === chip.kind)}
               >
                 {chip.label}
               </button>
             ))}
           </div>
+          {showWatchFilter && (
+            <>
+              <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+              <div role="group" aria-label="Watched in Plex" className="flex flex-wrap gap-2">
+                {WATCH_FILTER_CHIPS.map((chip) => (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    aria-pressed={watchFilter === chip.value}
+                    onClick={() => setWatchFilter(chip.value)}
+                    className={chipClass(watchFilter === chip.value)}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           {action}
         </div>
       </div>
