@@ -28,6 +28,13 @@ On start it applies pending database migrations, then serves the app. `MEDIAHUB_
 This folder is the basis for the Windows installer (see the README) and the Docker image planned next.
 
 ## Making a release
+Versions follow Pride.Normal.Shame (`<pride>.<normal>.<shame>`):
+- **Shame** (last number): only bug fixes, e.g. 1.0.0 → 1.0.1.
+- **Normal** (middle number): at least one new feature or setting, e.g. 1.0.1 → 1.1.0. Shame goes back to 0.
+- **Pride** (first number): something big and worth a jump, Gary's call, e.g. 1.4.2 → 2.0.0. Normal and shame go back to 0.
+
+A release takes the highest bump among its changes. The updater compares the three numbers in order, so every release must be higher than the last.
+
 1. Bump `version` in `package.json` (and `package-lock.json`, with `npm version <x.y.z> --no-git-tag-version`).
 2. Publish a GitHub release tagged `v<version>` or `v<version>-rc.N`. The tag must match `package.json`, or the release workflow fails.
 3. The release workflow builds the installer on Windows, tests it (install, upgrade, uninstall), and attaches `MediaHub-Setup-<version>.exe`, its `.sha256` and `build-info.json` to the release. It bundles the newest Node patch for the `.node-version` major.
