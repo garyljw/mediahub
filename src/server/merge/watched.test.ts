@@ -1,6 +1,6 @@
 import "server-only";
 import { describe, expect, it, vi } from "vitest";
-import { EpisodeItemsSchema, SectionItemsSchema, type PlexSectionItem } from "@/server/plex/server";
+import { EpisodeItemsSchema, SectionItemsSchema } from "@/server/plex/server";
 import movieSection from "./__fixtures__/plex-movie-section.json";
 import showSection from "./__fixtures__/plex-show-section.json";
 import episodeSection from "./__fixtures__/plex-show-episodes.json";
@@ -12,28 +12,31 @@ import {
   toEpisodeWatched,
   toWatchedIndex,
   type EpisodeRef,
+  type SectionedItem,
 } from "./watched";
 
 vi.mock("@/server/plex/data-connection", () => ({ getPlexDataClientId: () => "mediahub-data-fake-client-id" }));
 
 // The fixtures go through the same schema the live client uses, so the field stripping is exercised too.
-const movieItems = SectionItemsSchema.parse(movieSection);
-const showItems = SectionItemsSchema.parse(showSection);
+// The fixtures are the movie section (key "1") and the show section (key "2").
+const movieItems: SectionedItem[] = SectionItemsSchema.parse(movieSection).map((item) => ({ ...item, sectionKey: "1" }));
+const showItems: SectionedItem[] = SectionItemsSchema.parse(showSection).map((item) => ({ ...item, sectionKey: "2" }));
 const episodeItems = EpisodeItemsSchema.parse(episodeSection);
 
-const item = (overrides: Partial<PlexSectionItem> = {}): PlexSectionItem => ({
+const item = (overrides: Partial<SectionedItem> = {}): SectionedItem => ({
   guids: [],
   viewCount: 0,
   viewOffset: 0,
   leafCount: 0,
   viewedLeafCount: 0,
   ratingKey: null,
+  sectionKey: "1",
   ...overrides,
 });
 
 describe("the schema keeps only the watched-status fields", () => {
   it("drops titles, media and durations from each item, and keeps the rating key", () => {
-    expect(movieItems[0]).toEqual({
+    expect(SectionItemsSchema.parse(movieSection)[0]).toEqual({
       guids: ["imdb://tt0000001", "tmdb://900001", "tvdb://0"],
       viewCount: 1,
       viewOffset: 0,
@@ -306,5 +309,46 @@ describe("seasonWatchedState", () => {
     ];
     const states = toEpisodeWatched(season1, episodeItems);
     expect(seasonWatchedState(season1.map((episode) => states.get(episode.id)))).toBe("partial");
+  });
+});
+
+describe("toWatchedIndex: item keys", () => {
+  it("lists each movie's item key under every tmdb id, in the order Plex listed them", () => {
+    const movies = [
+      item({ guids: ["tmdb://600001"], ratingKey: "6001", sectionKey: "1" }),
+      item({ guids: ["tmdb://600001", "tmdb://600002"], ratingKey: "6002", sectionKey: "3" }),
+    ];
+    const index = toWatchedIndex(movies, []);
+    expect(index.itemKeys.movie.get(600001)).toEqual([
+      { sectionKey: "1", ratingKey: "6001" },
+      { sectionKey: "3", ratingKey: "6002" },
+    ]);
+    expect(index.itemKeys.movie.get(600002)).toEqual([{ sectionKey: "3", ratingKey: "6002" }]);
+  });
+
+  it("keeps a show's item key even when the show has no episodes, but records no state for it", () => {
+    const index = toWatchedIndex([], [item({ guids: ["tvdb://610001"], leafCount: 0, ratingKey: "6101", sectionKey: "2" })]);
+    expect(index.itemKeys.series.get(610001)).toEqual([{ sectionKey: "2", ratingKey: "6101" }]);
+    expect(index.series.has(610001)).toBe(false);
+  });
+
+  it("skips an item with no ratingKey, but keeps its state", () => {
+    const index = toWatchedIndex([item({ guids: ["tmdb://620001"], viewCount: 1, ratingKey: null })], []);
+    expect(index.movies.get(620001)).toBe("watched");
+    expect(index.itemKeys.movie.has(620001)).toBe(false);
+  });
+
+  it("does not list the same item twice", () => {
+    const twice = [
+      item({ guids: ["tvdb://630001"], leafCount: 2, ratingKey: "6301", sectionKey: "2" }),
+      item({ guids: ["tvdb://630001"], leafCount: 2, ratingKey: "6301", sectionKey: "2" }),
+    ];
+    expect(toWatchedIndex([], twice).itemKeys.series.get(630001)).toEqual([{ sectionKey: "2", ratingKey: "6301" }]);
+  });
+
+  it("reads the item keys from the movie and show fixtures", () => {
+    const index = toWatchedIndex(movieItems, showItems);
+    expect(index.itemKeys.movie.get(900001)).toEqual([{ sectionKey: "1", ratingKey: "1001" }]);
+    expect(index.itemKeys.series.get(100001)).toEqual([{ sectionKey: "2", ratingKey: "2001" }]);
   });
 });

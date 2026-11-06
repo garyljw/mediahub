@@ -18,6 +18,7 @@ import {
   removeFromFocus,
   reorderFocus,
 } from "@/server/focus/focus";
+import { requestFocusSync } from "@/server/focus/plex-sync";
 import { titleSearch, TitleSearchError, type TitleHit } from "@/server/title-search";
 
 // `stale` is set when the new order no longer matches the list. The client then reloads the page for the server's order.
@@ -79,6 +80,7 @@ export async function addFocusItem(input: unknown): Promise<FocusResult> {
     }
 
     addToFocus(kind, id, user.id);
+    requestFocusSync(kind);
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: DENIED };
     if (error instanceof FocusLimitError) return { ok: false, error: FULL };
@@ -96,7 +98,8 @@ export async function removeFocusItems(input: unknown): Promise<FocusResult> {
     await requireRole("admin", "requester");
     const parsed = RemoveInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: INVALID };
-    removeFromFocus(parsed.data.kind, parsed.data.ids);
+    // Asks for a sync only when rows were removed, so a no-op remove doesn't touch Plex.
+    if (removeFromFocus(parsed.data.kind, parsed.data.ids) > 0) requestFocusSync(parsed.data.kind);
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: DENIED };
     throw error;
@@ -114,6 +117,7 @@ export async function reorderFocusItems(input: unknown): Promise<FocusResult> {
     const parsed = ReorderInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: INVALID };
     reorderFocus(parsed.data.kind, parsed.data.ids);
+    requestFocusSync(parsed.data.kind);
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: DENIED };
     if (error instanceof FocusOrderError) return { ok: false, error: STALE, stale: true };
@@ -195,6 +199,7 @@ export async function addNewToFocus(input: unknown): Promise<FocusResult> {
 
     try {
       addToFocus(kind, result.id, user.id);
+      requestFocusSync(kind);
     } catch (error) {
       if (error instanceof FocusLimitError) {
         return {

@@ -89,13 +89,14 @@ function serverHeaders(token: string | undefined): Record<string, string> {
 async function getPlain(
   step: string,
   url: URL,
+  method: PlexMethod,
   headers: Record<string, string>,
   timeoutMs: number,
   maxBytes: number,
-): Promise<unknown> {
+): Promise<string> {
   let response: Response;
   try {
-    response = await fetch(url, { method: "GET", headers, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+    response = await fetch(url, { method, headers, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     throw transportError(step, error);
   }
@@ -123,22 +124,19 @@ async function getPlain(
     if (error instanceof PlexRequestError) throw error;
     throw transportError(step, error);
   }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-  } catch {
-    throw kindError(step, "invalid");
-  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /** Pinned https: node:https with the lookup fixed to pinAddress. A redirect (3xx) counts as an HTTP failure. */
 function getPinned(
   step: string,
   url: URL,
+  method: PlexMethod,
   pinAddress: string,
   headers: Record<string, string>,
   timeoutMs: number,
   maxBytes: number,
-): Promise<unknown> {
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const signal = AbortSignal.timeout(timeoutMs);
     let settled = false;
@@ -154,7 +152,7 @@ function getPinned(
 
     const request = httpsRequest(
       url,
-      { method: "GET", headers, lookup: pinnedLookup(pinAddress), signal },
+      { method, headers, lookup: pinnedLookup(pinAddress), signal },
       (response) => {
         const status = response.statusCode ?? 0;
         if (status < 200 || status > 299) {
@@ -175,11 +173,7 @@ function getPinned(
         response.on("end", () => {
           if (settled) return;
           settled = true;
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
-          } catch {
-            reject(kindError(step, "invalid"));
-          }
+          resolve(Buffer.concat(chunks).toString("utf8"));
         });
         response.on("error", failTransport);
       },
@@ -189,28 +183,65 @@ function getPinned(
   });
 }
 
+type PlexMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+type RequestOptions = { conn: ServerConnection; path: string; token?: string; timeoutMs?: number; maxBytes?: number };
+
 /**
- * The one place every Plex Media Server request goes through: headers, timeout, no redirects, and Zod validation.
- * Errors name the step and the kind or status only.
+ * Sends one request to the server and returns the raw body text. Headers, timeout, no redirects and the body cap are the
+ * same for every method. The path must already have its segments encoded and its query built.
  */
-async function plexServerFetch<T>(
-  step: string,
-  schema: z.ZodType<T>,
-  options: { conn: ServerConnection; path: string; token?: string; timeoutMs?: number; maxBytes?: number },
-): Promise<T> {
+async function requestBody(step: string, method: PlexMethod, options: RequestOptions): Promise<string> {
   const url = new URL(options.path, options.conn.url);
   const headers = serverHeaders(options.token);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? MAX_BODY_BYTES;
 
-  const json =
-    options.conn.pinAddress === null
-      ? await getPlain(step, url, headers, timeoutMs, maxBytes)
-      : await getPinned(step, url, options.conn.pinAddress, headers, timeoutMs, maxBytes);
+  return options.conn.pinAddress === null
+    ? getPlain(step, url, method, headers, timeoutMs, maxBytes)
+    : getPinned(step, url, method, options.conn.pinAddress, headers, timeoutMs, maxBytes);
+}
 
+/** Parses a reply body as JSON and checks it with the schema. Errors name the step and the kind only. */
+function parseReply<T>(step: string, schema: z.ZodType<T>, body: string): T {
+  let json: unknown;
+  try {
+    json = JSON.parse(body) as unknown;
+  } catch {
+    throw kindError(step, "invalid");
+  }
   const parsed = schema.safeParse(json);
   if (!parsed.success) throw new PlexRequestError(`${step} response was not as expected`, "invalid");
   return parsed.data;
+}
+
+/**
+ * The one place every Plex Media Server GET goes through: headers, timeout, no redirects, and Zod validation.
+ * Errors name the step and the kind or status only.
+ */
+async function plexServerFetch<T>(step: string, schema: z.ZodType<T>, options: RequestOptions): Promise<T> {
+  return parseReply(step, schema, await requestBody(step, "GET", options));
+}
+
+/**
+ * Sends a write (POST, PUT or DELETE) with no body. A write that returns nothing it needs skips the JSON parse, so an
+ * empty reply is fine. Pass a schema to check a reply that is needed (such as a new collection's key).
+ */
+function plexServerSend(step: string, method: Exclude<PlexMethod, "GET">, options: RequestOptions): Promise<void>;
+function plexServerSend<T>(
+  step: string,
+  method: Exclude<PlexMethod, "GET">,
+  options: RequestOptions,
+  schema: z.ZodType<T>,
+): Promise<T>;
+async function plexServerSend<T>(
+  step: string,
+  method: Exclude<PlexMethod, "GET">,
+  options: RequestOptions,
+  schema?: z.ZodType<T>,
+): Promise<T | void> {
+  const body = await requestBody(step, method, options);
+  if (schema) return parseReply(step, schema, body);
 }
 
 /** The server's machineIdentifier. Needs no token, so it can check an address before the token is sent there. */
@@ -327,4 +358,141 @@ export async function getShowEpisodes(conn: ServerConnection, token: string, rat
     timeoutMs: 15_000,
     maxBytes: SECTION_ITEMS_MAX_BYTES,
   });
+}
+
+// Focus collections (Movie Focus, TV Focus) are plain Plex collections MediaHub keeps in step with its lists. Each
+// call below is one step of that sync (see server/focus/plex-sync.ts). Every path segment is encoded and every query is
+// built with URLSearchParams. A reply is checked only for the keys the sync uses.
+
+const RatingKey = z.string().regex(/^\d+$/);
+const CreatedCollectionSchema = z.object({
+  MediaContainer: z.object({ Metadata: z.array(z.object({ ratingKey: RatingKey })).min(1) }),
+});
+const CollectionChildrenSchema = z.object({
+  MediaContainer: z.object({ Metadata: z.array(z.object({ ratingKey: RatingKey })).nullish() }),
+});
+
+/** Plex's collection type for a movie collection (1) or a show collection (2). */
+const COLLECTION_TYPE = { movie: "1", series: "2" } as const;
+/** Plex's sort value for a collection that keeps its own order. */
+const CUSTOM_COLLECTION_SORT = "2";
+
+/** True for a reply with HTTP status 404, the only status the collection calls treat as "not there". */
+function isNotFound(error: unknown): boolean {
+  return error instanceof PlexRequestError && error.kind === "http" && error.status === 404;
+}
+
+/** Creates an empty collection in a library section and returns its ratingKey. */
+export async function createCollection(
+  conn: ServerConnection,
+  token: string,
+  { kind, title, sectionKey }: { kind: "movie" | "series"; title: string; sectionKey: string },
+): Promise<string> {
+  const query = new URLSearchParams({ type: COLLECTION_TYPE[kind], title, smart: "0", sectionId: sectionKey });
+  const reply = await plexServerSend("Plex collection create", "POST", { conn, token, path: `/library/collections?${query}` }, CreatedCollectionSchema);
+  const created = reply.MediaContainer.Metadata[0];
+  if (!created) throw kindError("Plex collection create", "invalid");
+  return created.ratingKey;
+}
+
+/**
+ * The ratingKeys of a collection's items, in collection order. Null when the collection no longer exists (HTTP 404),
+ * so the caller can make a new one.
+ */
+export async function getCollectionItemKeys(conn: ServerConnection, token: string, collectionKey: string): Promise<string[] | null> {
+  try {
+    const reply = await plexServerFetch("Plex collection items", CollectionChildrenSchema, {
+      conn,
+      token,
+      path: `/library/collections/${encodeURIComponent(collectionKey)}/children`,
+      maxBytes: SECTION_ITEMS_MAX_BYTES,
+    });
+    return (reply.MediaContainer.Metadata ?? []).map((item) => item.ratingKey);
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
+
+/** Adds one item to a collection. Plex takes the item as a server:// uri that names this server's machine id. */
+export async function addCollectionItem(
+  conn: ServerConnection,
+  token: string,
+  { collectionKey, machineId, itemKey }: { collectionKey: string; machineId: string; itemKey: string },
+): Promise<void> {
+  const uri = `server://${machineId}/com.plexapp.plugins.library/library/metadata/${itemKey}`;
+  const query = new URLSearchParams({ uri });
+  await plexServerSend("Plex collection add item", "PUT", {
+    conn,
+    token,
+    path: `/library/collections/${encodeURIComponent(collectionKey)}/items?${query}`,
+  });
+}
+
+/** Removes one item from a collection. The item stays in the library. */
+export async function removeCollectionItem(conn: ServerConnection, token: string, collectionKey: string, itemKey: string): Promise<void> {
+  await plexServerSend("Plex collection remove item", "DELETE", {
+    conn,
+    token,
+    path: `/library/collections/${encodeURIComponent(collectionKey)}/items/${encodeURIComponent(itemKey)}`,
+  });
+}
+
+/** Moves one item to sit after another item, or to the front when after is null. */
+export async function moveCollectionItem(
+  conn: ServerConnection,
+  token: string,
+  collectionKey: string,
+  itemKey: string,
+  after: string | null,
+): Promise<void> {
+  const query = after === null ? "" : `?${new URLSearchParams({ after })}`;
+  await plexServerSend("Plex collection move item", "PUT", {
+    conn,
+    token,
+    path: `/library/collections/${encodeURIComponent(collectionKey)}/items/${encodeURIComponent(itemKey)}/move${query}`,
+  });
+}
+
+/** Sets a collection to keep its own custom order, so the moves above take effect. */
+export async function setCollectionCustomOrder(conn: ServerConnection, token: string, collectionKey: string): Promise<void> {
+  const query = new URLSearchParams({ collectionSort: CUSTOM_COLLECTION_SORT });
+  await plexServerSend("Plex collection sort", "PUT", {
+    conn,
+    token,
+    path: `/library/collections/${encodeURIComponent(collectionKey)}/prefs?${query}`,
+  });
+}
+
+/**
+ * Pins a collection to the owner's Plex Home: the pin call, then a move of its row to the top of the section's rows.
+ * The row's identifier is "custom.collection.{section}.{collection}", encoded as one path segment.
+ */
+export async function pinCollectionToHome(conn: ServerConnection, token: string, sectionKey: string, collectionKey: string): Promise<void> {
+  const pinQuery = new URLSearchParams({ metadataItemId: collectionKey, promotedToOwnHome: "1" });
+  await plexServerSend("Plex collection pin", "POST", {
+    conn,
+    token,
+    path: `/hubs/sections/${encodeURIComponent(sectionKey)}/manage?${pinQuery}`,
+  });
+
+  const identifier = `custom.collection.${sectionKey}.${collectionKey}`;
+  await plexServerSend("Plex collection hub move", "PUT", {
+    conn,
+    token,
+    path: `/hubs/sections/${encodeURIComponent(sectionKey)}/manage/${encodeURIComponent(identifier)}/move`,
+  });
+}
+
+/** Deletes a collection. Its items stay in the library. A collection that is already gone counts as deleted. */
+export async function deleteCollection(conn: ServerConnection, token: string, collectionKey: string): Promise<void> {
+  try {
+    await plexServerSend("Plex collection delete", "DELETE", {
+      conn,
+      token,
+      path: `/library/collections/${encodeURIComponent(collectionKey)}`,
+    });
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
+  }
 }

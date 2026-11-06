@@ -6,6 +6,7 @@ import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-opti
 import { getWatchedIndex } from "@/server/plex/watched";
 import type { WatchedIndex } from "@/server/merge/watched";
 import { listFocusIds } from "@/server/focus/focus";
+import { syncFocusIfStale } from "@/server/focus/plex-sync";
 import { toHomeItems } from "@/server/merge/library";
 import type { HomeItem } from "@/components/home/home-items";
 import { FocusAdd } from "@/components/focus/focus-add";
@@ -46,6 +47,8 @@ function libraryItems(library: Library, watched: WatchedIndex | null): HomeItem[
 export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmin: boolean }) {
   const name = FOCUS_NAME[kind];
   const app = FOCUS_APP[kind];
+  // Runs after the response, as on Home: puts Focus changes made in Plex back, and adds titles that have arrived.
+  syncFocusIfStale();
   // The full stored order, including titles no longer in the library. The grid sends it back whole on a reorder.
   const allIds = listFocusIds(kind);
   const stored = new Set(allIds);

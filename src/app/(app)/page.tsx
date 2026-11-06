@@ -7,6 +7,7 @@ import { loadOrNull } from "@/server/arr/load-or-null";
 import { getWatchedIndex } from "@/server/plex/watched";
 import { toHomeItems } from "@/server/merge/library";
 import { focusMembership } from "@/server/focus/focus";
+import { syncFocusIfStale } from "@/server/focus/plex-sync";
 import { Button } from "@/components/ui/button";
 import { HomeGrid } from "@/components/home/home-grid";
 
@@ -16,6 +17,8 @@ export const instant = false;
 
 export default async function HomePage() {
   await requirePageUser("admin", "requester");
+  // Puts Focus changes made in Plex back, and adds titles that have arrived in Plex. Runs after the response.
+  syncFocusIfStale();
 
   // Plex is not wrapped in loadOrNull: a failure comes back as "failed" and only costs the banners, not the grid.
   const [movies, series, watched] = await Promise.all([
