@@ -106,6 +106,20 @@
     inset 0 0 36px -4px var(--glow);
 }
 
+/* The poster wash behind a movie or series page: two soft glows in the poster's own hues (--h1, --h2, set by PosterWash).
+   Dark mode uses deeper tones. */
+@utility poster-wash {
+  background-image:
+    radial-gradient(ellipse 70% 55% at 10% 0%, oklch(0.75 0.16 var(--h1) / 0.38), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 95% 10%, oklch(0.65 0.17 var(--h2) / 0.3), transparent 70%);
+
+  @media (prefers-color-scheme: dark) {
+    background-image:
+      radial-gradient(ellipse 70% 55% at 10% 0%, oklch(0.5 0.16 var(--h1) / 0.45), transparent 70%),
+      radial-gradient(ellipse 60% 50% at 95% 10%, oklch(0.45 0.15 var(--h2) / 0.4), transparent 70%);
+  }
+}
+
 /* Soft neon glow under brand-coloured elements. */
 @utility glow-brand {
   box-shadow: 0 6px 22px -6px var(--glow);

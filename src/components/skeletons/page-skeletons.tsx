@@ -58,7 +58,7 @@ export function ItemPageSkeleton() {
         ← Home
       </Link>
 
-      <section className="relative overflow-hidden rounded-xl border bg-card">
+      <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
           <div className="w-32 shrink-0 rounded-md shadow-lg sm:w-40 md:w-48">
             <Skeleton className="aspect-[2/3] w-full" />

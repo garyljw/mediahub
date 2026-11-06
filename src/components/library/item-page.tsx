@@ -8,6 +8,7 @@ import { Backdrop } from "@/components/poster/backdrop";
 import { PosterTile } from "@/components/poster/poster";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
+import { PosterWash } from "@/components/poster/poster-wash";
 
 export type ItemPageProps = {
   title: string;
@@ -56,16 +57,16 @@ export function ItemPageLayout({
   settings,
 }: ItemPageProps) {
   return (
-    <div className="space-y-6">
+    <PosterWash posterSrc={posterSrc} className="space-y-6">
       {/* Home is the one library page, so every item page goes back there. */}
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
         ← Home
       </Link>
 
-      <section className="relative overflow-hidden rounded-xl border bg-card">
+      <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         {backdropSrc !== null && <Backdrop src={backdropSrc} />}
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-          <div className="w-32 shrink-0 rounded-md shadow-lg sm:w-40 md:w-48">
+          <div className="w-32 shrink-0 rounded-md shadow-lg transition-transform duration-500 motion-reduce:transition-none in-data-[washed]:-rotate-[1.5deg] in-data-[washed]:shadow-[0_30px_60px_-18px_oklch(0.55_0.2_var(--h1)/.8)] sm:w-40 md:w-48">
             <PosterTile src={posterSrc} />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
@@ -116,6 +117,6 @@ export function ItemPageLayout({
           {settings}
         </section>
       )}
-    </div>
+    </PosterWash>
   );
 }
