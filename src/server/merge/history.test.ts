@@ -115,6 +115,27 @@ describe("toHistoryEntries", () => {
     });
   });
 
+  it("gives a movie its year, the first three genres and the overview as its peek", () => {
+    expect(find("movie-1").peek).toStrictEqual({
+      year: 2026,
+      genres: ["Thriller", "Drama", "Mystery"],
+      overview: "A made-up film for tests.",
+    });
+  });
+
+  it("gives an episode the series' year, genres and overview as its peek", () => {
+    expect(find("episode-1").peek).toStrictEqual({
+      year: 2021,
+      genres: ["Drama", "Mystery"],
+      overview: "A made-up show for tests.",
+    });
+  });
+
+  it("gives a null peek when the movie or series is missing from the record", () => {
+    expect(find("movie-7").peek).toBeNull();
+    expect(find("episode-8").peek).toBeNull();
+  });
+
   it("gives no poster when the included resource has none, and still links the series", () => {
     expect(find("movie-2").posterSrc).toBeNull();
     expect(find("episode-4")).toMatchObject({ posterSrc: null, href: "/tv/202" });
@@ -181,6 +202,7 @@ describe("toHistoryEntries", () => {
       "href",
       "key",
       "kind",
+      "peek",
       "posterSrc",
       "quality",
       "title",

@@ -18,6 +18,7 @@ function row(overrides: Partial<QueueRow> & Pick<QueueRow, "key">): QueueRow {
     detail: "",
     href: null,
     posterSrc: null,
+    peek: null,
     state: "downloading",
     severity: "ok",
     progress: 10,

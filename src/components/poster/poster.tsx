@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Film } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
+import type { Peek } from "@/server/merge/peek";
+import { PEEK_HEIGHT, PEEK_WIDTH, PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
 
 /**
  * Tracks whether a poster src has loaded or failed, for thumbnails, tiles, headshots and backdrops. Both states belong
@@ -129,8 +130,50 @@ export function PosterPreview({ src, top, left }: { src: string; top: number; le
       width={PREVIEW_WIDTH}
       height={PREVIEW_HEIGHT}
       style={{ top, left }}
-      className="pointer-events-none fixed z-50 h-60 w-40 rounded-md border bg-muted object-cover shadow-lg"
+      className="pointer-events-none fixed z-50 h-60 w-40 animate-peek-in rounded-md border bg-muted object-cover shadow-lg motion-reduce:animate-none"
     />,
+    document.body,
+  );
+}
+
+/**
+ * The hover card for a title row: its poster beside the title, the year, kind and genres, and the overview. Fixed size
+ * (PEEK_WIDTH x PEEK_HEIGHT), portalled to body like PosterPreview. `src` is the row's own thumbnail URL, so the browser
+ * serves it from cache. It is aria-hidden, as the poster-only preview is: the same facts are on the row and the item page.
+ */
+export function PeekCard({
+  src,
+  title,
+  peek,
+  kind,
+  top,
+  left,
+}: {
+  src: string;
+  title: string;
+  peek: Peek;
+  kind: "movie" | "series";
+  top: number;
+  left: number;
+}) {
+  const meta = [peek.year === null ? null : String(peek.year), kind === "movie" ? "Movie" : "TV", peek.genres.join(", ")]
+    .filter((part): part is string => part !== null && part !== "")
+    .join(" · ");
+  return createPortal(
+    <div
+      aria-hidden
+      // The size comes from the same constants the positioning uses, so the two can't drift apart.
+      style={{ top, left, width: PEEK_WIDTH, height: PEEK_HEIGHT }}
+      className="pointer-events-none fixed z-50 grid animate-peek-in grid-cols-[120px_1fr] gap-3.5 overflow-hidden rounded-xl bg-popover p-3 text-[13px] leading-5 text-popover-foreground shadow-2xl ring-1 ring-border motion-reduce:animate-none"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it. */}
+      <img src={src} alt="" width={120} height={180} className="h-[180px] w-[120px] rounded-lg bg-muted object-cover" />
+      <div className="min-w-0 overflow-hidden">
+        <p className="font-display text-base leading-tight font-bold line-clamp-2">{title}</p>
+        {meta !== "" && <p className="mt-1 text-muted-foreground line-clamp-2">{meta}</p>}
+        {peek.overview !== "" && <p className="mt-2 text-muted-foreground line-clamp-4">{peek.overview}</p>}
+      </div>
+    </div>,
     document.body,
   );
 }

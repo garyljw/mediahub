@@ -6,6 +6,7 @@ import { ArrRequestError, arrRequest, getList } from "./request";
 import { positiveIdOrNull } from "./detail-fields";
 import { toRootFolderOptions, type RootFolderOption } from "./root-folders";
 import type { components as RadarrComponents } from "./generated/radarr";
+import { cutOverview } from "@/server/merge/peek";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
 
@@ -30,8 +31,6 @@ export type MovieAdd = {
   searchForMovie: boolean;
 };
 
-/** Longest overview sent to the browser, in code points (so an emoji is never cut in half). Longer text is cut and ends with an ellipsis. */
-const MAX_OVERVIEW = 300;
 /** Most search hits returned. Radarr can return hundreds; the dialog only needs a short list. */
 const MAX_RESULTS = 20;
 
@@ -96,13 +95,11 @@ export function toLookupResults(movies: MovieResource[], libraryTmdbIds: Set<num
     if (results.length >= MAX_RESULTS) break;
     if (typeof movie.tmdbId !== "number" || !(movie.tmdbId > 0)) continue;
     if (!movie.title) continue;
-    // Array.from splits by code point, so the cut and the length check never split a surrogate pair.
-    const overviewChars = Array.from(movie.overview ?? "");
     results.push({
       tmdbId: movie.tmdbId,
       title: movie.title,
       year: yearOrNull(movie.year),
-      overview: overviewChars.length > MAX_OVERVIEW ? `${overviewChars.slice(0, MAX_OVERVIEW - 1).join("")}…` : overviewChars.join(""),
+      overview: cutOverview(movie.overview),
       inLibrary: libraryTmdbIds.has(movie.tmdbId),
       posterFile: tmdbPosterFile(movie),
     });

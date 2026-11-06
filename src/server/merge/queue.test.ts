@@ -206,6 +206,33 @@ describe("toQueueRows series source", () => {
   });
 });
 
+describe("toQueueRows peek", () => {
+  it("gives a Radarr row its movie's year, genres and overview, with at most three genres", () => {
+    expect(find("radarr-1").peek).toStrictEqual({
+      year: 2001,
+      genres: ["Drama", "Crime", "Mystery"],
+      overview: "A made-up film for tests.",
+    });
+  });
+
+  it("gives a Radarr row with only a year a peek with no genres or overview", () => {
+    expect(find("radarr-2").peek).toStrictEqual({ year: 1999, genres: [], overview: "" });
+  });
+
+  it("gives a Sonarr season pack the series' peek, from the first item that has a series", () => {
+    expect(find("sonarr-101").peek).toStrictEqual({
+      year: 2020,
+      genres: ["Drama"],
+      overview: "A made-up show for tests.",
+    });
+  });
+
+  it("gives null when the movie or series is missing from the item", () => {
+    expect(find("radarr-5").peek).toBeNull();
+    expect(find("sonarr-501").peek).toBeNull();
+  });
+});
+
 describe("firstQueuedId", () => {
   it("returns the first of the given ids (in the order given) that is still in the queue", () => {
     // 101 has left the queue, so the next id of the pack is the one to use.

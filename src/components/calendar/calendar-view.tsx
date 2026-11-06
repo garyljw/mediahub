@@ -221,7 +221,11 @@ export function CalendarView({
                     <li
                       key={entry.key}
                       className="flex items-center gap-3 px-3 py-2"
-                      {...posterPreview.rowHandlers(entry.key, entry.posterSrc)}
+                      {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
+                        title: entry.title,
+                        kind: entry.kind === "movie" ? "movie" : "series",
+                        peek: entry.peek,
+                      })}
                     >
                       <Poster src={entry.posterSrc} />
                       <div className="min-w-0 flex-1" data-poster-anchor>

@@ -349,7 +349,7 @@ describe("toCalendarEntries", () => {
     expect(find("movie-101-digital").releaseType).toBe("digital");
   });
 
-  it("returns only the calendar fields, with no paths, overviews, file info or upstream URLs", () => {
+  it("returns only the calendar fields, with no paths, file info or upstream URLs", () => {
     for (const entry of merged()) {
       expect(Object.keys(entry).sort()).toEqual([
         "date",
@@ -357,19 +357,34 @@ describe("toCalendarEntries", () => {
         "href",
         "key",
         "kind",
+        "peek",
         "posterSrc",
         "releaseType",
         "shortDetail",
         "status",
         "title",
       ]);
+      // The peek is the only place an overview goes, and it holds just these three fields.
+      if (entry.peek !== null) expect(Object.keys(entry.peek).sort()).toEqual(["genres", "overview", "year"]);
     }
     const serialized = JSON.stringify(merged());
     expect(serialized).not.toContain("/movies/Starfall");
     expect(serialized).not.toContain("/tv/Harbour Lights");
-    expect(serialized).not.toContain("overview");
     expect(serialized).not.toContain("image.test");
     expect(serialized).not.toContain("apikey");
+  });
+
+  it("gives each movie and episode its peek, from the movie or its series", () => {
+    expect(find("movie-101-cinema").peek).toStrictEqual({
+      year: 2026,
+      genres: [],
+      overview: "A made-up film for tests.",
+    });
+    expect(find("episode-703").peek).toStrictEqual({
+      year: null,
+      genres: [],
+      overview: "A made-up show for tests.",
+    });
   });
 
   it("returns nothing for empty inputs", () => {

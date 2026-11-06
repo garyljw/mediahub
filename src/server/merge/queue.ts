@@ -6,6 +6,7 @@ import { episodeCode } from "@/components/library/release";
 import { compareQueueRows, type QueueRow, type QueueRowDetails } from "@/components/queue/queue-rows";
 import { hasPoster } from "./images";
 import { canManualImport } from "./manual-import";
+import { toPeek } from "./peek";
 
 export type { QueueRow, QueueRowDetails };
 
@@ -180,6 +181,7 @@ export function toQueueRows(
       detail: year !== null && year > 0 ? String(year) : "",
       href: movieId !== null ? `/movies/${movieId}` : null,
       posterSrc: movieId !== null && hasPoster(movie?.images) ? `/api/movies/${movieId}/poster` : null,
+      peek: toPeek(movie),
       ...factsOf(item, state, severity, now, includeDetails),
       canForceImport: includeDetails && canManualImport(item),
     });
@@ -200,6 +202,7 @@ export function toQueueRows(
       detail: episodeDetail(episodes),
       href: seriesId !== null ? `/tv/${seriesId}` : null,
       posterSrc: seriesId !== null && hasPoster(seriesSource.series?.images) ? `/api/tv/${seriesId}/poster` : null,
+      peek: toPeek(seriesSource.series),
       ...factsOf(winner, state, severity, now, includeDetails),
       canForceImport: includeDetails && group.items.some(canManualImport),
     });

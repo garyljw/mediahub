@@ -2,6 +2,7 @@
 // and the client view, so it must not import server-only code at runtime (type imports only).
 import type { ActivitySeverity, ActivityState } from "@/server/arr/activity";
 import { SEVERITY_RANK } from "@/components/library/severity";
+import type { Peek } from "@/server/merge/peek";
 
 /** The download details an admin can expand a row to see. Null for requesters. */
 export type QueueRowDetails = {
@@ -41,6 +42,8 @@ export type QueueRow = {
   href: string | null;
   /** MediaHub's own poster route, only when the included resource has a poster. */
   posterSrc: string | null;
+  /** The hover card's facts (year, genres, overview) for the title, or null when there is nothing to show. */
+  peek: Peek | null;
   state: ActivityState;
   severity: ActivitySeverity;
   /** Whole percent 0–100, or null when unknown. */

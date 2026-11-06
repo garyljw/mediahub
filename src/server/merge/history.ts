@@ -5,6 +5,7 @@ import { formatSize } from "@/components/library/format";
 import { episodeCode } from "@/components/library/release";
 import type { HistoryEventFilter } from "@/components/history/history-params";
 import { hasPoster } from "./images";
+import { toPeek, type Peek } from "./peek";
 import { formatLocalDateTime } from "./local-time";
 
 type MovieHistoryRecord = RadarrComponents["schemas"]["HistoryResource"];
@@ -51,6 +52,8 @@ export type HistoryEntry = {
   quality: string | null;
   /** MediaHub's own poster route, only when the included resource has a poster. */
   posterSrc: string | null;
+  /** The hover card's facts (year, genres, overview) for the movie or series, or null when there is nothing to show. */
+  peek: Peek | null;
   /** Episodes with a known series link to its page. Movies have no page, so null. */
   href: string | null;
   /** Only grabbed records can be marked as failed. */
@@ -202,6 +205,7 @@ function movieSortable(record: MovieHistoryRecord, timeZone: string): Sortable |
       detail: movie?.year ? String(movie.year) : "",
       quality: nonEmpty(record.quality?.quality?.name),
       posterSrc: movieId !== null && hasPoster(movie?.images) ? `/api/movies/${movieId}/poster` : null,
+      peek: toPeek(movie),
       href: null,
       canMarkFailed: event === "grabbed",
       details: detailsOf(record),
@@ -235,6 +239,7 @@ function episodeSortable(record: EpisodeHistoryRecord, timeZone: string): Sortab
           : "",
       quality: nonEmpty(record.quality?.quality?.name),
       posterSrc: seriesId !== null && hasPoster(series?.images) ? `/api/tv/${seriesId}/poster` : null,
+      peek: toPeek(series),
       href: seriesId !== null ? `/tv/${seriesId}` : null,
       canMarkFailed: event === "grabbed",
       details: detailsOf(record),

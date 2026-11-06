@@ -13,6 +13,7 @@ function movie(key: string, releaseType: "cinema" | "digital" | "physical", stat
     releaseType,
     status,
     posterSrc: null,
+    peek: null,
     href: null,
   };
 }
@@ -28,6 +29,7 @@ function episode(key: string, status: CalendarEntry["status"], date = "2026-11-0
     releaseType: null,
     status,
     posterSrc: null,
+    peek: null,
     href: "/tv/7",
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PREVIEW_HEIGHT, PREVIEW_WIDTH, previewPosition } from "./poster-preview";
+import { PEEK_HEIGHT, PEEK_WIDTH, PREVIEW_HEIGHT, PREVIEW_WIDTH, previewPosition } from "./poster-preview";
 
 const viewport = { width: 1000, height: 800 };
 // A 24x36 thumbnail at (left 20, top 300).
@@ -50,5 +50,25 @@ describe("previewPosition", () => {
   it("stays inside the viewport when neither side has room", () => {
     const wide = { top: 300, left: 100, right: 900, height: 36 };
     expect(previewPosition(wide, viewport, "left").left).toBe(1000 - 8 - PREVIEW_WIDTH);
+  });
+
+  it("sizes the card's position with the card's size", () => {
+    const wide = { top: 300, left: 400, right: 700, height: 36 };
+    const size = { width: PEEK_WIDTH, height: PEEK_HEIGHT };
+    expect(previewPosition(wide, viewport, "left", size)).toStrictEqual({
+      top: 300 + 18 - 102,
+      left: 400 - 8 - PEEK_WIDTH,
+    });
+  });
+
+  it("keeps the card inside the viewport at the top and bottom", () => {
+    const size = { width: PEEK_WIDTH, height: PEEK_HEIGHT };
+    expect(previewPosition({ ...thumb, top: 10 }, viewport, "left", size).top).toBe(8);
+    expect(previewPosition({ ...thumb, top: 790 }, viewport, "left", size).top).toBe(800 - 8 - PEEK_HEIGHT);
+  });
+
+  it("flips the card to the right of the title cell when there is no room on the left", () => {
+    const nearLeft = { top: 300, left: 100, right: 400, height: 36 };
+    expect(previewPosition(nearLeft, viewport, "left", { width: PEEK_WIDTH, height: PEEK_HEIGHT }).left).toBe(408);
   });
 });

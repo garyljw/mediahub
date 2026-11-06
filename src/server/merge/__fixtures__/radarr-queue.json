@@ -2,7 +2,7 @@
   {
     "id": 1,
     "movieId": 1,
-    "movie": { "id": 1, "title": "Alpha", "year": 2001, "images": [{ "coverType": "poster", "url": "/x" }] },
+    "movie": { "id": 1, "title": "Alpha", "year": 2001, "overview": "A made-up film for tests.", "genres": ["Drama", "Crime", "Mystery", "Thriller"], "images": [{ "coverType": "poster", "url": "/x" }] },
     "quality": { "quality": { "id": 7, "name": "Bluray-1080p" } },
     "title": "LEAK-RELEASE-ALPHA",
     "size": 1000,
