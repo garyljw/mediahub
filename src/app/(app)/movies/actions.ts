@@ -1,23 +1,11 @@
 "use server";
 
-import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
-import {
-  listQualityProfiles,
-  refreshMovies,
-  searchMovieReleases,
-} from "@/server/arr/movies";
-import {
-  MovieAddError,
-  addMovie,
-  listRootFolders,
-  lookupMovies,
-  type LookupResult,
-} from "@/server/arr/movie-add";
+import { refreshMovies, searchMovieReleases } from "@/server/arr/movies";
+import { lookupMovies, type LookupResult } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
-import { getMovieAddDefaults } from "@/server/settings/add-defaults";
-import { resolveAddTarget } from "@/server/settings/add-target";
+import { addMovieAs, type AddResult } from "@/server/add/movie-add";
 import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases } from "@/server/arr/releases";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
@@ -55,115 +43,22 @@ export async function searchMovies(input: unknown): Promise<SearchResult> {
   }
 }
 
-export type AddResult = { ok: true; id: number | null; title: string; year: number | null } | { ok: false; error: string };
-
-// Requesters send only the TMDB id. strictObject rejects any other key, so a requester cannot pick a profile,
-// a folder or monitoring.
-const RequesterMovieAddInput = z.strictObject({
-  tmdbId: z.number().int().positive(),
-});
-
-// Admins send every choice the add panel shows. All fields are required, and strictObject rejects any other key.
-const AdminMovieAddInput = z.strictObject({
-  tmdbId: z.number().int().positive(),
-  qualityProfileId: z.number().int().positive(),
-  rootFolderId: z.number().int().positive(),
-  monitored: z.boolean(),
-  searchForMovie: z.boolean(),
-});
-
-/** One add, as the action sees it after the role check. The requested ids are set for an admin only. */
-type MovieAddRequest = {
-  tmdbId: number;
-  requestedProfileId?: number;
-  requestedRootFolderId?: number;
-  monitored: boolean;
-  searchForMovie: boolean;
-};
+export type { AddResult };
 
 /**
  * Adds one TMDB movie to the Radarr library. A requester sends only the TMDB id, and the saved Add defaults
  * decide the profile and folder (or the first item when those are missing), with the movie monitored and search on.
  * An admin also sends the profile, folder, monitored and search choices. Same shape as the other actions: the role
- * check runs first inside try, and the catch always returns or throws.
+ * check runs first inside try, and the catch always returns or throws. The add itself is in src/server/add/movie-add.ts,
+ * shared with the Focus page.
  */
 export async function addLibraryMovie(input: unknown): Promise<AddResult> {
   try {
     const { user } = await requireRole("admin", "requester");
-    return await addLibraryMovieAs(user.role === "admin", input);
+    return await addMovieAs(user.role === "admin", input);
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: "You don't have permission to add movies." };
     throw error;
-  }
-}
-
-/** The add itself, once the role is known. The role check above has already run. */
-async function addLibraryMovieAs(isAdmin: boolean, input: unknown): Promise<AddResult> {
-  let request: MovieAddRequest;
-  if (isAdmin) {
-    const parsed = AdminMovieAddInput.safeParse(input);
-    if (!parsed.success) return { ok: false, error: "Invalid add." };
-    request = {
-      tmdbId: parsed.data.tmdbId,
-      requestedProfileId: parsed.data.qualityProfileId,
-      requestedRootFolderId: parsed.data.rootFolderId,
-      monitored: parsed.data.monitored,
-      searchForMovie: parsed.data.searchForMovie,
-    };
-  } else {
-    const parsed = RequesterMovieAddInput.safeParse(input);
-    if (!parsed.success) return { ok: false, error: "Invalid add." };
-    request = { tmdbId: parsed.data.tmdbId, monitored: true, searchForMovie: true };
-  }
-  const { tmdbId, requestedProfileId, requestedRootFolderId, monitored, searchForMovie } = request;
-
-  // Set by addMovie's onSend, just before the add request goes out. Only a timeout after that point can mean
-  // Radarr added the movie; a timeout in the lookup or the library check before it cannot.
-  let addSent = false;
-  try {
-    const [profiles, folders] = await Promise.all([listQualityProfiles(), listRootFolders()]);
-    const target = resolveAddTarget({
-      app: "Radarr",
-      noun: "movies",
-      profiles,
-      folders,
-      saved: getMovieAddDefaults(),
-      requestedProfileId,
-      requestedRootFolderId,
-    });
-    if (!target.ok) return { ok: false, error: target.error };
-
-    const added = await addMovie(
-      {
-        tmdbId,
-        qualityProfileId: target.qualityProfileId,
-        rootFolderPath: target.rootFolderPath,
-        monitored,
-        searchForMovie,
-      },
-      () => {
-        addSent = true;
-      },
-    );
-    // The library reads Radarr on every request, so refresh() is enough for the new row to appear.
-    refresh();
-    return { ok: true, id: added.id, title: added.title, year: added.year };
-  } catch (error) {
-    if (error instanceof MovieAddError) {
-      if (error.reason === "exists") return { ok: false, error: "That movie is already in your library." };
-      return { ok: false, error: "Radarr couldn't find that movie." };
-    }
-    if (!(error instanceof ArrRequestError)) throw error;
-    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
-    console.error(`Movie add: ${error.message}`);
-    // A timeout means Radarr may have finished the add after we gave up, so the user must check the library.
-    if (addSent && error.kind === "timeout") {
-      return {
-        ok: false,
-        error: "Radarr took too long to answer. The movie may still have been added, so reload the page to check.",
-      };
-    }
-    return { ok: false, error: "Radarr didn't accept the movie. Try again." };
   }
 }
 

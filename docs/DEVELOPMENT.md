@@ -56,6 +56,9 @@ A release whose tag has `-rc.N` must be marked as a pre-release on GitHub. The v
 
 **Rotating the key:** generate a new Ed25519 pair, replace the `UPDATE_SIGNING_KEY` secret, replace both public-key copies, and publish a release. Installs that trust the old key can't verify the new release, so each of them needs one manual install of that release.
 
+## Title search
+`src/server/title-search/` is the one place the Focus pages search for titles to add. Today `arr.ts` calls the Radarr and Sonarr lookup endpoints. A direct TMDB or TVDB provider would replace the object `titleSearch()` returns in `index.ts`, and it would need its own poster route, because the hits point at the Radarr and Sonarr poster routes. Pages and actions import only `@/server/title-search`, never `arr.ts`.
+
 ## Managing users from a dev checkout
 All commands prompt for passwords and never accept them as arguments.
 

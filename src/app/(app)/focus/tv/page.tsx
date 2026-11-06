@@ -6,6 +6,6 @@ export const metadata = { title: "TV Focus" };
 export const instant = false;
 
 export default async function TvFocusPage() {
-  await requirePageUser("admin", "requester");
-  return <FocusListPage kind="series" />;
+  const user = await requirePageUser("admin", "requester");
+  return <FocusListPage kind="series" isAdmin={user.role === "admin"} />;
 }

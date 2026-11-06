@@ -2,11 +2,13 @@ import { AlertTriangle } from "lucide-react";
 import { listMovies, type MovieRow } from "@/server/arr/movies";
 import { listSeries, type SeriesRow } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
+import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-options";
 import { getWatchedIndex } from "@/server/plex/watched";
 import type { WatchedIndex } from "@/server/merge/watched";
 import { listFocusIds } from "@/server/focus/focus";
 import { toHomeItems } from "@/server/merge/library";
 import type { HomeItem } from "@/components/home/home-items";
+import { FocusAdd } from "@/components/focus/focus-add";
 import { FocusGrid } from "@/components/focus/focus-grid";
 import { FOCUS_APP, FOCUS_NAME, type FocusKind } from "@/components/focus/focus-kinds";
 
@@ -35,27 +37,33 @@ function libraryIds(library: Library): Set<number> {
   return new Set(rows.map((row) => row.id));
 }
 
-/** Home tiles for the stored titles only, so the library's other titles never reach the page. */
-function toTiles(library: Library, stored: ReadonlySet<number>, watched: WatchedIndex | null): HomeItem[] {
-  if (library.kind === "movie") {
-    return toHomeItems(library.rows.filter((row) => stored.has(row.id)), [], watched);
-  }
-  return toHomeItems([], library.rows.filter((row) => stored.has(row.id)), watched);
+/** Home items for every title in the loaded library, sorted as on Home. The page splits them into tiles and candidates. */
+function libraryItems(library: Library, watched: WatchedIndex | null): HomeItem[] {
+  if (library.kind === "movie") return toHomeItems(library.rows, [], watched);
+  return toHomeItems([], library.rows, watched);
 }
 
-export async function FocusListPage({ kind }: { kind: FocusKind }) {
+export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmin: boolean }) {
   const name = FOCUS_NAME[kind];
   const app = FOCUS_APP[kind];
   // The full stored order, including titles no longer in the library. The grid sends it back whole on a reorder.
   const allIds = listFocusIds(kind);
   const stored = new Set(allIds);
 
-  // Plex is not wrapped in loadOrNull: a failure only costs the watched banners, as on Home.
-  const [library, watched] = await Promise.all([loadLibrary(kind), getWatchedIndex()]);
+  // Plex is not wrapped in loadOrNull: a failure only costs the watched banners, as on Home. Admins load the kind's
+  // add options for the panel in the same wait. Requesters load none.
+  const [library, watched, movieOptions, seriesOptions] = await Promise.all([
+    loadLibrary(kind),
+    getWatchedIndex(),
+    isAdmin && kind === "movie" ? loadMovieAddOptions("Focus page") : null,
+    isAdmin && kind === "series" ? loadSeriesAddOptions("Focus page") : null,
+  ]);
   const watchedIndex = watched === "failed" ? null : watched;
 
   // Missing titles are only known when the library loaded. Nothing is removed automatically.
-  const tiles = library === null ? null : toTiles(library, stored, watchedIndex);
+  const items = library === null ? null : libraryItems(library, watchedIndex);
+  const tiles = items === null ? null : items.filter((item) => stored.has(item.id));
+  const candidates = items === null ? [] : items.filter((item) => !stored.has(item.id));
   const present = library === null ? null : libraryIds(library);
   const missing = present === null ? [] : allIds.filter((id) => !present.has(id));
   const byId = new Map((tiles ?? []).map((item) => [item.id, item]));
@@ -78,9 +86,19 @@ export async function FocusListPage({ kind }: { kind: FocusKind }) {
           Couldn&apos;t load watched status from Plex.
         </p>
       )}
+      {library !== null && (
+        <FocusAdd
+          kind={kind}
+          isAdmin={isAdmin}
+          candidates={candidates}
+          movieOptions={movieOptions}
+          seriesOptions={seriesOptions}
+        />
+      )}
       {tiles !== null && allIds.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Nothing in {name} yet. Right-click a {NOUN[kind]} on Home (or press and hold) and choose Add to {name}.
+          Nothing in {name} yet. Search above to add a {NOUN[kind]}, or right-click a {NOUN[kind]} on Home (or press and hold)
+          and choose Add to {name}.
         </p>
       )}
       {tiles !== null && allIds.length > 0 && (
