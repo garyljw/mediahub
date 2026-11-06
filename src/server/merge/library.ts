@@ -20,6 +20,7 @@ function movieItem(row: MovieRow, watched: WatchedIndex | null, inFocus: boolean
     href: `/movies/${row.id}`,
     posterSrc: row.hasPoster ? `/api/movies/${row.id}/poster` : null,
     badge: { label: MOVIE_STATUS_LABEL[row.status], className: MOVIE_STATUS_CLASS[row.status] },
+    onDisk: row.status === "downloaded",
     watched: row.tmdbId === null ? null : (watched?.movies.get(row.tmdbId) ?? null),
     inFocus,
   };
@@ -51,6 +52,7 @@ function seriesItem(row: SeriesRow, watched: WatchedIndex | null, inFocus: boole
     href: `/tv/${row.id}`,
     posterSrc: row.hasPoster ? `/api/tv/${row.id}/poster` : null,
     badge: seriesBadge(row),
+    onDisk: row.episodeFileCount > 0,
     watched: row.tvdbId === null ? null : (watched?.series.get(row.tvdbId) ?? null),
     inFocus,
   };

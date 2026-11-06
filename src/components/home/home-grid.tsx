@@ -312,7 +312,13 @@ export const HomeTile = memo(function HomeTile({
       draggable={false}
       className="group block rounded-lg select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <div className="relative overflow-hidden rounded-md [&_img]:pointer-events-none [&_img]:transition-transform [&_img]:duration-300 group-hover:[&_img]:scale-[1.05] motion-reduce:[&_img]:transition-none motion-reduce:group-hover:[&_img]:scale-100">
+      {/* No file on disk: the poster is shown in greyscale so missing titles stand out. The badge below still names the status. */}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-md [&_img]:pointer-events-none [&_img]:transition-transform [&_img]:duration-300 group-hover:[&_img]:scale-[1.05] motion-reduce:[&_img]:transition-none motion-reduce:group-hover:[&_img]:scale-100",
+          !item.onDisk && "[&_img]:grayscale [&_img]:brightness-90",
+        )}
+      >
         <PosterTile src={item.posterSrc} />
         {/* The grid's content-visibility clips anything drawn outside a tile, so on hover the frame stays put: the picture zooms
             inside it and the ring and glow are inset. z-10 puts the ring over the badges. */}

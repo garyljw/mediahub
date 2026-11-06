@@ -14,6 +14,7 @@ function item(kind: HomeItem["kind"], id: number, title: string, year: number | 
     href: `/${kind === "movie" ? "movies" : "tv"}/${id}`,
     posterSrc: null,
     badge: { label: "Missing", className: "" },
+    onDisk: true,
     watched: null,
     inFocus: false,
   };
