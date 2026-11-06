@@ -3,7 +3,7 @@ import { sonarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
 import { queueSeriesWrite } from "./series-writes";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
-import { DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
+import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { NewItemMonitor, SeriesType } from "@/components/tv/series-edit";
 import type { components as SonarrComponents } from "./generated/sonarr";
@@ -233,4 +233,21 @@ export async function getSeriesPoster(seriesId: number): Promise<Uint8Array<Arra
 /** Sonarr's backdrop (fanart) for one series, as JPEG bytes, through the disk image cache. */
 export async function getSeriesBackdrop(seriesId: number): Promise<Uint8Array<ArrayBuffer>> {
   return cachedArrImage("sonarr", "backdrop", seriesId, () => fetchSeriesBackdrop(seriesId));
+}
+
+/**
+ * True when Sonarr has the series with this id, false when it answers 404. Any other failure (ArrRequestError) propagates,
+ * so a Sonarr outage is never read as "the series is gone".
+ */
+export async function seriesExists(seriesId: number): Promise<boolean> {
+  const client = sonarrClient();
+  try {
+    const series = await arrRequest("Sonarr series", (signal) =>
+      client.GET("/api/v3/series/{id}", { params: { path: { id: seriesId } }, signal }),
+    );
+    return Boolean(series);
+  } catch (error) {
+    if (error instanceof ArrRequestError && error.status === 404) return false;
+    throw error;
+  }
 }

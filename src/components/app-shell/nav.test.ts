@@ -6,12 +6,12 @@ const labels = (items: { label: string }[]) => items.map((item) => item.label);
 describe("navItemsFor", () => {
   it("hides adminOnly items from a requester", () => {
     const items = navItemsFor(false);
-    expect(labels(items)).toEqual(["Home", "Calendar", "Queue", "History"]);
+    expect(labels(items)).toEqual(["Home", "Movie Focus", "TV Focus", "Calendar", "Queue", "History"]);
     expect(items.some((item) => item.adminOnly)).toBe(false);
   });
 
   it("shows every item to an admin, in order", () => {
-    expect(labels(navItemsFor(true))).toEqual(["Home", "Calendar", "Queue", "History", "Settings"]);
+    expect(labels(navItemsFor(true))).toEqual(["Home", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Settings"]);
     expect(navItemsFor(true)).toEqual(NAV_ITEMS);
   });
 });

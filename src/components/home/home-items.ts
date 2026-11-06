@@ -33,6 +33,8 @@ export type HomeItem = {
   badge: { label: string; className: string };
   /** The Plex watched state, or null when the item isn't in Plex (or Plex isn't connected). */
   watched: WatchedState | null;
+  /** True when the title is in its Focus list (Movie Focus for movies, TV Focus for series). */
+  inFocus: boolean;
 };
 
 export type HomeKind = "all" | "movie" | "series";

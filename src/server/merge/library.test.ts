@@ -164,3 +164,17 @@ describe("toHomeItems: Plex watched state", () => {
     }
   });
 });
+
+describe("toHomeItems: Focus membership", () => {
+  it("marks a series only from the series list, even when a movie has the same number", () => {
+    const sharedId = series[0].id;
+    const result = toHomeItems(movies, series, null, { movie: new Set([sharedId]), series: new Set() });
+    expect(result.some((item) => item.kind === "series" && item.id === sharedId)).toBe(true);
+    expect(result.filter((item) => item.inFocus).every((item) => item.kind === "movie")).toBe(true);
+    expect(result.filter((item) => item.inFocus).length).toBe(movies.filter((movie) => movie.id === sharedId).length);
+  });
+
+  it("is false for everything when no membership is given", () => {
+    expect(items.every((item) => item.inFocus === false)).toBe(true);
+  });
+});
