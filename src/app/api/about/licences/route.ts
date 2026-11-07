@@ -20,7 +20,7 @@ export async function GET() {
 
   const text = noticesText();
   if (text === null) {
-    return new Response("The licence list is not in this build of MediaHub.", { status: 404, headers: HEADERS });
+    return new Response("The licence texts are created when MediaHub is packaged, so they aren't available in development.", { status: 404, headers: HEADERS });
   }
   return new Response(text, { headers: HEADERS });
 }

@@ -26,11 +26,14 @@ export default async function AboutPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           MediaHub is built on the open-source projects listed below, each under its own licence.
         </p>
-        <p className="mt-2 text-sm">
-          <a href="/api/about/licences" className="text-primary hover:underline">
-            Read the full licence texts
-          </a>
-        </p>
+        {/* The texts come from the same packaging step as the list, so the link only shows when the list does. */}
+        {licences !== null && (
+          <p className="mt-2 text-sm">
+            <a href="/api/about/licences" className="text-primary hover:underline">
+              Read the full licence texts
+            </a>
+          </p>
+        )}
 
         {licences === null ? (
           <p className="mt-6 text-sm text-muted-foreground">
