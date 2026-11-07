@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -106,6 +106,20 @@ export function TabBar({ email, isAdmin }: Props) {
         <p className="truncate px-3 text-sm text-muted-foreground" title={email}>
           {email}
         </p>
+        <Link
+          href="/about"
+          aria-current={isActive(pathname, "/about") ? "page" : undefined}
+          onClick={() => setMoreOpen(false)}
+          className={cn(
+            "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
+            isActive(pathname, "/about")
+              ? "bg-brand text-primary-foreground glow-brand"
+              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          )}
+        >
+          <Info className="size-4" aria-hidden="true" />
+          About
+        </Link>
         <form action={signOut}>
           <Button type="submit" variant="ghost" className="w-full justify-start px-3 py-3">
             Sign out

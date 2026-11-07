@@ -5,13 +5,15 @@
 //
 // Steps: copy .next/standalone (dereferencing symlinks and junctions, so the folder is relocatable),
 // then public/, .next/static/ and drizzle/ (Next does not copy these), bundle the launcher and the
-// break-glass tools with esbuild, write build-info.json, and refuse any .env* file or data/ folder.
+// break-glass tools with esbuild, write build-info.json, write THIRD_PARTY_NOTICES.txt/.json and LICENSE.txt, check
+// that sharp is absent, and refuse any .env* file or data/ folder.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { build } from "esbuild";
+import { allEntries, collectPackages, collectVendored, renderNotices, summarize } from "./notices.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const standalone = path.join(root, ".next", "standalone");
@@ -36,7 +38,7 @@ function findForbidden(dir, rel = "", found = []) {
 // The release workflow passes the installer's version (X.Y.Z, X.Y.Z-rc.N or X.Y.Z-dev.N), which the updater and the
 // Settings page read from build-info.json. Its X.Y.Z must match package.json. Without --version, package.json's.
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
-const { values: args } = parseArgs({ options: { version: { type: "string" } } });
+const { values: args } = parseArgs({ options: { version: { type: "string" }, "node-license": { type: "string" } } });
 const version = args.version ?? pkg.version;
 const versionMatch = /^(\d+\.\d+\.\d+)(?:-(?:rc|dev)\.\d+)?$/.exec(version);
 if (!versionMatch || versionMatch[1] !== pkg.version) {
@@ -109,6 +111,56 @@ writeFileSync(
   path.join(out, "build-info.json"),
   `${JSON.stringify({ version, node: process.version }, null, 2)}\n`,
 );
+
+// Third-party notices. The Node.js licence comes from the Node zip the release workflow verified (--node-license).
+// Local builds have no zip, so their notices say so. WinSW (MediaHub.exe) is always in the installer.
+let nodeLicence = "This build did not include Node.js's licence; the installer build does.";
+if (args["node-license"] !== undefined) {
+  if (!existsSync(args["node-license"])) fail(`--node-license file not found: ${args["node-license"]}`);
+  nodeLicence = readFileSync(args["node-license"], "utf8");
+}
+const winswLicencePath = path.join(root, "installer", "licenses", "WinSW-LICENSE.txt");
+if (!existsSync(winswLicencePath)) fail("installer/licenses/WinSW-LICENSE.txt is missing.");
+const extras = [
+  { name: "Node.js", licence: "MIT and others (see text)", text: nodeLicence },
+  { name: "WinSW 2.12.0 (MediaHub.exe, the service wrapper)", licence: "MIT", text: readFileSync(winswLicencePath, "utf8") },
+];
+const notices = { packages: collectPackages(root), vendored: collectVendored(root), extras };
+writeFileSync(path.join(out, "THIRD_PARTY_NOTICES.txt"), renderNotices(notices));
+writeFileSync(path.join(out, "THIRD_PARTY_NOTICES.json"), `${JSON.stringify(summarize(allEntries(notices)), null, 2)}\n`);
+cpSync(path.join(root, "LICENSE"), path.join(out, "LICENSE.txt"));
+
+// The notices must name the packages MediaHub is built on, and the sharp packages must not have been traced in.
+const noticeNames = new Set(allEntries(notices).map((entry) => entry.name));
+for (const required of ["next", "react", "smartcrop"]) {
+  if (!noticeNames.has(required)) fail(`the third-party notices do not list ${required}.`);
+}
+// Every package the build ships must be in the notices. Read the name from each folder's package.json, because
+// Next can add hashed alias folders (better-sqlite3-<hash>). Folders without one are not packages.
+const shippedModules = path.join(out, "node_modules");
+const shippedDirs = existsSync(shippedModules)
+  ? readdirSync(shippedModules, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== ".bin")
+      .flatMap((entry) =>
+        entry.name.startsWith("@")
+          ? readdirSync(path.join(shippedModules, entry.name), { withFileTypes: true })
+              .filter((child) => child.isDirectory())
+              .map((child) => path.join(shippedModules, entry.name, child.name))
+          : [path.join(shippedModules, entry.name)],
+      )
+  : [];
+const unlisted = shippedDirs.flatMap((dir) => {
+  const manifest = path.join(dir, "package.json");
+  if (!existsSync(manifest)) return [];
+  const name = JSON.parse(readFileSync(manifest, "utf8")).name;
+  return typeof name === "string" && !noticeNames.has(name) ? [name] : [];
+});
+if (unlisted.length > 0) fail(`these shipped packages are missing from the third-party notices: ${unlisted.join(", ")}.`);
+for (const excluded of ["node_modules/sharp", "node_modules/@img"]) {
+  if (existsSync(path.join(out, excluded))) {
+    fail(`${excluded} is in the package. sharp is excluded in next.config.ts; if Next traces it again, find out why.`);
+  }
+}
 
 // The bundles load better-sqlite3 from here at runtime. Tracing has to have copied it, native binary included.
 const sqliteDir = path.join(out, "node_modules", "better-sqlite3");

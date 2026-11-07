@@ -122,6 +122,10 @@ jobs:
           if (-not $nodeExe) { throw 'node.exe not found in the zip.' }
           Write-Host "Bundled node.exe: $($nodeExe.FullName)"
           Add-Content -Path $env:GITHUB_ENV -Value "BUNDLED_NODE=$($nodeExe.FullName)"
+          # The Node zip carries its licence next to node.exe (node-v<ver>-win-x64/LICENSE). The package ships it.
+          $nodeLicense = Join-Path (Split-Path -Parent $nodeExe.FullName) 'LICENSE'
+          if (-not (Test-Path -LiteralPath $nodeLicense)) { throw "Node's LICENSE is not next to node.exe in the zip." }
+          Add-Content -Path $env:GITHUB_ENV -Value "BUNDLED_NODE_LICENSE=$nodeLicense"
 
       - name: Set up Node (same exact version, for building)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -137,7 +141,7 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
-        run: npm run package -- --version $env:APP_VERSION
+        run: npm run package -- --version $env:APP_VERSION --node-license $env:BUNDLED_NODE_LICENSE
 
       - name: Check the bundled Node version
         shell: pwsh
