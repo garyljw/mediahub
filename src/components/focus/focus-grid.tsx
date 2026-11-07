@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { removeFocusItems, reorderFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
 import { PosterTile } from "@/components/poster/poster";
 import { HomeTile } from "@/components/home/home-grid";
+import { useTilePeek } from "@/components/home/tile-peek";
 import { withWatched, type HomeItem, type HomeWatched } from "@/components/home/home-items";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
@@ -89,6 +90,8 @@ export function FocusGrid({
   // without them, so the reorder logic is the same either way.
   const watchedByKey = watchedState?.state === "ready" ? watchedState.byKey : null;
   const shownItems = useMemo(() => withWatched(order.items, watchedByKey), [order.items, watchedByKey]);
+  const shownByKey = useMemo(() => new Map(shownItems.map((item) => [item.key, item])), [shownItems]);
+  const { gridHandlers, card } = useTilePeek((key) => shownByKey.get(key));
 
   // `busy` blocks a second save synchronously, before React re-renders.
   const busy = useRef(false);
@@ -217,7 +220,7 @@ export function FocusGrid({
         onDragCancel={() => setDrag(null)}
       >
         <SortableContext items={order.items.map((item) => item.id)} strategy={rectSortingStrategy}>
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
+          <ul {...gridHandlers} className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
             {shownItems.map((item, index) => (
               <FocusTile
                 key={item.key}
@@ -240,6 +243,7 @@ export function FocusGrid({
           ) : null}
         </DragOverlay>
       </DndContext>
+      {card}
     </div>
   );
 }

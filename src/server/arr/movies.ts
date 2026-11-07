@@ -3,6 +3,7 @@ import { radarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
 import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
+import { toPeek, type Peek } from "@/server/merge/peek";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
@@ -219,6 +220,23 @@ export async function movieExists(movieId: number): Promise<boolean> {
     return Boolean(movie);
   } catch (error) {
     if (error instanceof ArrRequestError && error.status === 404) return false;
+    throw error;
+  }
+}
+
+/**
+ * The hover-card facts for one movie (year, genres, overview), or null when Radarr answers 404 or the movie has
+ * nothing to show. Any other failure (ArrRequestError) propagates. Only the three Peek fields leave this function.
+ */
+export async function getMoviePeek(movieId: number): Promise<Peek | null> {
+  const client = radarrClient();
+  try {
+    const movie = await arrRequest("Radarr movie", (signal) =>
+      client.GET("/api/v3/movie/{id}", { params: { path: { id: movieId } }, signal }),
+    );
+    return toPeek(movie);
+  } catch (error) {
+    if (error instanceof ArrRequestError && error.status === 404) return null;
     throw error;
   }
 }

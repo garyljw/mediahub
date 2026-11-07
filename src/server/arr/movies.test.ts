@@ -36,6 +36,7 @@ import {
   deleteMovies,
   editMovie,
   getMovieBackdrop,
+  getMoviePeek,
   getMoviePoster,
   listMovies,
   listQualityProfiles,
@@ -745,6 +746,43 @@ describe("movieExists", () => {
   it("propagates other failures instead of reporting the movie as gone", async () => {
     fetchMock.mockResolvedValue(new Response("", { status: 500 }));
     const error = await rejectionOf(movieExists(7));
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).status).toBe(500);
+  });
+});
+
+describe("getMoviePeek", () => {
+  it("returns only year, genres and overview, and asks for that id with the key in a header", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        id: 7,
+        title: "Fake Film",
+        year: 2001,
+        genres: ["Drama", "Comedy", "Action", "Thriller"],
+        overview: "A made-up plot.",
+        path: "/data/fake-film",
+        images: [{ coverType: "poster", url: "/MediaCover/7/poster.jpg" }],
+        apiKey: FAKE_KEY,
+      }),
+    );
+    const peek = await getMoviePeek(7);
+    expect(peek).toEqual({ year: 2001, genres: ["Drama", "Comedy", "Action"], overview: "A made-up plot." });
+    expect(Object.keys(peek ?? {}).sort()).toEqual(["genres", "overview", "year"]);
+    expect(JSON.stringify(peek)).not.toContain(FAKE_KEY);
+    const req = requestAt(0);
+    expect(new URL(req.url).pathname).toBe("/api/v3/movie/7");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+  });
+
+  it("is null when Radarr answers 404", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    expect(await getMoviePeek(7)).toBeNull();
+  });
+
+  it("propagates other failures as ArrRequestError", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 500 }));
+    const error = await rejectionOf(getMoviePeek(7));
     expect(error).toBeInstanceOf(ArrRequestError);
     expect((error as ArrRequestError).status).toBe(500);
   });

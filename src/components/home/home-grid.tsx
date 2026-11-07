@@ -13,6 +13,7 @@ import { useActivity } from "@/components/library/use-activity";
 import { FOCUS_NAME, SAVE_FAILED } from "@/components/focus/focus-kinds";
 import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { useTilePeek } from "./tile-peek";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
 import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
@@ -231,6 +232,8 @@ function HomeResults({
     [items, inFocusKeys],
   );
   const shownByKey = useMemo(() => new Map(shown.map((item) => [item.key, item])), [shown]);
+  // The hover card for a tile. Its handlers go on the grid <ul>, next to the ContextMenu trigger's own handlers.
+  const { gridHandlers, card } = useTilePeek((key) => shownByKey.get(key));
   const menuTarget = menuKey === null ? undefined : shownByKey.get(menuKey);
   const filtered = useMemo(
     () => filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter }),
@@ -331,7 +334,10 @@ function HomeResults({
               }}
             >
               {/* Fixed-width tiles fill each row, so wider screens get more columns rather than bigger posters. */}
-              <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
+              <ul
+                {...gridHandlers}
+                className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]"
+              >
                 {filtered.map((item) => (
                   // content-visibility lets the browser skip layout and paint for tiles that are off screen.
                   <li
@@ -358,6 +364,7 @@ function HomeResults({
               )}
             </ContextMenuContent>
           </ContextMenu>
+          {card}
         </>
       )}
     </>
@@ -394,11 +401,13 @@ export const HomeTile = memo(function HomeTile({
   return (
     <Link
       href={item.href}
+      data-peek-key={item.key}
       draggable={false}
       className="group block rounded-lg select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       {/* No file on disk: the poster is shown in greyscale so missing titles stand out. The badge below still names the status. */}
       <div
+        data-peek-anchor
         className={cn(
           "relative overflow-hidden rounded-md [&_img]:pointer-events-none [&_img]:transition-transform [&_img]:duration-300 group-hover:[&_img]:scale-[1.05] motion-reduce:[&_img]:transition-none motion-reduce:group-hover:[&_img]:scale-100",
           !item.onDisk && "[&_img]:grayscale [&_img]:brightness-90",

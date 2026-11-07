@@ -5,7 +5,7 @@ One web page for running Radarr (movies) and Sonarr (TV) together, instead of sw
 MediaHub is a hobby project. It started as an experiment in building a web app with [Claude Code](https://claude.com/claude-code), and nearly all of it was written that way, under a fixed set of review and security rules (see [CLAUDE.md](CLAUDE.md)). It is not a serious product: there is no support, no roadmap promise and no warranty. It runs on my home network and does what I need. You are welcome to use it, copy it or change it under the [MIT licence](LICENSE).
 
 ## What it does
-- **Home:** one poster grid of everything in Radarr and Sonarr, with one search box that covers your library and finds new titles to add (from TMDB and TVDB).
+- **Home:** one poster grid of everything in Radarr and Sonarr, with one search box that covers your library and finds new titles to add (from TMDB and TVDB). Rest the pointer on a poster for half a second and its year, genres and synopsis appear beside it, on Home and on the Focus lists.
 - **Adding:** one click adds a movie or series using the defaults an admin has chosen. Admins can also pick the quality profile and other options.
 - **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release.
 - **Queue:** what is downloading, with remove and force import.

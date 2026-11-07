@@ -3,6 +3,7 @@ import { sonarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
 import { queueSeriesWrite } from "./series-writes";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
+import { toPeek, type Peek } from "@/server/merge/peek";
 import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { NewItemMonitor, SeriesType } from "@/components/tv/series-edit";
@@ -248,6 +249,23 @@ export async function seriesExists(seriesId: number): Promise<boolean> {
     return Boolean(series);
   } catch (error) {
     if (error instanceof ArrRequestError && error.status === 404) return false;
+    throw error;
+  }
+}
+
+/**
+ * The hover-card facts for one series (year, genres, overview), or null when Sonarr answers 404 or the series has
+ * nothing to show. Any other failure (ArrRequestError) propagates. Only the three Peek fields leave this function.
+ */
+export async function getSeriesPeek(seriesId: number): Promise<Peek | null> {
+  const client = sonarrClient();
+  try {
+    const series = await arrRequest("Sonarr series", (signal) =>
+      client.GET("/api/v3/series/{id}", { params: { path: { id: seriesId } }, signal }),
+    );
+    return toPeek(series);
+  } catch (error) {
+    if (error instanceof ArrRequestError && error.status === 404) return null;
     throw error;
   }
 }
