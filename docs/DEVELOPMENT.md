@@ -84,3 +84,12 @@ All commands prompt for passwords and never accept them as arguments.
 - `--reset-password` signs the user out of all existing sessions. It also repairs a user who was created without a password.
 - There is no email reset. If you lose access to Plex, run `reset-plex-admin` from an administrator Command Prompt (see "Users and recovery" in the README).
 - If setting a new user's password fails after the user row is created, the script tries to remove that partial user and exits with an error. If the removal also fails, it says so, and `--reset-password` for that email repairs it.
+
+## Demo mode
+`npm run demo` starts MediaHub against made-up data, so screenshots show the real UI without a real library. One process starts a fake Radarr (port 17878), a fake Sonarr (17989) and a fake Plex Media Server (17400), seeds `demo/mediahub.db`, then runs `next dev` at http://127.0.0.1:3100 (loopback only). It uses 127.0.0.1 rather than localhost so the demo's sign-in cookie doesn't replace your normal dev session. Stop with Ctrl+C. `npm run demo -- --no-next` starts only the fakes and the seed, for testing the fakes with curl.
+
+- Sign-ins: the requester is `alex@example.test` with password `demo-password`. The admin is `admin@example.test` and has no password, because admins sign in with Plex. To sign in as the admin, open http://127.0.0.1:3101/: it sets the session cookie from `demo/admin-session.json` (written by the seed) and sends you to the demo. The screenshot script uses the same file.
+- The demo is cut off from the internet: MediaHub runs with `NODE_USE_ENV_PROXY=1` and a proxy address nothing listens on, so plex.tv, TMDB, TVDB and GitHub can't be reached. Only the local fakes answer. "Admin: sign in with Plex" therefore fails in the demo, as it should.
+- Everything is under `demo/` (gitignored): the database, the fake-server art cache and the session file. It never touches `data/`, and the seed refuses to run unless `DATABASE_PATH` is inside `demo/`.
+- Stop any running `npm run dev` first. Both use the `.next` folder, so the second one can't start.
+- The fakes live in `scripts/demo/`. Their sources are `src/server/arr/generated/` and the fixtures, so a change to an endpoint MediaHub calls needs a matching change there.

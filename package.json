@@ -15,6 +15,7 @@
     "create-user": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/create-user.ts",
     "create-admin": "npm run create-user -- --role admin",
     "reset-plex-admin": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/reset-plex-admin.ts",
+    "demo": "tsx scripts/demo/run.ts",
     "test": "vitest run"
   },
   "dependencies": {
