@@ -142,21 +142,21 @@ function SeasonDetails({
       {season.episodes.length === 0 ? (
         <p className="border-t px-3 py-2 text-sm text-muted-foreground">No episodes.</p>
       ) : (
-        <div className="border-t">
+        <div className="overflow-x-auto border-t">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>Monitored</TableHead>
                 <TableHead className={HEAD}>#</TableHead>
                 <TableHead className={HEAD}>Title</TableHead>
-                <TableHead className={HEAD}>Air date</TableHead>
+                <TableHead className={`${HEAD} hidden md:table-cell`}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
                 {episodeWatched !== null && <TableHead className={HEAD}>Watched</TableHead>}
                 <TableHead className={`${HEAD} w-48`}>
                   <EpisodeActivityHead />
                 </TableHead>
-                <TableHead className={HEAD}>Quality</TableHead>
-                <TableHead className={`${HEAD} text-right`}>Size</TableHead>
+                <TableHead className={`${HEAD} hidden md:table-cell`}>Quality</TableHead>
+                <TableHead className={`${HEAD} hidden text-right md:table-cell`}>Size</TableHead>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -178,8 +178,11 @@ function SeasonDetails({
                     )}
                   </TableCell>
                   <TableCell className={`${CELL} tabular-nums`}>{episode.episodeNumber}</TableCell>
-                  <TableCell className={CELL}>{episode.title}</TableCell>
-                  <TableCell className={`${CELL} tabular-nums text-muted-foreground`}>
+                  <TableCell className={`${CELL} whitespace-normal`}>
+                    {episode.title}
+                    <NarrowEpisodeFacts airDate={episode.airDate} quality={episode.quality} size={episode.size} />
+                  </TableCell>
+                  <TableCell className={`${CELL} hidden tabular-nums text-muted-foreground md:table-cell`}>
                     {formatAdded(episode.airDate)}
                   </TableCell>
                   <TableCell className={CELL}>
@@ -196,8 +199,8 @@ function SeasonDetails({
                     episodeId={episode.id}
                     name={`${season.label} episode ${episode.episodeNumber}`}
                   />
-                  <TableCell className={`${CELL} text-muted-foreground`}>{episode.quality ?? "—"}</TableCell>
-                  <TableCell className={`${CELL} text-right tabular-nums`}>{formatSize(episode.size)}</TableCell>
+                  <TableCell className={`${CELL} hidden text-muted-foreground md:table-cell`}>{episode.quality ?? "—"}</TableCell>
+                  <TableCell className={`${CELL} hidden text-right tabular-nums md:table-cell`}>{formatSize(episode.size)}</TableCell>
                   <TableCell className={`${CELL} text-right`}>
                     <EpisodeSearchButton
                       episodeId={episode.id}
@@ -222,6 +225,28 @@ function SeasonDetails({
       )}
     </details>
   );
+}
+
+/**
+ * Below md the table drops the Air date, Quality and Size columns, so their values show here under the title instead.
+ * Missing values are left out.
+ */
+function NarrowEpisodeFacts({
+  airDate,
+  quality,
+  size,
+}: {
+  airDate: string | null;
+  quality: string | null;
+  size: number;
+}) {
+  const facts = [
+    airDate !== null ? formatAdded(airDate) : null,
+    quality,
+    size > 0 ? formatSize(size) : null,
+  ].filter((fact): fact is string => fact !== null);
+  if (facts.length === 0) return null;
+  return <p className="text-xs text-muted-foreground md:hidden">{facts.join(" · ")}</p>;
 }
 
 /** An airing time in MediaHub's display time zone, or an em dash. Formatted here on the server, see CLAUDE.md. */

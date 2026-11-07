@@ -102,7 +102,7 @@ export function ItemPageSkeleton() {
   );
 }
 
-/** A table page (Queue, History): the heading and a card with a header row and `rows` rows. */
+/** A table page (Queue, History): the heading, then a table card at lg and up or a stack of cards below that. */
 export function TablePageSkeleton({ title, rows = 8, columns }: { title: string; rows?: number; columns: number }) {
   // The first cell holds a poster thumbnail and a title line. The rest hold one text line each.
   const cells = Array.from({ length: columns }, (_, index) => index);
@@ -110,7 +110,7 @@ export function TablePageSkeleton({ title, rows = 8, columns }: { title: string;
     <div aria-busy="true" className="space-y-4">
       <LoadingStatus />
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="hidden overflow-hidden rounded-xl border bg-card lg:block">
         <div className="flex h-8 items-center gap-4 border-b px-2">
           {cells.map((cell) => (
             <Skeleton key={cell} className="h-3 flex-1 rounded-sm" />
@@ -133,6 +133,17 @@ export function TablePageSkeleton({ title, rows = 8, columns }: { title: string;
           </div>
         ))}
       </div>
+      <ul className="space-y-2 lg:hidden">
+        {Array.from({ length: rows }, (_, row) => (
+          <li key={row} className="flex gap-3 rounded-xl border bg-card p-3">
+            <Skeleton className="h-9 w-6 shrink-0 rounded-sm" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

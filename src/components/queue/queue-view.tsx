@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ChevronDown, ChevronRight, FolderInput, Trash2 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useState, type HTMLAttributes } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +10,7 @@ import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { showsEtaFor, showsProgressFor, stateLabel } from "@/components/library/activity";
-import { CELL, HEAD, RowMenu } from "@/components/library/table-parts";
+import { toggleOnClick, CELL, HEAD, RowMenu } from "@/components/library/table-parts";
 import { formatEta, formatSize } from "@/components/library/format";
 import {
   keepLastKnown,
@@ -58,6 +58,144 @@ function DetailList({ row, details }: { row: QueueRow; details: QueueRowDetails 
         </ul>
       )}
     </div>
+  );
+}
+
+/** The status with its icon, in the colour of its severity. Same markup in the table and on the cards. */
+function StatusLabel({ row }: { row: QueueRow }) {
+  const Icon = ACTIVITY_ICON[row.state];
+  return (
+    <span className={`flex min-w-0 items-center gap-1.5 whitespace-nowrap ${ACTIVITY_CLASS[row.severity]}`}>
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {stateLabel(row.state)}
+    </span>
+  );
+}
+
+/** The ⋯ menu for an admin row or card. Force import and Remove open dialogs that the page holds. */
+function QueueMenu({
+  row,
+  onOpen,
+  onClosed,
+  onImport,
+  onRemove,
+}: {
+  row: QueueRow;
+  onOpen: () => void;
+  onClosed: () => void;
+  onImport: (row: QueueRow) => void;
+  onRemove: (row: QueueRow) => void;
+}) {
+  return (
+    <RowMenu title={row.title} onOpen={onOpen} onClosed={onClosed}>
+      {(defer) => (
+        <>
+          {row.canForceImport && (
+            <DropdownMenuItem onSelect={() => defer(() => onImport(row))}>
+              <FolderInput aria-hidden />
+              Force import…
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem variant="destructive" onSelect={() => defer(() => onRemove(row))}>
+            <Trash2 aria-hidden />
+            Remove…
+          </DropdownMenuItem>
+        </>
+      )}
+    </RowMenu>
+  );
+}
+
+/** One queue item on narrow screens: the poster, the title and facts (all wrapping), and the actions. */
+function QueueCard({
+  row,
+  previewHandlers,
+  showDetails,
+  canRemove,
+  isOpen,
+  onToggle,
+  onMenuOpen,
+  onMenuClosed,
+  onImport,
+  onRemove,
+}: {
+  row: QueueRow;
+  /** The poster hover preview's handlers (mouse only), as on the table rows. */
+  previewHandlers: HTMLAttributes<HTMLLIElement>;
+  showDetails: boolean;
+  canRemove: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onMenuOpen: () => void;
+  onMenuClosed: () => void;
+  onImport: (row: QueueRow) => void;
+  onRemove: (row: QueueRow) => void;
+}) {
+  const detailsId = `queue-card-details-${row.key}`;
+  const showProgress = showsProgressFor(row.state) && row.progress !== null;
+  const eta = showsEtaFor(row.state) ? formatEta(row.etaSeconds) : null;
+  return (
+    <li
+      className={`rounded-xl border bg-card p-3 ${showDetails && row.details !== null ? "cursor-pointer" : ""}`}
+      {...previewHandlers}
+      onClick={showDetails && row.details !== null ? toggleOnClick(onToggle) : undefined}
+    >
+      <div className="flex gap-3">
+        <Poster src={row.posterSrc} />
+        <div className="flex min-w-0 flex-1 items-start gap-2" data-poster-anchor>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 break-words font-medium">
+                {row.href !== null ? (
+                  <Link href={row.href} className="hover:underline">
+                    {row.title}
+                  </Link>
+                ) : (
+                  row.title
+                )}
+              </span>
+              <Badge variant="outline" className="shrink-0">
+                {row.kind === "movie" ? "Movie" : "TV"}
+              </Badge>
+            </div>
+            {row.detail !== "" && <p className="break-words text-xs text-muted-foreground">{row.detail}</p>}
+            <div className="flex flex-wrap items-center gap-x-1.5 text-sm">
+              <StatusLabel row={row} />
+              {showProgress && <span className="text-muted-foreground">{`· ${row.progress}%`}</span>}
+              {eta !== null && <span className="text-muted-foreground">{`· ${eta}`}</span>}
+            </div>
+            {row.messages.length > 0 && <p className="break-words text-xs text-muted-foreground">{row.messages[0]}</p>}
+            {showDetails && (
+              <p className="text-xs text-muted-foreground">
+                {`${row.details?.quality ?? "—"} · ${formatSize(row.details?.sizeBytes ?? 0)}`}
+              </p>
+            )}
+          </div>
+          <div className="-mt-1 -mr-1 flex shrink-0 items-start">
+            {showDetails && row.details !== null && (
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={detailsId}
+                aria-label={`${isOpen ? "Hide" : "Show"} details for ${row.title}`}
+                onClick={onToggle}
+                className="grid size-8 place-items-center rounded-md text-muted-foreground hover:text-foreground"
+              >
+                {isOpen ? <ChevronDown className="size-4" aria-hidden="true" /> : <ChevronRight className="size-4" aria-hidden="true" />}
+              </button>
+            )}
+            {canRemove && (
+              <QueueMenu row={row} onOpen={onMenuOpen} onClosed={onMenuClosed} onImport={onImport} onRemove={onRemove} />
+            )}
+          </div>
+        </div>
+      </div>
+      {showDetails && isOpen && row.details !== null && (
+        <div id={detailsId} data-card-details className="mt-3 cursor-auto border-t pt-3">
+          <DetailList row={row} details={row.details} />
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -131,6 +269,8 @@ export function QueueView({
       {visible.rows.length === 0 ? (
         visible.alerts.length === 0 && <p className="text-sm text-muted-foreground">Nothing in the queue.</p>
       ) : (
+        <>
+        <div className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -154,18 +294,21 @@ export function QueueView({
             {visible.rows.map((row) => {
               const isOpen = expanded.has(row.key);
               const detailsId = `queue-details-${row.key}`;
-              const Icon = ACTIVITY_ICON[row.state];
               return (
                 <Fragment key={row.key}>
-                  <TableRow {...posterPreview.rowHandlers(row.key, row.posterSrc, {
+                  <TableRow
+                    className={showDetails && row.details !== null ? "cursor-pointer" : undefined}
+                    {...posterPreview.rowHandlers(row.key, row.posterSrc, {
                       title: row.title,
                       kind: row.kind === "movie" ? "movie" : "series",
                       peek: row.peek,
-                    })}>
+                    })}
+                    onClick={showDetails && row.details !== null ? toggleOnClick(() => toggleExpanded(row.key)) : undefined}
+                  >
                     <TableCell className={CELL}>
                       <Poster src={row.posterSrc} />
                     </TableCell>
-                    <TableCell className={`${CELL} max-w-0 w-full`} data-poster-anchor>
+                    <TableCell className={`${CELL} max-w-0 w-full min-w-48`} data-poster-anchor>
                       <div className="flex min-w-0 items-center gap-2">
                         {showDetails && row.details !== null && (
                           <button
@@ -204,10 +347,7 @@ export function QueueView({
                     </TableCell>
                     {/* Like the Activity column: the first message (admins only) shows under the state, all of them on hover. */}
                     <TableCell className={CELL} title={[stateLabel(row.state), ...row.messages].join("\n")}>
-                      <span className={`flex min-w-0 items-center gap-1.5 whitespace-nowrap ${ACTIVITY_CLASS[row.severity]}`}>
-                        <Icon aria-hidden className="size-3.5 shrink-0" />
-                        {stateLabel(row.state)}
-                      </span>
+                      <StatusLabel row={row} />
                       {row.messages.length > 0 && (
                         <p className="mt-0.5 max-w-64 truncate text-xs text-muted-foreground">{row.messages[0]}</p>
                       )}
@@ -228,26 +368,13 @@ export function QueueView({
                     )}
                     {canRemove && (
                       <TableCell className={`${CELL} text-right`}>
-                        <RowMenu
-                          title={row.title}
+                        <QueueMenu
+                          row={row}
                           onOpen={() => setMenuRowKey(row.key)}
                           onClosed={() => setMenuRowKey((previous) => (previous === row.key ? null : previous))}
-                        >
-                          {(defer) => (
-                            <>
-                              {row.canForceImport && (
-                                <DropdownMenuItem onSelect={() => defer(() => setImporting(row))}>
-                                  <FolderInput aria-hidden />
-                                  Force import…
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem variant="destructive" onSelect={() => defer(() => setRemoving(row))}>
-                                <Trash2 aria-hidden />
-                                Remove…
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </RowMenu>
+                          onImport={setImporting}
+                          onRemove={setRemoving}
+                        />
                       </TableCell>
                     )}
                   </TableRow>
@@ -263,6 +390,29 @@ export function QueueView({
             })}
           </TableBody>
         </Table>
+        </div>
+        <ul className="space-y-2 lg:hidden">
+          {visible.rows.map((row) => (
+            <QueueCard
+              key={row.key}
+              previewHandlers={posterPreview.rowHandlers(row.key, row.posterSrc, {
+                title: row.title,
+                kind: row.kind === "movie" ? "movie" : "series",
+                peek: row.peek,
+              })}
+              row={row}
+              showDetails={showDetails}
+              canRemove={canRemove}
+              isOpen={expanded.has(row.key)}
+              onToggle={() => toggleExpanded(row.key)}
+              onMenuOpen={() => setMenuRowKey(row.key)}
+              onMenuClosed={() => setMenuRowKey((previous) => (previous === row.key ? null : previous))}
+              onImport={setImporting}
+              onRemove={setRemoving}
+            />
+          ))}
+        </ul>
+        </>
       )}
 
       {visible.rows.length > 0 && (

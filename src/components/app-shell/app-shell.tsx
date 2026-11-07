@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Brand } from "./brand";
-import { MobileNav } from "./mobile-nav";
 import { NavLinks } from "./nav-links";
 import { SessionKeepAlive } from "./session-keep-alive";
+import { TabBar } from "./tab-bar";
 import { UserMenu } from "./user-menu";
 
 type Props = {
@@ -16,8 +16,8 @@ export function AppShell({ user, isAdmin, children }: Props) {
   return (
     <div className="min-h-screen">
       <SessionKeepAlive />
-      {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 hidden w-56 flex-col border-r bg-sidebar md:flex">
+      {/* Desktop sidebar (lg and up) */}
+      <aside className="fixed inset-y-0 left-0 hidden w-56 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-14 items-center px-4">
           <Brand />
         </div>
@@ -29,16 +29,16 @@ export function AppShell({ user, isAdmin, children }: Props) {
         </div>
       </aside>
 
-      {/* Mobile top bar: hamburger opens the drawer */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b bg-background px-2 md:hidden">
-        <div className="flex min-w-0 items-center gap-1">
-          <MobileNav isAdmin={isAdmin} />
-          <Brand />
-        </div>
-        <UserMenu name={user.name} email={user.email} />
+      {/* Narrow top bar (below lg): just the brand. Navigation is the bottom tab bar. */}
+      <header className="flex h-14 items-center border-b bg-background pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] lg:hidden">
+        <Brand />
       </header>
 
-      <main className="px-4 py-6 md:ml-56 md:px-8">{children}</main>
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-6 lg:ml-56 lg:px-8 lg:py-6">
+        {children}
+      </main>
+
+      <TabBar email={user.email} isAdmin={isAdmin} />
     </div>
   );
 }

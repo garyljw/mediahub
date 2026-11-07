@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -56,4 +56,23 @@ export function RowMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/**
+ * Click handler for an expandable card or table row: a click anywhere on it toggles it, so the chevron (which a hover
+ * card can cover) isn't the only target. Clicks on its own controls, inside its open details, or that end a text
+ * selection are left alone. The chevron stays as the keyboard and screen reader control.
+ */
+export function toggleOnClick(onToggle: () => void) {
+  return (event: MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    // An open ⋯ menu is portalled outside the card, but its clicks still bubble here through React. Ignore them.
+    if (!(target instanceof Element) || !event.currentTarget.contains(target)) return;
+    if (target.closest("a, button, input, select, textarea, [role=menuitem], [data-card-details]")) return;
+    // A click that ends a text selection inside this row or card (e.g. copying a title) isn't a toggle. A selection
+    // elsewhere on the page doesn't count.
+    const selection = window.getSelection();
+    if (selection !== null && !selection.isCollapsed && selection.containsNode(event.currentTarget, true)) return;
+    onToggle();
+  };
 }

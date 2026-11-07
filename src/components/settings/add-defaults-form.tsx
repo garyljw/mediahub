@@ -78,7 +78,7 @@ export function AddDefaultsForm({
   return (
     <form onSubmit={save} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={profileSelectId} className="text-sm font-medium">
             Quality profile
           </label>
@@ -98,7 +98,7 @@ export function AddDefaultsForm({
             ))}
           </select>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={folderSelectId} className="text-sm font-medium">
             Root folder
           </label>
@@ -119,7 +119,7 @@ export function AddDefaultsForm({
           </select>
         </div>
         {app === "sonarr" && (
-          <div className="grid gap-1.5">
+          <div className="grid content-start gap-1.5">
             <label htmlFor={monitorSelectId} className="text-sm font-medium">
               Monitor
             </label>
