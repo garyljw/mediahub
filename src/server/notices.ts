@@ -17,23 +17,32 @@ const SummarySchema = z.array(
 
 export type NoticeSummary = z.infer<typeof SummarySchema>[number];
 
+/** True for "the file isn't there", the normal case in development. Anything else is worth a log line. */
+function isMissing(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
 /** The package list for the About page (name, version, licence), or null when the file is missing or invalid. */
 export function noticesSummary(): NoticeSummary[] | null {
+  let raw: unknown;
   try {
     // turbopackIgnore stops Next's file tracing from treating this as a file the build needs.
-    const raw: unknown = JSON.parse(readFileSync(path.join(/*turbopackIgnore: true*/ process.cwd(), "THIRD_PARTY_NOTICES.json"), "utf8"));
-    const parsed = SummarySchema.safeParse(raw);
-    return parsed.success ? parsed.data : null;
-  } catch {
+    raw = JSON.parse(readFileSync(path.join(/*turbopackIgnore: true*/ process.cwd(), "THIRD_PARTY_NOTICES.json"), "utf8"));
+  } catch (error) {
+    if (!isMissing(error)) console.error("About page: THIRD_PARTY_NOTICES.json could not be read");
     return null;
   }
+  const parsed = SummarySchema.safeParse(raw);
+  if (!parsed.success) console.error("About page: THIRD_PARTY_NOTICES.json is not a valid licence list");
+  return parsed.success ? parsed.data : null;
 }
 
 /** The full licence texts (THIRD_PARTY_NOTICES.txt), or null when the file is missing. */
 export function noticesText(): string | null {
   try {
     return readFileSync(path.join(/*turbopackIgnore: true*/ process.cwd(), "THIRD_PARTY_NOTICES.txt"), "utf8");
-  } catch {
+  } catch (error) {
+    if (!isMissing(error)) console.error("About page: THIRD_PARTY_NOTICES.txt could not be read");
     return null;
   }
 }

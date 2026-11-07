@@ -66,6 +66,18 @@ describe("collectPackages", () => {
     expect(() => collectPackages(root)).toThrow(/missing is a dependency but is not installed/);
   });
 
+  it("reads licence files named with a dash or underscore, like dual-licensed packages ship them", () => {
+    write("package.json", pkgJson({ dependencies: { a: "1.0.0" } }));
+    write("node_modules/a/package.json", pkgJson({ name: "a", version: "1.0.0", license: "MIT OR Apache-2.0" }));
+    write("node_modules/a/LICENSE-MIT", "MIT text");
+    write("node_modules/a/license_apache.txt", "Apache text");
+    write("node_modules/a/licensed-to-nobody.js", "not a licence");
+    const text = collectPackages(root)[0].licenceText;
+    expect(text).toContain("MIT text");
+    expect(text).toContain("Apache text");
+    expect(text).not.toContain("not a licence");
+  });
+
   it("reports UNKNOWN when a package has no licence field", () => {
     write("package.json", pkgJson({ dependencies: { a: "1.0.0" } }));
     write("node_modules/a/package.json", pkgJson({ name: "a", version: "1.0.0" }));

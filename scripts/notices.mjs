@@ -10,8 +10,9 @@ import path from "node:path";
 export const NOT_SHIPPED = ["sharp"];
 const isNotShipped = (name) => NOT_SHIPPED.includes(name) || name.startsWith("@img/");
 
-// A licence, notice or copying file at the top of a package folder, e.g. LICENSE, LICENSE.md, license-MIT.txt, NOTICE.
-const LICENCE_FILE = /^(licen[cs]e|copying|notice)(\..*)?$/i;
+// A licence, notice or copying file at the top of a package folder, e.g. LICENSE, LICENSE.md, LICENSE-MIT,
+// license_apache.txt, NOTICE.
+const LICENCE_FILE = /^(licen[cs]e|copying|notice)([-_.].*)?$/i;
 
 function readJson(file) {
   return JSON.parse(readFileSync(file, "utf8"));

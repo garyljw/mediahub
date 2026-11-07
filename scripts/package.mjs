@@ -135,20 +135,23 @@ const noticeNames = new Set(allEntries(notices).map((entry) => entry.name));
 for (const required of ["next", "react", "smartcrop"]) {
   if (!noticeNames.has(required)) fail(`the third-party notices do not list ${required}.`);
 }
-// Every package the build ships must be in the notices. Read the name from each folder's package.json, because
-// Next can add hashed alias folders (better-sqlite3-<hash>). Folders without one are not packages.
-const shippedModules = path.join(out, "node_modules");
-const shippedDirs = existsSync(shippedModules)
-  ? readdirSync(shippedModules, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== ".bin")
-      .flatMap((entry) =>
-        entry.name.startsWith("@")
-          ? readdirSync(path.join(shippedModules, entry.name), { withFileTypes: true })
-              .filter((child) => child.isDirectory())
-              .map((child) => path.join(shippedModules, entry.name, child.name))
-          : [path.join(shippedModules, entry.name)],
-      )
-  : [];
+// Every package the build ships must be in the notices, including copies nested in another package's node_modules.
+// Read the name from each folder's package.json, because Next can add hashed alias folders (better-sqlite3-<hash>).
+// Folders without one are not packages.
+function packageDirs(modulesDir) {
+  if (!existsSync(modulesDir)) return [];
+  return readdirSync(modulesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name !== ".bin")
+    .flatMap((entry) => {
+      const dirs = entry.name.startsWith("@")
+        ? readdirSync(path.join(modulesDir, entry.name), { withFileTypes: true })
+            .filter((child) => child.isDirectory())
+            .map((child) => path.join(modulesDir, entry.name, child.name))
+        : [path.join(modulesDir, entry.name)];
+      return dirs.flatMap((dir) => [dir, ...packageDirs(path.join(dir, "node_modules"))]);
+    });
+}
+const shippedDirs = packageDirs(path.join(out, "node_modules"));
 const unlisted = shippedDirs.flatMap((dir) => {
   const manifest = path.join(dir, "package.json");
   if (!existsSync(manifest)) return [];
