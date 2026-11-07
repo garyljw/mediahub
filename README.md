@@ -1,8 +1,46 @@
 # MediaHub
 
-One web page for running Radarr (movies) and Sonarr (TV) together, instead of switching between the two.
+**One home for Radarr and Sonarr.** A single web app for your movies and TV: one poster grid, one search, one-click adding, and Plex watched status, instead of switching between two apps.
 
-MediaHub is a hobby project. It started as an experiment in building a web app with [Claude Code](https://claude.com/claude-code), and nearly all of it was written that way, under a fixed set of review and security rules (see [CLAUDE.md](CLAUDE.md)). It is not a serious product: there is no support, no roadmap promise and no warranty. It runs on my home network and does what I need. You are welcome to use it, copy it or change it under the [MIT licence](LICENSE).
+[![CI](https://github.com/garyljw/mediahub/actions/workflows/ci.yml/badge.svg)](https://github.com/garyljw/mediahub/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/garyljw/mediahub)](https://github.com/garyljw/mediahub/releases/latest)
+[![MIT licence](https://img.shields.io/github/license/garyljw/mediahub)](LICENSE)
+![Windows 10 and 11](https://img.shields.io/badge/runs%20on-Windows%2010%20%7C%2011-blue)
+
+![MediaHub's Home page: a grid of movie and TV posters with watched banners, filters and a search box](docs/screenshots/home.jpg)
+
+MediaHub is a hobby project for personal use, maintained in spare time. It runs on my home network every day and does what I need, and you're welcome to use it too. It comes as a Windows installer that sets itself up as a service and keeps itself up to date. It was built almost entirely with [Claude Code](https://claude.com/claude-code), under a fixed set of review and security rules (see [CLAUDE.md](CLAUDE.md)). It comes with no support, no roadmap promise and no warranty, under the [MIT licence](LICENSE).
+
+**[Install](#install)** · **[Screenshots](#screenshots)** · **[Releases](https://github.com/garyljw/mediahub/releases)**
+
+## Screenshots
+The screenshots show a made-up demo library, not a real one.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/movie.jpg" alt="A movie page with its poster, details, cast and admin buttons"><br><sub><b>Movie page:</b> details, cast, search, Focus and admin tools</sub></td>
+    <td width="50%"><img src="docs/screenshots/series.jpg" alt="A series page with seasons and an episode table"><br><sub><b>Series page:</b> seasons and episodes, with Plex watched status</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/home-hover.jpg" alt="Home with the pointer resting on a poster, showing its synopsis"><br><sub><b>Hover card:</b> rest on a poster for its year, genres and synopsis</sub></td>
+    <td><img src="docs/screenshots/add.jpg" alt="The Add page with search results and Add buttons"><br><sub><b>Add:</b> search TMDB and TVDB, add in one click</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/queue.jpg" alt="The download queue with progress and status"><br><sub><b>Queue:</b> what's downloading, with remove and force import</sub></td>
+    <td><img src="docs/screenshots/history.jpg" alt="History with grabbed, imported and deleted events"><br><sub><b>History:</b> Radarr and Sonarr events in one list</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/calendar.jpg" alt="The calendar list of upcoming episodes and releases"><br><sub><b>Calendar:</b> upcoming episodes and releases</sub></td>
+    <td><img src="docs/screenshots/focus.jpg" alt="The Movie Focus list"><br><sub><b>Focus lists:</b> hand-ordered, synced to Plex collections</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/settings.jpg" alt="Settings, Connections: Radarr, Sonarr and Plex"><br><sub><b>Settings:</b> connections, add defaults, users and updates</sub></td>
+    <td>
+      <img src="docs/screenshots/phone-home.jpg" alt="Home on a phone" width="48%">
+      <img src="docs/screenshots/phone-series.jpg" alt="A series' episode cards on a phone" width="48%"><br><sub><b>Phones:</b> a bottom tab bar and card layouts</sub>
+    </td>
+  </tr>
+</table>
 
 ## What it does
 - **Home:** one poster grid of everything in Radarr and Sonarr, with one search box that covers your library and finds new titles to add (from TMDB and TVDB). Rest the pointer on a poster for half a second and its year, genres and synopsis appear beside it, on Home and on the Focus lists.
@@ -122,3 +160,6 @@ For the times you can't use the web page, `mediahub-tool.cmd` in the install fol
 MediaHub is released under the [MIT licence](LICENSE). Use it however you like, at your own risk.
 
 MediaHub is built on open-source projects, including Node.js and the WinSW service wrapper that the installer ships. Their licences and notices are in `THIRD_PARTY_NOTICES.txt` in `C:\Program Files\MediaHub\app`, and the **About** page lists them with their versions. On a phone, **About** is under **More**. The page also links to the full licence texts.
+
+## Contributing
+I'm not accepting contributions at this time, so pull requests will be closed. You're welcome to fork it. To report a security problem, see [SECURITY.md](SECURITY.md).
