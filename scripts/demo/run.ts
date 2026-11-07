@@ -4,6 +4,7 @@
 // Usage:
 //   npm run demo               start the fakes, seed the demo database and run `next dev -p 3100`
 //   npm run demo -- --no-next  start the fakes and seed only (for testing the fakes with curl)
+//   npm run demo:screenshots   the same stack, then the screenshots in docs/screenshots/, then shut down (exit 0 or 1)
 //
 // Stop with Ctrl+C. Stop any running `npm run dev` first: both use the .next folder, so the second one can't start.
 import { spawn, type ChildProcess } from "node:child_process";
@@ -21,6 +22,9 @@ const EARLY_EXIT_MS = 30_000;
 
 const repoRoot = process.cwd();
 const noNext = process.argv.includes("--no-next");
+const screenshots = process.argv.includes("--screenshots");
+/** How long a fresh `next dev` may take to answer on /login before the screenshots give up. */
+const LOGIN_READY_MS = 3 * 60_000;
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv): ChildProcess {
   return spawn(command, args, { cwd: repoRoot, env, stdio: "inherit", shell: process.platform === "win32" });
@@ -75,6 +79,29 @@ function startAdminHelper(): Promise<Server> {
     server.once("error", reject);
     server.listen(DEMO_PORTS.adminHelper, DEMO_HOST, () => resolve(server));
   });
+}
+
+/** Resolves once `url` answers 200. Rejects after LOGIN_READY_MS, or at once when next dev has already exited. */
+async function waitForPage(url: string, hasExited: () => boolean): Promise<void> {
+  const deadline = Date.now() + LOGIN_READY_MS;
+  while (Date.now() < deadline) {
+    if (hasExited()) throw new Error("next dev stopped before the login page answered.");
+    try {
+      const response = await fetch(url, { redirect: "manual" });
+      await response.body?.cancel();
+      if (response.status === 200) return;
+    } catch {
+      // Not listening yet. Try again.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`${url} did not answer 200 within 3 minutes.`);
+}
+
+/** The seeded admin session cookie, from the file the seed wrote. */
+function readSessionCookie(): { name: string; value: string } {
+  const sessionFile = path.join(repoRoot, "demo", "admin-session.json");
+  return JSON.parse(readFileSync(sessionFile, "utf8")) as { name: string; value: string };
 }
 
 function printSignIns(): void {
@@ -143,6 +170,30 @@ async function main(): Promise<void> {
   // -H binds the demo to loopback only, so other devices on the network can't reach it.
   const next = run("npx", ["next", "dev", "-p", String(DEMO_PORTS.web), "-H", DEMO_HOST], demoEnvironment());
   children.next = next;
+  if (screenshots) {
+    let exited = false;
+    next.on("exit", () => {
+      exited = true;
+    });
+    let code = 0;
+    try {
+      await waitForPage(`http://${DEMO_HOST}:${DEMO_PORTS.web}/login`, () => exited);
+      const { takeScreenshots } = await import("./screenshots");
+      await takeScreenshots({
+        baseUrl: `http://${DEMO_HOST}:${DEMO_PORTS.web}`,
+        catalogue,
+        session: readSessionCookie(),
+        repoRoot,
+        log: (line) => console.log(line),
+      });
+      console.log("demo: screenshots done.");
+    } catch (error) {
+      console.error(`demo: screenshots failed: ${error instanceof Error ? error.message : "unexpected error."}`);
+      code = 1;
+    }
+    await shutdown(code);
+    return;
+  }
   const code = await waitForExit(next);
   if (stopping) return;
   if (Date.now() - startedAt < EARLY_EXIT_MS || code !== 0) {

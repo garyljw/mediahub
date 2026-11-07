@@ -50,6 +50,9 @@ async function main(): Promise<void> {
 
   const databaseFile = path.resolve(repoRoot, env.DATABASE_PATH ?? "");
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`${databaseFile}${suffix}`, { force: true });
+  // MediaHub caches posters next to the database by item id. A new catalogue reuses ids for different titles, so a
+  // cache left from an earlier run would show the wrong posters. The path check above keeps this inside demo/.
+  rmSync(path.join(path.dirname(databaseFile), "image-cache"), { recursive: true, force: true });
   mkdirSync(path.dirname(databaseFile), { recursive: true });
   applyMigrations("drizzle");
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalogue } from "../../../scripts/demo/catalogue";
+import { buildCatalogue, remoteArtIndex } from "../../../scripts/demo/catalogue";
+import { posterFileFromUrl, TMDB_POSTER_FILE, tmdbPosterFile } from "@/server/arr/movie-add";
+import { TVDB_POSTER_PATH, tvdbImagePath, tvdbPosterPath } from "@/server/arr/series-add";
 
 const NOW = Date.UTC(2026, 10, 7, 12, 0, 0);
 const DAY = 86_400_000;
@@ -133,5 +135,98 @@ describe("buildCatalogue", () => {
     for (const hit of catalogue.radarr.lookupMovies) expect(libraryTmdb.has(hit.tmdbId)).toBe(false);
     const libraryTvdb = new Set(catalogue.sonarr.series.map((show) => show.tvdbId));
     for (const hit of catalogue.sonarr.lookupSeries) expect(libraryTvdb.has(hit.tvdbId)).toBe(false);
+  });
+
+  it("writes remote artwork only in the shapes the app's validators accept", () => {
+    const catalogue = buildCatalogue(NOW);
+    const movies = [...catalogue.radarr.movies, ...catalogue.radarr.lookupMovies];
+    for (const movie of movies) {
+      expect(tmdbPosterFile(movie)).not.toBeNull();
+    }
+    for (const credits of Object.values(catalogue.radarr.creditsByTmdbId)) {
+      for (const credit of credits) {
+        const url = credit.images?.find((image) => image.coverType === "headshot")?.remoteUrl ?? "";
+        const file = posterFileFromUrl(url);
+        expect(file).not.toBeNull();
+        expect(TMDB_POSTER_FILE.test(file ?? "")).toBe(true);
+      }
+    }
+    const shows = [...catalogue.sonarr.series, ...catalogue.sonarr.lookupSeries];
+    for (const show of shows) {
+      const path = tvdbPosterPath(show);
+      expect(path).not.toBeNull();
+      expect(TVDB_POSTER_PATH.test(path ?? "")).toBe(true);
+      for (const season of show.seasons ?? []) {
+        const url = season.images?.find((image) => image.coverType === "poster")?.remoteUrl;
+        const seasonPath = tvdbImagePath(url);
+        expect(seasonPath).not.toBeNull();
+        expect(TVDB_POSTER_PATH.test(seasonPath ?? "")).toBe(true);
+      }
+    }
+  });
+
+  it("gives every remote image a made-up file name", () => {
+    const catalogue = buildCatalogue(NOW);
+    const urls = [
+      ...[...catalogue.radarr.movies, ...catalogue.radarr.lookupMovies].map((movie) => movie.remotePoster),
+      ...Object.values(catalogue.radarr.creditsByTmdbId).flat().map((credit) => credit.images?.[0]?.remoteUrl),
+      ...[...catalogue.sonarr.series, ...catalogue.sonarr.lookupSeries].flatMap((show) => [
+        show.remotePoster,
+        ...(show.seasons ?? []).map((season) => season.images?.[0]?.remoteUrl),
+      ]),
+    ];
+    for (const url of urls) {
+      expect(url).toBeTruthy();
+      expect(url).toContain("demo");
+      expect(url).not.toContain("apikey");
+    }
+  });
+
+  it("indexes every emitted remote image under the app's route path", () => {
+    const catalogue = buildCatalogue(NOW);
+    const index = remoteArtIndex(catalogue);
+    const expected = new Map<string, string>();
+    for (const movie of [...catalogue.radarr.movies, ...catalogue.radarr.lookupMovies]) {
+      expected.set(`/api/movies/lookup-poster/${tmdbPosterFile(movie)}`, "poster");
+    }
+    for (const credits of Object.values(catalogue.radarr.creditsByTmdbId)) {
+      for (const credit of credits) {
+        const file = posterFileFromUrl(credit.images?.[0]?.remoteUrl ?? "");
+        expected.set(`/api/movies/headshot/${file}`, "headshot");
+      }
+    }
+    for (const show of [...catalogue.sonarr.series, ...catalogue.sonarr.lookupSeries]) {
+      expected.set(`/api/tv/lookup-poster/${tvdbPosterPath(show)}`, "poster");
+      for (const season of show.seasons ?? []) {
+        expected.set(`/api/tv/lookup-poster/${tvdbImagePath(season.images?.[0]?.remoteUrl)}`, "season");
+      }
+    }
+    expect(index.size).toBe(expected.size);
+    for (const [path, kind] of expected) {
+      expect(index.get(path)?.kind).toBe(kind);
+    }
+  });
+
+  it("indexes only paths the app's image routes accept", () => {
+    const index = remoteArtIndex(buildCatalogue(NOW));
+    for (const path of index.keys()) {
+      if (path.startsWith("/api/tv/lookup-poster/")) {
+        expect(TVDB_POSTER_PATH.test(path.slice("/api/tv/lookup-poster/".length))).toBe(true);
+      } else {
+        const prefix = path.startsWith("/api/movies/headshot/") ? "/api/movies/headshot/" : "/api/movies/lookup-poster/";
+        expect(path.startsWith(prefix)).toBe(true);
+        expect(TMDB_POSTER_FILE.test(path.slice(prefix.length))).toBe(true);
+      }
+    }
+  });
+
+  it("gives each season and each cast member their own image", () => {
+    const catalogue = buildCatalogue(NOW);
+    const index = remoteArtIndex(catalogue);
+    const seasonCount = [...catalogue.sonarr.series, ...catalogue.sonarr.lookupSeries].reduce((sum, show) => sum + (show.seasons?.length ?? 0), 0);
+    const seasons = [...index.values()].filter((art) => art.kind === "season");
+    expect(seasons).toHaveLength(seasonCount);
+    const headshotCount = Object.values(catalogue.radarr.creditsByTmdbId).flat().length;
+    expect([...index.values()].filter((art) => art.kind === "headshot")).toHaveLength(headshotCount);
   });
 });

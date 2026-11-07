@@ -206,6 +206,41 @@ const SERIES_TVDB_BASE = 300_000;
 const PLEX_MOVIE_KEY_BASE = 1000;
 const PLEX_SHOW_KEY_BASE = 2000;
 
+/*
+ * Remote image URLs. MediaHub never fetches these in the demo (the proxy is dead), but the app builds its own image
+ * routes from them, so they must have the exact shape the app's validators accept:
+ *   TMDB: https://image.tmdb.org/t/p/<size>/<file>.jpg, where <file> is letters and digits only (movie posters, cast).
+ *   TVDB: https://artworks.thetvdb.com/banners/<up to five levels of [A-Za-z0-9_-]>/<file>.jpg (series and season posters).
+ * The file names are invented and derived from ids, so the same catalogue always gives the same URLs.
+ */
+const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/original/";
+const TVDB_IMAGE_BASE = "https://artworks.thetvdb.com/";
+
+/** The TMDB poster file for a movie, e.g. "demoMovie900001.jpg". Used for library movies and lookup hits alike. */
+export function demoMoviePosterFile(tmdbId: number): string {
+  return `demoMovie${tmdbId}.jpg`;
+}
+
+/** The TVDB poster path for a series, e.g. "banners/v4/series/300001/posters/demoSeries300001.jpg". */
+export function demoSeriesPosterPath(tvdbId: number): string {
+  return `banners/v4/series/${tvdbId}/posters/demoSeries${tvdbId}.jpg`;
+}
+
+/** The TVDB poster path for one season of a series, e.g. "banners/v4/season/300001-2/posters/demoSeason300001-2.jpg". */
+export function demoSeasonPosterPath(tvdbId: number, seasonNumber: number): string {
+  return `banners/v4/season/${tvdbId}-${seasonNumber}/posters/demoSeason${tvdbId}-${seasonNumber}.jpg`;
+}
+
+/** The TMDB file name for a cast or crew member, e.g. "demoPerson17.jpg". `personNumber` is unique per credit. */
+export function demoPersonFile(personNumber: number): string {
+  return `demoPerson${personNumber}.jpg`;
+}
+
+/** The last path segment of a URL: the TMDB file name from a TMDB image URL. */
+function lastSegment(url: string): string {
+  return new URL(url).pathname.split("/").pop() ?? "";
+}
+
 type Quality = { id: number; name: string };
 const RADARR_QUALITIES: Record<"1080" | "web1080" | "2160" | "720", Quality> = {
   "1080": { id: 7, name: "Bluray-1080p" },
@@ -256,6 +291,7 @@ function buildMovie(rng: Rng, now: number, index: number, id: number, title: str
   const genres = [pick(rng, GENRES), pick(rng, GENRES)].filter((genre, i, all) => all.indexOf(genre) === i);
   const sortTitle = title.replace(/^The /, "").toLowerCase();
   const path = `/media/movies/${title} (${year})`;
+  const remotePoster = `${TMDB_IMAGE_BASE}${demoMoviePosterFile(tmdbId)}`;
   const movie: MovieResource = {
     id,
     title,
@@ -268,9 +304,10 @@ function buildMovie(rng: Rng, now: number, index: number, id: number, title: str
     physicalRelease: isoTime(physical),
     digitalRelease: isoTime(digital),
     images: [
-      { coverType: "poster", url: `/MediaCover/${id}/poster.jpg` },
+      { coverType: "poster", url: `/MediaCover/${id}/poster.jpg`, remoteUrl: remotePoster },
       { coverType: "fanart", url: `/MediaCover/${id}/fanart.jpg` },
     ],
+    remotePoster,
     website: "",
     year,
     hasFile,
@@ -315,10 +352,16 @@ function buildMovie(rng: Rng, now: number, index: number, id: number, title: str
   return movie;
 }
 
-function buildCredits(rng: Rng): CreditResource[] {
+/** Cast and one director. `nextPersonNumber` gives each credit its own headshot file, so no two people share one. */
+function buildCredits(rng: Rng, nextPersonNumber: () => number): CreditResource[] {
   const castCount = int(rng, 6, 10);
   const credits: CreditResource[] = [];
+  const headshots = (personNumber: number) => {
+    const remoteUrl = `${TMDB_IMAGE_BASE}${demoPersonFile(personNumber)}`;
+    return [{ coverType: "headshot", url: remoteUrl, remoteUrl }];
+  };
   for (let order = 0; order < castCount; order++) {
+    const personNumber = nextPersonNumber();
     credits.push({
       id: int(rng, 10_000, 99_999),
       personName: makePersonName(rng),
@@ -326,10 +369,11 @@ function buildCredits(rng: Rng): CreditResource[] {
       order,
       type: "cast",
       department: "Acting",
-      images: [],
+      images: headshots(personNumber),
     } as CreditResource);
   }
-  credits.push({ id: int(rng, 10_000, 99_999), personName: makePersonName(rng), character: null, type: "crew", department: "Directing", job: "Director", images: [] } as CreditResource);
+  const directorNumber = nextPersonNumber();
+  credits.push({ id: int(rng, 10_000, 99_999), personName: makePersonName(rng), character: null, type: "crew", department: "Directing", job: "Director", images: headshots(directorNumber) } as CreditResource);
   return credits;
 }
 
@@ -468,7 +512,11 @@ function buildSeries(
   for (const season of seasonSizes) {
     const seasonMonitored = !(library && index === 5 && season.seasonNumber === 2);
     const seasonEpisodes: EpisodeResource[] = [];
+    // Episode titles don't repeat within a season, and only Season 1 opens with "Pilot".
+    const titlePool = EPISODE_WORDS.filter((word) => word !== "Pilot");
     for (let e = 1; e <= season.count; e++) {
+      const episodeTitle =
+        season.seasonNumber === 1 && e === 1 ? "Pilot" : (titlePool.splice(Math.floor(rng() * titlePool.length), 1)[0] ?? `Episode ${e}`);
       const airMs = schedule[g];
       const aired = airMs <= now;
       const episodeId = nextEpisodeId();
@@ -488,7 +536,7 @@ function buildSeries(
         episodeFileId: hasFile ? episodeId * 10 : 0,
         seasonNumber: season.seasonNumber,
         episodeNumber: e,
-        title: pick(rng, EPISODE_WORDS),
+        title: episodeTitle,
         airDate: isoDate(airMs),
         airDateUtc: `${isoDate(airMs)}T01:00:00Z`,
         runtime: int(rng, 22, 58),
@@ -515,14 +563,16 @@ function buildSeries(
       episodes.push(episode);
       g += 1;
     }
+    const seasonPoster = `${TVDB_IMAGE_BASE}${demoSeasonPosterPath(tvdbId, season.seasonNumber)}`;
     seasonRows.push({
       seasonNumber: season.seasonNumber,
       monitored: seasonMonitored,
-      images: [],
+      images: [{ coverType: "poster", url: seasonPoster, remoteUrl: seasonPoster }],
       statistics: seasonStatistics(seasonEpisodes, now),
     } as SeasonResource);
   }
 
+  const remotePoster = `${TVDB_IMAGE_BASE}${demoSeriesPosterPath(tvdbId)}`;
   const statistics = seriesStatistics(episodes, seasonRows.length, now);
   const status: SeriesResource["status"] = profile === "continuing" ? "continuing" : profile === "upcoming" ? "upcoming" : "ended";
   const nextAiring = episodes.find((episode) => episode.airDateUtc && Date.parse(episode.airDateUtc) > now);
@@ -543,9 +593,10 @@ function buildSeries(
     seriesType: index % 6 === 5 ? "anime" : "standard",
     added: isoTime(now - int(rng, 30, 900) * DAY),
     images: [
-      { coverType: "poster", url: `/MediaCover/${id}/poster.jpg` },
+      { coverType: "poster", url: `/MediaCover/${id}/poster.jpg`, remoteUrl: remotePoster },
       { coverType: "fanart", url: `/MediaCover/${id}/fanart.jpg` },
     ],
+    remotePoster,
     tvdbId,
     imdbId: imdbIdFor(100 + index),
     tmdbId: tvdbId + 1,
@@ -594,7 +645,10 @@ function seasonStatistics(episodes: EpisodeResource[], now: number) {
   const fileEpisodes = episodes.filter((episode) => episode.hasFile === true);
   return {
     episodeFileCount: fileEpisodes.length,
-    episodeCount: episodes.filter((episode) => Date.parse(episode.airDateUtc ?? "") <= now && episode.monitored === true).length,
+    // Episodes with a file always count, so the "files / episodes" figure never shows more files than episodes.
+    episodeCount: episodes.filter(
+      (episode) => episode.hasFile === true || (Date.parse(episode.airDateUtc ?? "") <= now && episode.monitored === true),
+    ).length,
     totalEpisodeCount: episodes.length,
     sizeOnDisk: fileEpisodes.reduce((sum, episode) => sum + (episode.episodeFile?.size ?? 0), 0),
     percentOfEpisodes: episodes.length === 0 ? 0 : Math.round((fileEpisodes.length / episodes.length) * 100),
@@ -697,6 +751,8 @@ export function buildCatalogue(now: number): Catalogue {
 
   let nextEpisodeId = 10_001;
   const episodeIds = () => nextEpisodeId++;
+  let nextPersonNumber = 1;
+  const personNumbers = () => nextPersonNumber++;
 
   // Movies: library first, then lookup-only titles with ids that are not used by the library.
   const movies: MovieResource[] = [];
@@ -705,7 +761,7 @@ export function buildCatalogue(now: number): Catalogue {
     const title = makeTitle(rng, usedTitles);
     const movie = buildMovie(rng, now, i, i + 1, title, MOVIE_TMDB_BASE + i, true);
     movies.push(movie);
-    creditsByTmdbId[movie.tmdbId ?? 0] = buildCredits(rng);
+    creditsByTmdbId[movie.tmdbId ?? 0] = buildCredits(rng, personNumbers);
   }
   const lookupMovies: MovieResource[] = [];
   for (let i = 0; i < MOVIE_LOOKUP_COUNT; i++) {
@@ -716,7 +772,7 @@ export function buildCatalogue(now: number): Catalogue {
     movie.hasFile = false;
     movie.movieFile = undefined;
     lookupMovies.push(movie);
-    creditsByTmdbId[tmdbId] = buildCredits(rng);
+    creditsByTmdbId[tmdbId] = buildCredits(rng, personNumbers);
   }
 
   // Calendar movies: some released-but-not-downloaded movies get digital dates inside the calendar window.
@@ -891,4 +947,55 @@ export function searchTitles<T extends { title?: string | null; year?: number | 
   const needle = term.trim().toLowerCase();
   if (needle === "") return [];
   return items.filter((item) => (item.title ?? "").toLowerCase().includes(needle));
+}
+
+/** What one remote image shows, for the screenshot script to draw in place of the real artwork. */
+export type RemoteArt =
+  | { kind: "poster"; title: string; year: number | null; seed: number }
+  | { kind: "headshot"; name: string; seed: number }
+  | { kind: "season"; title: string; seasonNumber: number; seed: number };
+
+/**
+ * Every remote image the catalogue emits, keyed by the app-side path the browser requests: the route MediaHub builds
+ * from the upstream URL (/api/movies/lookup-poster/<file>, /api/movies/headshot/<file>, /api/tv/lookup-poster/<path>).
+ * It reads the URLs the catalogue actually emits, so an image added to the catalogue is listed here too.
+ */
+export function remoteArtIndex(catalogue: Catalogue): Map<string, RemoteArt> {
+  const index = new Map<string, RemoteArt>();
+  const movieRoute = (url: string) => `/api/movies/lookup-poster/${lastSegment(url)}`;
+  const headshotRoute = (url: string) => `/api/movies/headshot/${lastSegment(url)}`;
+  const tvRoute = (url: string) => `/api/tv/lookup-poster/${new URL(url).pathname.slice(1)}`;
+
+  for (const movie of [...catalogue.radarr.movies, ...catalogue.radarr.lookupMovies]) {
+    if (!movie.remotePoster) continue;
+    index.set(movieRoute(movie.remotePoster), {
+      kind: "poster",
+      title: movie.title ?? "",
+      year: movie.year ?? null,
+      seed: movie.tmdbId ?? 0,
+    });
+  }
+  for (const credits of Object.values(catalogue.radarr.creditsByTmdbId)) {
+    for (const credit of credits) {
+      const headshot = credit.images?.find((image) => image.coverType === "headshot")?.remoteUrl;
+      if (!headshot) continue;
+      index.set(headshotRoute(headshot), { kind: "headshot", name: credit.personName ?? "", seed: credit.id ?? 0 });
+    }
+  }
+  for (const show of [...catalogue.sonarr.series, ...catalogue.sonarr.lookupSeries]) {
+    if (show.remotePoster) {
+      index.set(tvRoute(show.remotePoster), { kind: "poster", title: show.title ?? "", year: show.year ?? null, seed: show.tvdbId ?? 0 });
+    }
+    for (const season of show.seasons ?? []) {
+      const poster = season.images?.find((image) => image.coverType === "poster")?.remoteUrl;
+      if (!poster) continue;
+      index.set(tvRoute(poster), {
+        kind: "season",
+        title: show.title ?? "",
+        seasonNumber: season.seasonNumber ?? 0,
+        seed: (show.tvdbId ?? 0) * 100 + (season.seasonNumber ?? 0),
+      });
+    }
+  }
+  return index;
 }

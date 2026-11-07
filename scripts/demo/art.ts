@@ -66,7 +66,7 @@ function shapes(seed: number, width: number, height: number, accent: string): st
   ].join("");
 }
 
-/** A 500x750 poster: midnight background, neon gradient title, the year at the foot. */
+/** A 500x750 poster: midnight background, neon gradient title, the year above the foot (MediaHub draws its watched banner along the bottom). */
 export function posterSvg(title: string, year: number | null, seed: number): string {
   const width = 500;
   const height = 750;
@@ -87,7 +87,7 @@ export function posterSvg(title: string, year: number | null, seed: number): str
     `<rect width="${width}" height="${height}" fill="${BACKGROUND}"/>`,
     shapes(seed, width, height, palette.accent),
     `<text font-family="Helvetica, Arial, sans-serif" font-weight="900" font-size="${size}" text-anchor="middle" fill="url(#g)">${tspans}</text>`,
-    `<text x="250" y="${height - 60}" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="36" text-anchor="middle" fill="${palette.accent}" letter-spacing="6">${yearText}</text>`,
+    `<text x="250" y="${height - 150}" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="36" text-anchor="middle" fill="${palette.accent}" letter-spacing="6">${yearText}</text>`,
     "</svg>",
   ].join("");
 }

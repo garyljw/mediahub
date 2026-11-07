@@ -93,3 +93,4 @@ All commands prompt for passwords and never accept them as arguments.
 - Everything is under `demo/` (gitignored): the database, the fake-server art cache and the session file. It never touches `data/`, and the seed refuses to run unless `DATABASE_PATH` is inside `demo/`.
 - Stop any running `npm run dev` first. Both use the `.next` folder, so the second one can't start.
 - The fakes live in `scripts/demo/`. Their sources are `src/server/arr/generated/` and the fixtures, so a change to an endpoint MediaHub calls needs a matching change there.
+- Screenshots for the docs: `npm run demo:screenshots` starts the same stack, shoots the pages with headless Chromium (Playwright, pinned to 1.64.1) and writes JPEGs to `docs/screenshots/`, then shuts down. One-time setup: `npx playwright install chromium`. Stop any running `npm run dev` first. Remote artwork (TMDB, TVDB) can't be reached in the demo, so the script draws it itself with the art in `scripts/demo/art.ts`.

@@ -241,7 +241,8 @@ function radarrRoutes(catalogue: Catalogue, artDir: string, images: Map<string, 
       const term = query.get("term") ?? "";
       const libraryTmdb = new Map(movies.map((movie) => [movie.tmdbId, movie]));
       // Lookup hits carry the library id for a movie already in the library, so the Add dialog can mark it.
-      const hits = [...movies, ...lookupMovies].filter((movie) => searchTitles([movie], term).length > 0);
+      // Titles not in the library first, so a search shows Add buttons above the "In library" rows.
+      const hits = [...lookupMovies, ...movies].filter((movie) => searchTitles([movie], term).length > 0);
       return ok(hits.slice(0, 20).map((movie) => ({ ...movie, id: libraryTmdb.get(movie.tmdbId)?.id ?? 0 })));
     }),
     route("GET", "/api/v3/movie/lookup/tmdb", ({ query }) => {
@@ -354,7 +355,8 @@ function sonarrRoutes(catalogue: Catalogue, artDir: string, images: Map<string, 
     }),
     route("GET", "/api/v3/series/lookup", ({ query }) => {
       const term = query.get("term") ?? "";
-      const pool = [...series, ...lookupSeries];
+      // Titles not in the library first, as for movies.
+      const pool = [...lookupSeries, ...series];
       const hits = term.startsWith("tvdb:")
         ? pool.filter((show) => String(show.tvdbId) === term.slice("tvdb:".length))
         : searchTitles(pool, term);
