@@ -91,7 +91,7 @@ export async function takeScreenshots(options: ScreenshotOptions): Promise<void>
     const moviePick = pickMovie(options.catalogue);
     const desktopShots: Shot[] = [
       { file: "home.jpg", path: "/" },
-      { file: "home-hover.jpg", path: "/", prepare: hoverFirstTile },
+      { file: "home-hover.jpg", path: "/", prepare: hoverFourthTile },
       { file: "movie.jpg", path: `/movies/${moviePick.id}`, fullPage: true },
       { file: "series.jpg", path: `/tv/${seriesPick.id}`, fullPage: true },
       { file: "focus.jpg", path: "/focus/movies" },
@@ -263,8 +263,8 @@ async function scrollThrough(page: Page): Promise<void> {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-/** Rests the pointer on the third Home tile until its hover card has opened (the card waits 500 ms). */
-async function hoverFirstTile(page: Page): Promise<void> {
+/** Rests the pointer on the fourth Home tile (index 3, away from the left edge) until its hover card has opened (the card waits 500 ms). */
+async function hoverFourthTile(page: Page): Promise<void> {
   const tile = page.locator("[data-peek-key]").nth(3);
   await tile.scrollIntoViewIfNeeded();
   await tile.hover();

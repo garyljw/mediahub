@@ -612,6 +612,15 @@ function matchRoute(routes: Route[], method: string, pathname: string): { route:
   return undefined;
 }
 
+/** matchRoute, but a path with a broken %-escape gives "bad" instead of throwing and taking the fakes down. */
+function safeMatch(routes: Route[], method: string, pathname: string): ReturnType<typeof matchRoute> | "bad" {
+  try {
+    return matchRoute(routes, method, pathname);
+  } catch {
+    return "bad";
+  }
+}
+
 /**
  * One app server. The API key or Plex token is checked before anything else, and a failure is a 401 with no route
  * lookup. Log lines name the method and the path only, never the query string or the key.
@@ -625,7 +634,11 @@ function appServer(name: string, routes: Route[], check: (req: IncomingMessage) 
     }
     const body = await readBody(req);
     const method = (req.method ?? "GET").toUpperCase();
-    const found = matchRoute(routes, method, url.pathname);
+    const found = safeMatch(routes, method, url.pathname);
+    if (found === "bad") {
+      sendReply(res, { status: 400, body: { message: "Bad path" } });
+      return;
+    }
     if (!found) {
       log(`[fake ${name}] 404 ${method} ${url.pathname}`);
       sendReply(res, notFound());
@@ -677,13 +690,22 @@ export async function startFakeServers(options: StartFakeServersOptions): Promis
       sendReply(res, { status: 401, body: { error: "unauthorized" } });
       return;
     }
-    const found = matchRoute(plexRouteList, method, url.pathname);
+    const found = safeMatch(plexRouteList, method, url.pathname);
+    if (found === "bad") {
+      sendReply(res, { status: 400, body: { error: "bad path" } });
+      return;
+    }
     if (!found) {
       log(`[fake plex] 404 ${method} ${url.pathname}`);
       sendReply(res, notFound());
       return;
     }
-    sendReply(res, await found.route.handler({ method, params: found.params, query: url.searchParams, body: undefined }));
+    try {
+      sendReply(res, await found.route.handler({ method, params: found.params, query: url.searchParams, body: undefined }));
+    } catch (error) {
+      log(`[fake plex] 500 ${method} ${url.pathname}: ${error instanceof Error ? error.message : "error"}`);
+      sendReply(res, { status: 500, body: { error: "fake server error" } });
+    }
   });
 
   const radarrServer = appServer("radarr", radarrRoutes(catalogue, artDir, images, now), hasKey, log);

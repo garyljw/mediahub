@@ -66,9 +66,20 @@ function demoEnvironment(): NodeJS.ProcessEnv {
  * session for the throwaway demo database, nothing else.
  */
 function startAdminHelper(): Promise<Server> {
-  const sessionFile = path.join(repoRoot, "demo", "admin-session.json");
-  const server = createServer((_request, response) => {
-    const cookie = JSON.parse(readFileSync(sessionFile, "utf8")) as { name: string; value: string };
+  const expectedHost = `${DEMO_HOST}:${DEMO_PORTS.adminHelper}`;
+  const server = createServer((request, response) => {
+    // Only answer requests addressed to the helper itself, so a DNS-rebinding hostname pointed at 127.0.0.1 gets nothing.
+    if (request.headers.host !== expectedHost) {
+      response.writeHead(421).end();
+      return;
+    }
+    let cookie: { name: string; value: string };
+    try {
+      cookie = readSessionCookie();
+    } catch {
+      response.writeHead(503, { "Content-Type": "text/plain" }).end("demo/admin-session.json is missing. Restart npm run demo.");
+      return;
+    }
     response.writeHead(302, {
       "Set-Cookie": `${cookie.name}=${cookie.value}; Path=/; HttpOnly; SameSite=Lax`,
       Location: `http://${DEMO_HOST}:${DEMO_PORTS.web}/`,
@@ -136,8 +147,15 @@ async function main(): Promise<void> {
   const shutdown = async (code: number) => {
     if (stopping) return;
     stopping = true;
-    children.next?.kill("SIGINT");
     children.helper?.close();
+    // Wait for next dev to exit (up to 10 s), so it never outlives the demo holding port 3100 and the .next lock.
+    const next = children.next;
+    if (next && next.exitCode === null && next.signalCode === null) {
+      const exited = waitForExit(next);
+      next.kill("SIGINT");
+      const timedOut = await Promise.race([exited.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 10_000))]);
+      if (timedOut) next.kill("SIGKILL");
+    }
     await fakes.close();
     process.exit(code);
   };
@@ -168,7 +186,13 @@ async function main(): Promise<void> {
 
   const startedAt = Date.now();
   // -H binds the demo to loopback only, so other devices on the network can't reach it.
-  const next = run("npx", ["next", "dev", "-p", String(DEMO_PORTS.web), "-H", DEMO_HOST], demoEnvironment());
+  // Run Next's own entry point with this node, not through npx, so the process we signal on shutdown is next dev itself.
+  const nextBin = path.join(repoRoot, "node_modules", "next", "dist", "bin", "next");
+  const next = spawn(process.execPath, [nextBin, "dev", "-p", String(DEMO_PORTS.web), "-H", DEMO_HOST], {
+    cwd: repoRoot,
+    env: demoEnvironment(),
+    stdio: "inherit",
+  });
   children.next = next;
   if (screenshots) {
     let exited = false;
