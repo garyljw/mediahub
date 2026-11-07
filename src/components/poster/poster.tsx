@@ -40,13 +40,14 @@ export function usePosterImage(src: string | null) {
 }
 
 /**
- * A poster thumbnail, 24x36 (`sm`, for tables with a hover preview) or 64x96 (`lg`, for the Add and Focus search
- * rows, which need no preview), or a same-size placeholder when there is no src or it failed to load. While it loads,
+ * A poster thumbnail, 24x36 (`sm`, for tables with a hover preview) or 64x96 (`lg`, 44x66 on a phone, for the Add,
+ * Focus search and History rows, which need no preview), or a same-size placeholder when there is no src or it failed to load. While it loads,
  * the thumbnail sits over a skeleton of the same size. `src` is always one of MediaHub's own poster routes, never a Radarr or
  * TMDB URL.
  */
 export function Poster({ src, size = "sm" }: { src: string | null; size?: "sm" | "lg" }) {
-  const box = size === "lg" ? "h-24 w-16 rounded" : "h-9 w-6 rounded-sm";
+  // lg is 44x66 on a phone, so the row still leaves room for its text, and 64x96 from the sm breakpoint.
+  const box = size === "lg" ? "h-16 w-11 rounded sm:h-24 sm:w-16" : "h-9 w-6 rounded-sm";
   const { failed, loaded, imgRef, onLoad, onError } = usePosterImage(src);
 
   if (src !== null && !failed) {

@@ -148,6 +148,7 @@ export function HistoryView({
   const [pending, startTransition] = useTransition();
   const posterPreview = usePosterPreview<string>();
 
+  // The desktop table's columns: When, Poster and Title. The expanded details row spans all of them.
   const columnCount = 3;
   const appName = shownTarget?.app === "sonarr" ? "Sonarr" : "Radarr";
   const release = shownTarget?.details.sourceTitle ?? shownTarget?.title ?? "";
