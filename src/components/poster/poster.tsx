@@ -40,30 +40,33 @@ export function usePosterImage(src: string | null) {
 }
 
 /**
- * A 24x36 poster thumbnail, or a same-size placeholder when there is no src or it failed to load. While it loads, the
- * thumbnail sits over a skeleton of the same size. `src` is always one of MediaHub's own poster routes, never a Radarr or
+ * A poster thumbnail, 24x36 (`sm`, for tables with a hover preview) or 64x96 (`lg`, 44x66 on a phone, for the Add,
+ * Focus search and History rows, which need no preview), or a same-size placeholder when there is no src or it failed to load. While it loads,
+ * the thumbnail sits over a skeleton of the same size. `src` is always one of MediaHub's own poster routes, never a Radarr or
  * TMDB URL.
  */
-export function Poster({ src }: { src: string | null }) {
+export function Poster({ src, size = "sm" }: { src: string | null; size?: "sm" | "lg" }) {
+  // lg is 44x66 on a phone, so the row still leaves room for its text, and 64x96 from the sm breakpoint.
+  const box = size === "lg" ? "h-16 w-11 rounded sm:h-24 sm:w-16" : "h-9 w-6 rounded-sm";
   const { failed, loaded, imgRef, onLoad, onError } = usePosterImage(src);
 
   if (src !== null && !failed) {
     return (
-      <div className={cn("relative h-9 w-6 shrink-0 rounded-sm", !loaded && "skeleton")}>
+      <div className={cn("relative shrink-0", box, !loaded && "skeleton")}>
         {/* eslint-disable-next-line @next/next/no-img-element -- next/image's optimizer would load sharp on the 2 GB NAS, and the sources are already small (Radarr 250px, TMDB w342). The alt is empty because the title sits right next to it. */}
         <img
           ref={imgRef}
           data-poster-thumb
           src={src}
           alt=""
-          width={24}
-          height={36}
+          width={size === "lg" ? 64 : 24}
+          height={size === "lg" ? 96 : 36}
           loading="lazy"
           decoding="async"
           onLoad={onLoad}
           onError={onError}
           className={cn(
-            "absolute inset-0 size-full rounded-sm bg-muted object-cover transition-opacity duration-300 motion-reduce:transition-none",
+            "absolute inset-0 size-full rounded-[inherit] bg-muted object-cover transition-opacity duration-300 motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0",
           )}
         />
@@ -72,8 +75,8 @@ export function Poster({ src }: { src: string | null }) {
   }
 
   return (
-    <div aria-hidden className="flex h-9 w-6 shrink-0 items-center justify-center rounded-sm bg-muted">
-      <Film className="size-3 text-muted-foreground/60" />
+    <div aria-hidden className={cn("flex shrink-0 items-center justify-center bg-muted", box)}>
+      <Film className={cn("text-muted-foreground/60", size === "lg" ? "size-5" : "size-3")} />
     </div>
   );
 }

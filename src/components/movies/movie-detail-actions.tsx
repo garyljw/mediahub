@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { RefreshCw, Search, Trash2, UserSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
+import { FocusToggleButton } from "@/components/focus/focus-toggle-button";
 import { MOVIE } from "@/components/library/nouns";
 import { ReleaseDialog } from "@/components/library/release-dialog";
 import { grabbedMessage } from "@/components/library/release";
@@ -17,20 +18,23 @@ import { searchStartedMessage } from "./movie-search";
 const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try again.";
 
 /**
- * The action bar on a movie's page. Search is for everyone. The rest is admin only, and the page only renders it for
- * admins. Refresh, search and the release pick reuse the shared movie actions. Delete uses the page's own action,
- * which sends the browser back to the list.
+ * The action bar on a movie's page. Search and the Focus toggle are for everyone. The rest is admin only, and the page
+ * only renders it for admins. Refresh, search and the release pick reuse the shared movie actions. Delete uses the
+ * page's own action, which sends the browser back to the list.
  */
 export function MovieDetailActions({
   movieId,
   title,
   year,
   isAdmin,
+  inFocus,
 }: {
   movieId: number;
   title: string;
   year: number | null;
   isAdmin: boolean;
+  /** Whether the movie is already in Movie Focus, from the server, so the button starts in the right state. */
+  inFocus: boolean;
 }) {
   const [status, setStatus] = useStatusLine();
   const [searching, startSearch] = useTransition();
@@ -69,6 +73,7 @@ export function MovieDetailActions({
           <Search aria-hidden />
           Search
         </Button>
+        <FocusToggleButton kind="movie" id={movieId} inFocus={inFocus} onMessage={setStatus} />
         {isAdmin && (
           <>
             <Button size="sm" variant="secondary" onClick={() => setPicking(true)}>

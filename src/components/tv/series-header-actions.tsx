@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { RefreshCw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FocusToggleButton } from "@/components/focus/focus-toggle-button";
 import { LibraryDeleteDialog } from "@/components/library/delete-dialog";
 import { SERIES } from "@/components/library/nouns";
 import { useStatusLine } from "@/components/library/use-status-line";
@@ -15,20 +16,23 @@ import { searchStartedMessage } from "./series-search";
 const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try again.";
 
 /**
- * The action bar on a series' page, for the whole series. Search is for everyone. Refresh and delete are admin
- * only, and the page only renders them for admins. Search and refresh reuse the shared series actions. Delete uses the
- * page's own action, which sends the browser back to the list.
+ * The action bar on a series' page, for the whole series. Search and the Focus toggle are for everyone. Refresh and
+ * delete are admin only, and the page only renders them for admins. Search and refresh reuse the shared series
+ * actions. Delete uses the page's own action, which sends the browser back to the list.
  */
 export function SeriesHeaderActions({
   seriesId,
   title,
   year,
   isAdmin,
+  inFocus,
 }: {
   seriesId: number;
   title: string;
   year: number | null;
   isAdmin: boolean;
+  /** Whether the series is already in TV Focus, from the server, so the button starts in the right state. */
+  inFocus: boolean;
 }) {
   const [status, setStatus] = useStatusLine();
   const [searching, startSearch] = useTransition();
@@ -66,6 +70,7 @@ export function SeriesHeaderActions({
           <Search aria-hidden />
           Search
         </Button>
+        <FocusToggleButton kind="series" id={seriesId} inFocus={inFocus} onMessage={setStatus} />
         {isAdmin && (
           <>
             <Button size="sm" variant="secondary" onClick={refreshAndScan} disabled={refreshing} aria-busy={refreshing}>

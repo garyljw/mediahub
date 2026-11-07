@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import type { HomeItem } from "@/components/home/home-items";
 import { GENERIC_ERROR, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
-import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import type { TitleHit } from "@/server/title-search";
 import { FOCUS_APP, FOCUS_NAME, type FocusKind } from "./focus-kinds";
 import { libraryMatches, libraryRowKey, remoteRowKey, remoteTerm } from "./focus-add-items";
@@ -81,7 +80,6 @@ export function FocusAdd({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Counts searches and keystrokes. A reply whose number is no longer the latest is for an older term, so it is dropped.
   const requestRef = useRef(0);
-  const posterPreview = usePosterPreview<string>();
   const fieldId = useId();
 
   // Don't leave a search queued after the page goes away.
@@ -226,13 +224,9 @@ export function FocusAdd({
                 const rowError = rowErrors.get(key);
                 const label = resultLabel(item);
                 return (
-                  <li key={key} className="p-3" {...posterPreview.rowHandlers(key, item.posterSrc)}>
+                  <li key={key} className="p-3">
                     <div className="flex items-center gap-3">
-                      <Poster src={item.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor>
-                        <p className="font-medium">{label}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex w-20 shrink-0 flex-col items-start gap-1.5">
                         {added ? (
                           <Badge variant="secondary">Added</Badge>
                         ) : (
@@ -247,6 +241,10 @@ export function FocusAdd({
                             {adding ? "Adding…" : "Add"}
                           </Button>
                         )}
+                      </div>
+                      <Poster src={item.posterSrc} size="lg" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{label}</p>
                       </div>
                     </div>
                     {rowError !== undefined && (
@@ -291,19 +289,9 @@ export function FocusAdd({
                 const label = resultLabel(hit);
                 const idBase = `${fieldId}-${key}`;
                 return (
-                  <li key={key} className="p-3" {...posterPreview.rowHandlers(key, hit.posterSrc, {
-                    title: hit.title,
-                    kind,
-                    peek: hit.year === null && hit.overview === "" ? null : { year: hit.year, genres: [], overview: hit.overview },
-                  })}>
+                  <li key={key} className="p-3">
                     <div className="flex items-start gap-3">
-                      <Poster src={hit.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor>
-                        <p className="font-medium">{label}</p>
-                        {hit.network !== null && <p className="text-sm text-muted-foreground">{hit.network}</p>}
-                        {hit.overview !== "" && <p className="line-clamp-2 text-sm text-muted-foreground">{hit.overview}</p>}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <div className="flex w-20 shrink-0 flex-col items-start gap-1.5">
                         {added ? (
                           <Badge variant="secondary">Added</Badge>
                         ) : isAdmin ? (
@@ -337,6 +325,12 @@ export function FocusAdd({
                             {adding ? "Adding…" : "Add"}
                           </Button>
                         )}
+                      </div>
+                      <Poster src={hit.posterSrc} size="lg" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{label}</p>
+                        {hit.network !== null && <p className="text-sm text-muted-foreground">{hit.network}</p>}
+                        {hit.overview !== "" && <p className="line-clamp-3 text-sm text-muted-foreground">{hit.overview}</p>}
                       </div>
                     </div>
 
@@ -372,7 +366,6 @@ export function FocusAdd({
           )}
         </section>
       )}
-      {posterPreview.preview}
     </div>
   );
 }

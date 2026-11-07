@@ -35,11 +35,32 @@ export const ACTIVITY_ICON: Record<ActivityState, typeof Clock> = {
  */
 export function ActivityCell({ name, activity }: { name: string; activity: QueueActivity | undefined }) {
   if (!activity) return <TableCell className={CELL} />;
-  const Icon = ACTIVITY_ICON[activity.state];
-  // The label can be cut off in the cell, so the hover text always has it. Messages (admins only) follow it.
-  const tooltip = [activityLabel(activity), ...activity.messages].join("\n");
   return (
-    <TableCell className={cn(CELL, "whitespace-normal min-w-48")} title={tooltip}>
+    <TableCell className={cn(CELL, "whitespace-normal min-w-48")} title={activityTooltip(activity)}>
+      <ActivityContent name={name} activity={activity} />
+    </TableCell>
+  );
+}
+
+/** The same content as ActivityCell outside a table, for cards. Renders nothing when the item isn't queued. */
+export function ActivityBlock({ name, activity }: { name: string; activity: QueueActivity | undefined }) {
+  if (!activity) return null;
+  return (
+    <div title={activityTooltip(activity)}>
+      <ActivityContent name={name} activity={activity} />
+    </div>
+  );
+}
+
+/** The label can be cut off, so the hover text always has it. Messages (admins only) follow it. */
+function activityTooltip(activity: QueueActivity): string {
+  return [activityLabel(activity), ...activity.messages].join("\n");
+}
+
+function ActivityContent({ name, activity }: { name: string; activity: QueueActivity }) {
+  const Icon = ACTIVITY_ICON[activity.state];
+  return (
+    <>
       <span className={cn("flex min-w-0 items-center gap-1.5", ACTIVITY_CLASS[activity.severity])}>
         <Icon aria-hidden className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{activityLabel(activity)}</span>
@@ -59,7 +80,7 @@ export function ActivityCell({ name, activity }: { name: string; activity: Queue
       {activity.messages.length > 0 && (
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{activity.messages[0]}</p>
       )}
-    </TableCell>
+    </>
   );
 }
 

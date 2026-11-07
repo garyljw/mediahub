@@ -19,6 +19,11 @@ describe("previewPosition", () => {
     expect(previewPosition(thumb, viewport, "right")).toStrictEqual({ top: 300 + 18 - 120, left: 52 });
   });
 
+  it("opens right of a wide rect (the title cell) when asked for right", () => {
+    const wide = { top: 300, left: 100, right: 400, height: 36 };
+    expect(previewPosition(wide, viewport, "right").left).toBe(408);
+  });
+
   it("clamps to the top margin when the thumbnail is near the top", () => {
     expect(previewPosition({ ...thumb, top: 10 }, viewport, "right")).toStrictEqual({ top: 8, left: 52 });
   });

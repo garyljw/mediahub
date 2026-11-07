@@ -14,6 +14,7 @@ import { SeriesEditForm } from "@/components/tv/series-edit-form";
 import { SeriesHeaderActions } from "@/components/tv/series-header-actions";
 import {
   EpisodeActivityCell,
+  EpisodeActivityLine,
   EpisodeActivityHead,
   SeasonActivitySummary,
   SeriesActivityProvider,
@@ -28,6 +29,7 @@ import {
   SeasonSearchButton,
 } from "@/components/tv/series-detail-actions";
 import { requirePageUser } from "@/server/authz";
+import { listFocusIds } from "@/server/focus/focus";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
 import { seasonWatchedState, toEpisodeWatched } from "@/server/merge/watched";
@@ -142,21 +144,68 @@ function SeasonDetails({
       {season.episodes.length === 0 ? (
         <p className="border-t px-3 py-2 text-sm text-muted-foreground">No episodes.</p>
       ) : (
-        <div className="overflow-x-auto border-t">
+        <>
+        {/* Below md each episode is a card: a table this wide doesn't fit a phone. */}
+        <ul className="divide-y border-t md:hidden">
+          {season.episodes.map((episode) => (
+            <li key={episode.id} className="flex items-start gap-3 px-3 py-2.5">
+              <span className="inline-flex pt-0.5">
+                {isAdmin ? (
+                  <EpisodeMonitorToggle
+                    episodeId={episode.id}
+                    episodeNumber={episode.episodeNumber}
+                    seasonLabel={season.label}
+                    monitored={episode.monitored}
+                  />
+                ) : (
+                  <MonitoredIcon monitored={episode.monitored} />
+                )}
+              </span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="font-medium">
+                  <span className="tabular-nums text-muted-foreground">{episode.episodeNumber}.</span> {episode.title}
+                </p>
+                <NarrowEpisodeFacts airDate={episode.airDate} quality={episode.quality} size={episode.size} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={EPISODE_STATUS_CLASS[episode.status]}>
+                    {EPISODE_STATUS_LABEL[episode.status]}
+                  </Badge>
+                  {episodeWatched !== null && episodeWatched.get(episode.id) !== undefined && (
+                    <WatchedBadge state={episodeWatched.get(episode.id)} />
+                  )}
+                </div>
+                <EpisodeActivityLine episodeId={episode.id} name={`${season.label} episode ${episode.episodeNumber}`} />
+              </div>
+              <div className="flex shrink-0 items-center">
+                <EpisodeSearchButton episodeId={episode.id} episodeNumber={episode.episodeNumber} seasonLabel={season.label} />
+                {isAdmin && (
+                  <EpisodeReleaseButton
+                    seriesTitle={seriesTitle}
+                    seasonNumber={season.seasonNumber}
+                    episodeId={episode.id}
+                    episodeNumber={episode.episodeNumber}
+                    seasonLabel={season.label}
+                  />
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto border-t md:block">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>Monitored</TableHead>
                 <TableHead className={HEAD}>#</TableHead>
                 <TableHead className={HEAD}>Title</TableHead>
-                <TableHead className={`${HEAD} hidden md:table-cell`}>Air date</TableHead>
+                <TableHead className={HEAD}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
                 {episodeWatched !== null && <TableHead className={HEAD}>Watched</TableHead>}
                 <TableHead className={`${HEAD} w-48`}>
                   <EpisodeActivityHead />
                 </TableHead>
-                <TableHead className={`${HEAD} hidden md:table-cell`}>Quality</TableHead>
-                <TableHead className={`${HEAD} hidden text-right md:table-cell`}>Size</TableHead>
+                <TableHead className={HEAD}>Quality</TableHead>
+                <TableHead className={`${HEAD} text-right`}>Size</TableHead>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -180,9 +229,8 @@ function SeasonDetails({
                   <TableCell className={`${CELL} tabular-nums`}>{episode.episodeNumber}</TableCell>
                   <TableCell className={`${CELL} whitespace-normal`}>
                     {episode.title}
-                    <NarrowEpisodeFacts airDate={episode.airDate} quality={episode.quality} size={episode.size} />
                   </TableCell>
-                  <TableCell className={`${CELL} hidden tabular-nums text-muted-foreground md:table-cell`}>
+                  <TableCell className={`${CELL} tabular-nums text-muted-foreground`}>
                     {formatAdded(episode.airDate)}
                   </TableCell>
                   <TableCell className={CELL}>
@@ -199,8 +247,8 @@ function SeasonDetails({
                     episodeId={episode.id}
                     name={`${season.label} episode ${episode.episodeNumber}`}
                   />
-                  <TableCell className={`${CELL} hidden text-muted-foreground md:table-cell`}>{episode.quality ?? "—"}</TableCell>
-                  <TableCell className={`${CELL} hidden text-right tabular-nums md:table-cell`}>{formatSize(episode.size)}</TableCell>
+                  <TableCell className={`${CELL} text-muted-foreground`}>{episode.quality ?? "—"}</TableCell>
+                  <TableCell className={`${CELL} text-right tabular-nums`}>{formatSize(episode.size)}</TableCell>
                   <TableCell className={`${CELL} text-right`}>
                     <EpisodeSearchButton
                       episodeId={episode.id}
@@ -222,14 +270,14 @@ function SeasonDetails({
             </TableBody>
           </Table>
         </div>
+        </>
       )}
     </details>
   );
 }
 
 /**
- * Below md the table drops the Air date, Quality and Size columns, so their values show here under the title instead.
- * Missing values are left out.
+ * An episode's air date, quality and size on one line, for the phone cards. Missing values are left out.
  */
 function NarrowEpisodeFacts({
   airDate,
@@ -246,7 +294,7 @@ function NarrowEpisodeFacts({
     size > 0 ? formatSize(size) : null,
   ].filter((fact): fact is string => fact !== null);
   if (facts.length === 0) return null;
-  return <p className="text-xs text-muted-foreground md:hidden">{facts.join(" · ")}</p>;
+  return <p className="text-xs text-muted-foreground">{facts.join(" · ")}</p>;
 }
 
 /** An airing time in MediaHub's display time zone, or an em dash. Formatted here on the server, see CLAUDE.md. */
@@ -276,18 +324,21 @@ async function episodeWatchedFor(detail: SeriesDetail): Promise<Map<number, Watc
 function SeriesView({
   page,
   isAdmin,
+  inFocus,
   episodeWatched,
   watchFailed,
 }: {
   page: SeriesDetailPage;
   isAdmin: boolean;
+  /** Whether the series is in TV Focus, for the header's Focus button. */
+  inFocus: boolean;
   /** Each episode's Plex watched state, or null to leave the Watched column out. */
   episodeWatched: Map<number, WatchedState> | null;
   /** True when Plex couldn't be read, so a status line says so. */
   watchFailed: boolean;
 }) {
   const { detail, profiles } = page;
-  // The newest season that isn't Specials starts open. Seasons arrive newest first.
+  // The first season that isn't Specials starts open (usually Season 1). Seasons arrive in ascending order.
   const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
   // Every episode of the series, for the hero's queue line.
   const episodeIds = detail.seasons.flatMap((season) => season.episodes.map((episode) => episode.id));
@@ -312,7 +363,9 @@ function SeriesView({
         monitored={detail.monitored}
         qualityProfile={detail.qualityProfile}
         overview={detail.overview}
-        actions={<SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />}
+        actions={
+          <SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />
+        }
         activity={<SeriesActivitySummary episodeIds={episodeIds} title={detail.title} />}
         typeSection={
           <section aria-label="Seasons" className="space-y-3">
@@ -409,6 +462,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
     <SeriesView
       page={page}
       isAdmin={isAdmin}
+      inFocus={listFocusIds("series").includes(page.detail.id)}
       episodeWatched={watched === "failed" ? null : watched}
       watchFailed={watched === "failed"}
     />

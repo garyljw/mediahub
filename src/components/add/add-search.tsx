@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GENERIC_ERROR, normalizeTerm, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
-import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { AdminPanel } from "@/components/add/admin-add-panel";
 import { cn } from "@/lib/utils";
 import {
@@ -100,7 +99,6 @@ export function AddSearch({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Counts searches and keystrokes. A reply whose number is no longer the latest is for an older term, so it is dropped.
   const requestRef = useRef(0);
-  const posterPreview = usePosterPreview<string>();
   const fieldId = useId();
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -187,7 +185,7 @@ export function AddSearch({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           ref={searchRef}
           type="search"
@@ -252,24 +250,9 @@ export function AddSearch({
             const idBase = `${fieldId}-${item.key}`;
 
             return (
-              <li key={item.key} className="p-3" {...posterPreview.rowHandlers(item.key, item.posterSrc, {
-                title: item.title,
-                kind: item.kind,
-                peek: item.year === null && item.overview === "" ? null : { year: item.year, genres: [], overview: item.overview },
-              })}>
+              <li key={item.key} className="p-3">
                 <div className="flex items-start gap-3">
-                  <Poster src={item.posterSrc} />
-                  <div className="min-w-0 flex-1" data-poster-anchor>
-                    <p className="font-medium">
-                      {label}
-                      <Badge variant="outline" className="ml-2 align-middle">
-                        {item.kind === "movie" ? "Movie" : "TV"}
-                      </Badge>
-                    </p>
-                    {item.network !== null && <p className="text-sm text-muted-foreground">{item.network}</p>}
-                    {item.overview !== "" && <p className="line-clamp-2 text-sm text-muted-foreground">{item.overview}</p>}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <div className="flex w-20 shrink-0 flex-col items-start gap-1.5">
                     {isAdded ? (
                       <>
                         <Badge variant="secondary">Added</Badge>
@@ -301,6 +284,17 @@ export function AddSearch({
                         {adding ? "Adding…" : "Add"}
                       </Button>
                     )}
+                  </div>
+                  <Poster src={item.posterSrc} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      {label}
+                      <Badge variant="outline" className="ml-2 align-middle">
+                        {item.kind === "movie" ? "Movie" : "TV"}
+                      </Badge>
+                    </p>
+                    {item.network !== null && <p className="text-sm text-muted-foreground">{item.network}</p>}
+                    {item.overview !== "" && <p className="line-clamp-3 text-sm text-muted-foreground">{item.overview}</p>}
                   </div>
                 </div>
 
@@ -353,7 +347,6 @@ export function AddSearch({
           })}
         </ul>
       )}
-      {posterPreview.preview}
     </div>
   );
 }

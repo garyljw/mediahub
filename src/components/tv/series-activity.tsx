@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
-import { ACTIVITY_CLASS, ACTIVITY_ICON, ActivityCell, ActivityHead } from "@/components/library/activity-cell";
+import { ACTIVITY_CLASS, ACTIVITY_ICON, ActivityBlock, ActivityCell, ActivityHead } from "@/components/library/activity-cell";
 import { formatCount } from "@/components/library/format";
 import { useActivity, type ActivityResult } from "@/components/library/use-activity";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,12 @@ export function SeriesActivityProvider({ seriesId, children }: { seriesId: numbe
 export function EpisodeActivityCell({ episodeId, name }: { episodeId: number; name: string }) {
   const { byId } = useContext(SeriesActivityContext);
   return <ActivityCell name={name} activity={byId.get(episodeId)} />;
+}
+
+/** An episode's queue line on a phone card. Nothing when the episode isn't queued. */
+export function EpisodeActivityLine({ episodeId, name }: { episodeId: number; name: string }) {
+  const { byId } = useContext(SeriesActivityContext);
+  return <ActivityBlock name={name} activity={byId.get(episodeId)} />;
 }
 
 /** The Activity column header for an episode table. */

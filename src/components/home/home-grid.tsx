@@ -6,6 +6,7 @@ import { AlertTriangle, Bookmark, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PosterTile } from "@/components/poster/poster";
+import { POSTER_GRID_CLASS, POSTER_TILE_CLASS } from "@/components/poster/poster-grid";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { activityLabel, showsProgress } from "@/components/library/activity";
 import { formatCount } from "@/components/library/format";
@@ -111,7 +112,7 @@ export function HomeGrid({
         </p>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           ref={searchRef}
           type="search"
@@ -333,17 +334,15 @@ function HomeResults({
                 setMenuKey(key);
               }}
             >
-              {/* Fixed-width tiles fill each row, so wider screens get more columns rather than bigger posters. */}
-              <ul
-                {...gridHandlers}
-                className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]"
-              >
+              {/* Tiles are at least 6.5rem, or from sm up 7vw or 8rem, whichever is wider. Wide windows get bigger posters,
+                  not just more columns. The skeleton uses the same class, so the tiles don't jump when it's replaced. */}
+              <ul {...gridHandlers} className={POSTER_GRID_CLASS}>
                 {filtered.map((item) => (
                   // content-visibility lets the browser skip layout and paint for tiles that are off screen.
                   <li
                     key={item.key}
                     data-focus-key={item.key}
-                    className="[contain-intrinsic-size:auto_15rem] [content-visibility:auto]"
+                    className={POSTER_TILE_CLASS}
                   >
                     <HomeTile
                       item={item}

@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { mergeVisibleOrder, moveInOrder } from "./focus-order";
 import { FOCUS_APP, FOCUS_NAME, SAVE_FAILED, type FocusKind } from "./focus-kinds";
+import { POSTER_GRID_CLASS, POSTER_TILE_CLASS } from "@/components/poster/poster-grid";
 
 // Space picks up a tile, the arrows move it, Space or Enter drops it. Enter isn't a start key, so it still opens the link.
 const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter"] };
@@ -220,7 +221,7 @@ export function FocusGrid({
         onDragCancel={() => setDrag(null)}
       >
         <SortableContext items={order.items.map((item) => item.id)} strategy={rectSortingStrategy}>
-          <ul {...gridHandlers} className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
+          <ul {...gridHandlers} className={POSTER_GRID_CLASS}>
             {shownItems.map((item, index) => (
               <FocusTile
                 key={item.key}
@@ -319,7 +320,8 @@ function FocusTile({
           style={style}
           aria-describedby={attributes["aria-describedby"]}
           className={cn(
-            "relative [contain-intrinsic-size:auto_15rem] [content-visibility:auto]",
+            "relative",
+            POSTER_TILE_CLASS,
             isDragging && "opacity-40",
           )}
           {...listeners}
