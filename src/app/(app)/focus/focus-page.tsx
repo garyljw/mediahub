@@ -1,4 +1,3 @@
-import { AlertTriangle } from "lucide-react";
 import { listMovies, type MovieRow } from "@/server/arr/movies";
 import { listSeries, type SeriesRow } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
@@ -7,8 +6,8 @@ import { getWatchedIndex } from "@/server/plex/watched";
 import type { WatchedIndex } from "@/server/merge/watched";
 import { listFocusIds } from "@/server/focus/focus";
 import { syncFocusIfStale } from "@/server/focus/plex-sync";
-import { toHomeItems } from "@/server/merge/library";
-import type { HomeItem } from "@/components/home/home-items";
+import { homeWatched, toHomeItems } from "@/server/merge/library";
+import type { HomeItem, HomeWatched } from "@/components/home/home-items";
 import { FocusAdd } from "@/components/focus/focus-add";
 import { FocusGrid } from "@/components/focus/focus-grid";
 import { FOCUS_APP, FOCUS_NAME, type FocusKind } from "@/components/focus/focus-kinds";
@@ -39,9 +38,19 @@ function libraryIds(library: Library): Set<number> {
 }
 
 /** Home items for every title in the loaded library, sorted as on Home. The page splits them into tiles and candidates. */
-function libraryItems(library: Library, watched: WatchedIndex | null): HomeItem[] {
-  if (library.kind === "movie") return toHomeItems(library.rows, [], watched);
-  return toHomeItems([], library.rows, watched);
+function libraryItems(library: Library): HomeItem[] {
+  if (library.kind === "movie") return toHomeItems(library.rows, [], null);
+  return toHomeItems([], library.rows, null);
+}
+
+/**
+ * The watched status for the stored titles only, as the grid streams it. Built from the library and Plex together, and
+ * never rejects. A null library (failed) gives no matches, so the grid shows nothing with banners.
+ */
+function focusWatched(library: Library | null, stored: Set<number>, index: WatchedIndex | null | "failed"): HomeWatched {
+  if (library === null) return homeWatched([], [], index);
+  if (library.kind === "movie") return homeWatched(library.rows.filter((row) => stored.has(row.id)), [], index);
+  return homeWatched([], library.rows.filter((row) => stored.has(row.id)), index);
 }
 
 export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmin: boolean }) {
@@ -53,18 +62,24 @@ export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmi
   const allIds = listFocusIds(kind);
   const stored = new Set(allIds);
 
-  // Plex is not wrapped in loadOrNull: a failure only costs the watched banners, as on Home. Admins load the kind's
-  // add options for the panel in the same wait. Requesters load none.
-  const [library, watched, movieOptions, seriesOptions] = await Promise.all([
-    loadLibrary(kind),
-    getWatchedIndex(),
+  // Plex is not awaited with the library: the tiles show at once, and the banners arrive when Plex answers (FocusGrid).
+  // A Plex failure only costs the banners, so the promise never rejects. Admins load the kind's add options for the
+  // panel in the same wait. Requesters load none.
+  const libraryPromise = loadLibrary(kind);
+  const watched: Promise<HomeWatched> = Promise.all([libraryPromise, getWatchedIndex()])
+    .then(([loaded, index]) => focusWatched(loaded, stored, index))
+    .catch(() => {
+      console.error("Focus page: the watched status could not be built");
+      return { state: "failed" } as const;
+    });
+  const [library, movieOptions, seriesOptions] = await Promise.all([
+    libraryPromise,
     isAdmin && kind === "movie" ? loadMovieAddOptions("Focus page") : null,
     isAdmin && kind === "series" ? loadSeriesAddOptions("Focus page") : null,
   ]);
-  const watchedIndex = watched === "failed" ? null : watched;
 
   // Missing titles are only known when the library loaded. Nothing is removed automatically.
-  const items = library === null ? null : libraryItems(library, watchedIndex);
+  const items = library === null ? null : libraryItems(library);
   const tiles = items === null ? null : items.filter((item) => stored.has(item.id));
   const candidates = items === null ? [] : items.filter((item) => !stored.has(item.id));
   const present = library === null ? null : libraryIds(library);
@@ -83,12 +98,6 @@ export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmi
           Couldn&apos;t load {kind === "movie" ? "movies" : "TV"} from {app}.
         </p>
       )}
-      {watched === "failed" && (
-        <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
-          <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
-          Couldn&apos;t load watched status from Plex.
-        </p>
-      )}
       {library !== null && (
         <FocusAdd
           kind={kind}
@@ -105,7 +114,7 @@ export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmi
         </p>
       )}
       {tiles !== null && allIds.length > 0 && (
-        <FocusGrid kind={kind} items={visible} allIds={allIds} missing={missing} />
+        <FocusGrid kind={kind} items={visible} allIds={allIds} missing={missing} watched={watched} />
       )}
     </div>
   );

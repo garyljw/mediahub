@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Bookmark, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,15 +15,19 @@ import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/fo
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
+import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
 import {
   filterHomeItems,
-  hasWatchData,
   WATCH_FILTER_CHIPS,
   WATCHED_CLASS,
   WATCHED_LABEL,
+  withWatched,
   type HomeItem,
   type HomeKind,
+  type HomeLibrary,
+  type HomeWatched,
   type HomeWatchFilter,
+  type WatchedState,
 } from "./home-items";
 
 const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
@@ -45,21 +49,150 @@ function chipClass(selected: boolean): string {
 /**
  * The Home poster grid: movies and TV together, with instant search and a kind filter. Read-only. Each tile
  * opens the item's own page. Live activity is polled for both apps, and shown as a line and progress bar.
+ *
+ * The toolbar renders at once. The tiles arrive with the library (Radarr and Sonarr), and the watched status arrives on
+ * its own (Plex): the banners and the watch chips fill in when it does.
  */
 export function HomeGrid({
-  items,
-  unavailable,
+  library,
+  watched,
+  plexConnected,
   action,
 }: {
-  items: HomeItem[];
-  /** Kinds whose library failed to load. The page already shows an error for each, so no empty-state text is added. */
-  unavailable: HomeItem["kind"][];
+  /** The library, from the page. Resolves once Radarr and Sonarr have answered. Never rejects. */
+  library: Promise<HomeLibrary>;
+  /** The Plex watched status, from the page. Resolves once Plex has answered. Never rejects. */
+  watched: Promise<HomeWatched>;
+  /** True when a Plex data connection is set up, so the watch chips are worth showing (disabled) while Plex loads. */
+  plexConnected: boolean;
   /** Shown at the end of the filter row, e.g. the Add button. */
   action?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
   const [watchFilter, setWatchFilter] = useState<HomeWatchFilter>("any");
+  // Null until Plex answers. Read in an effect rather than with use(), so the toolbar and grid don't wait for it.
+  const [watchedState, setWatchedState] = useState<HomeWatched | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Autofocus the search box on desktop only, so phones don't pop the keyboard.
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    watched.then((value) => {
+      if (!cancelled) setWatchedState(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [watched]);
+
+  // While Plex is loading the chips show, disabled, but only when a Plex connection is set up, so a MediaHub without
+  // Plex never shows them. They hide when Plex failed or matched nothing.
+  // byKey only holds the items Plex matched, so an empty byKey means no item has a watched state.
+  const watchFilterLoading = watchedState === null;
+  const watchFilterShown =
+    (watchedState === null && plexConnected) || (watchedState?.state === "ready" && Object.keys(watchedState.byKey).length > 0);
+  // Reset to "any" when the chips hide, so a choice can't silently re-apply when Plex data comes back.
+  if (!watchFilterShown && watchFilter !== "any") setWatchFilter("any");
+  const activeWatch: HomeWatchFilter = watchFilterShown ? watchFilter : "any";
+  const watchedByKey = watchedState?.state === "ready" ? watchedState.byKey : null;
+
+  return (
+    <div className="space-y-4">
+      {watchedState?.state === "failed" && (
+        <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+          Couldn&apos;t load watched status from Plex.
+        </p>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Input
+          ref={searchRef}
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search movies and TV"
+          aria-label="Search your library"
+          className="sm:max-w-sm"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+            {KIND_CHIPS.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                aria-pressed={kind === chip.kind}
+                onClick={() => setKind(chip.kind)}
+                className={chipClass(kind === chip.kind)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          {watchFilterShown && (
+            <>
+              <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+              <div role="group" aria-label="Watched in Plex" className="flex flex-wrap gap-2">
+                {WATCH_FILTER_CHIPS.map((chip) => (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    disabled={watchFilterLoading}
+                    aria-disabled={watchFilterLoading || undefined}
+                    aria-pressed={watchFilter === chip.value}
+                    onClick={() => setWatchFilter(chip.value)}
+                    className={cn(chipClass(watchFilter === chip.value), "aria-disabled:opacity-50")}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {action}
+        </div>
+      </div>
+
+      <Suspense fallback={<HomeGridSkeleton />}>
+        <HomeResults
+          library={library}
+          watchedByKey={watchedByKey}
+          search={search}
+          kind={kind}
+          watchFilter={activeWatch}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+/**
+ * The part of the grid that needs the library: the error lines, the count, and the tiles. It suspends until Radarr and
+ * Sonarr have answered, and the toolbar above stays usable meanwhile. Its own state (Focus changes, menus) lives here.
+ */
+function HomeResults({
+  library: libraryPromise,
+  watchedByKey,
+  search,
+  kind,
+  watchFilter,
+}: {
+  library: Promise<HomeLibrary>;
+  watchedByKey: Record<string, WatchedState> | null;
+  search: string;
+  kind: HomeKind;
+  watchFilter: HomeWatchFilter;
+}) {
+  const library = use(libraryPromise);
+  const base = library.items;
+  const unavailable: HomeItem["kind"][] = [...(library.moviesFailed ? ["movie" as const] : []), ...(library.seriesFailed ? ["series" as const] : [])];
+  const items = useMemo(() => withWatched(base, watchedByKey), [base, watchedByKey]);
+
   const [focusError, setFocusError] = useState<string | null>(null);
   // The tile the open menu is for, by key. Set on the grid's own context-menu or touch-press event (see below).
   const [menuKey, setMenuKey] = useState<string | null>(null);
@@ -69,26 +202,20 @@ export function HomeGrid({
   const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(() => new Set());
   // Which titles are in a Focus list. It starts from the page's data and changes at once on add or remove, and is
   // rolled back if the save fails. It follows new page data only when that data arrives.
-  const [source, setSource] = useState(items);
-  const [inFocusKeys, setInFocusKeys] = useState(() => focusKeysOf(items));
-  if (source !== items) {
-    setSource(items);
+  const [source, setSource] = useState(base);
+  const [inFocusKeys, setInFocusKeys] = useState(() => focusKeysOf(base));
+  if (source !== base) {
+    setSource(base);
     // A title whose save is still pending keeps its optimistic value; the save's own result settles it.
-    const next = focusKeysOf(items);
+    const next = focusKeysOf(base);
     for (const key of pendingKeys) {
       if (inFocusKeys.has(key)) next.add(key);
       else next.delete(key);
     }
     setInFocusKeys(next);
   }
-  const searchRef = useRef<HTMLInputElement>(null);
   const movieActivity = useActivity("/api/movies/activity");
   const seriesActivity = useActivity("/api/tv/activity");
-
-  // Autofocus the search box on desktop only, so phones don't pop the keyboard.
-  useEffect(() => {
-    if (window.matchMedia("(min-width: 768px)").matches) searchRef.current?.focus();
-  }, []);
 
   // Every match shows at once: no paging. Posters load lazily as they scroll into view. The grid follows a
   // deferred copy of the search, so typing stays responsive while a large grid re-renders.
@@ -105,17 +232,11 @@ export function HomeGrid({
   );
   const shownByKey = useMemo(() => new Map(shown.map((item) => [item.key, item])), [shown]);
   const menuTarget = menuKey === null ? undefined : shownByKey.get(menuKey);
-  // The watch filter only shows when Plex data is present. If that data goes away, the filter stops applying, so the
-  // grid can't empty itself with no chip showing why.
-  const showWatchFilter = useMemo(() => hasWatchData(items), [items]);
-  // Reset to "any" when the chips hide, so a choice can't silently re-apply when Plex data comes back.
-  if (!showWatchFilter && watchFilter !== "any") setWatchFilter("any");
-  const activeWatch: HomeWatchFilter = showWatchFilter ? watchFilter : "any";
   const filtered = useMemo(
-    () => filterHomeItems(shown, { kind, search: deferredSearch, watched: activeWatch }),
-    [shown, kind, deferredSearch, activeWatch],
+    () => filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter }),
+    [shown, kind, deferredSearch, watchFilter],
   );
-  const filtering = kind !== "all" || deferredSearch.trim() !== "" || activeWatch !== "any";
+  const filtering = kind !== "all" || deferredSearch.trim() !== "" || watchFilter !== "any";
   // An empty grid with a failed app in view is explained by the page's error, not by "No matches".
   const failedInView = unavailable.some((failed) => kind === "all" || kind === failed);
 
@@ -155,7 +276,17 @@ export function HomeGrid({
   }
 
   return (
-    <div className="space-y-4">
+    <>
+      {library.moviesFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          Couldn&apos;t load movies from Radarr.
+        </p>
+      )}
+      {library.seriesFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          Couldn&apos;t load TV from Sonarr.
+        </p>
+      )}
       {movieActivity.failed && <ActivityFailed source="Radarr" />}
       {seriesActivity.failed && <ActivityFailed source="Sonarr" />}
       {focusError && (
@@ -163,52 +294,6 @@ export function HomeGrid({
           {focusError}
         </p>
       )}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          ref={searchRef}
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search movies and TV"
-          aria-label="Search your library"
-          className="sm:max-w-sm"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
-            {KIND_CHIPS.map((chip) => (
-              <button
-                key={chip.kind}
-                type="button"
-                aria-pressed={kind === chip.kind}
-                onClick={() => setKind(chip.kind)}
-                className={chipClass(kind === chip.kind)}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-          {showWatchFilter && (
-            <>
-              <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
-              <div role="group" aria-label="Watched in Plex" className="flex flex-wrap gap-2">
-                {WATCH_FILTER_CHIPS.map((chip) => (
-                  <button
-                    key={chip.value}
-                    type="button"
-                    aria-pressed={watchFilter === chip.value}
-                    onClick={() => setWatchFilter(chip.value)}
-                    className={chipClass(watchFilter === chip.value)}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          {action}
-        </div>
-      </div>
 
       {filtered.length === 0 && failedInView ? null : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nothing in your library yet.</p>
@@ -275,7 +360,7 @@ export function HomeGrid({
           </ContextMenu>
         </>
       )}
-    </div>
+    </>
   );
 }
 

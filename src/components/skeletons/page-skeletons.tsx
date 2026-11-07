@@ -14,7 +14,7 @@ function LoadingStatus() {
 }
 
 /** The grid of poster tiles, with the same column classes as the Home grid. */
-function PosterGridSkeleton({ count }: { count: number }) {
+export function PosterGridSkeleton({ count }: { count: number }) {
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
       {Array.from({ length: count }, (_, index) => (
@@ -28,7 +28,17 @@ function PosterGridSkeleton({ count }: { count: number }) {
   );
 }
 
-/** Home: the heading, a toolbar, and 24 poster tiles. */
+/** The Home grid's body while the library loads: the count line and 24 poster tiles. */
+export function HomeGridSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-5 w-24" />
+      <PosterGridSkeleton count={24} />
+    </div>
+  );
+}
+
+/** Home: the heading, a toolbar, and the grid's placeholder. */
 export function HomeSkeleton() {
   return (
     <div aria-busy="true" className="space-y-4">
@@ -43,8 +53,7 @@ export function HomeSkeleton() {
           <Skeleton className="h-9 w-20" />
         </div>
       </div>
-      <Skeleton className="h-5 w-24" />
-      <PosterGridSkeleton count={24} />
+      <HomeGridSkeleton />
     </div>
   );
 }
