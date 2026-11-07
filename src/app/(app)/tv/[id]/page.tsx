@@ -198,13 +198,13 @@ function SeasonDetails({
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>Monitored</TableHead>
                 <TableHead className={HEAD}>#</TableHead>
                 <TableHead className={HEAD}>Title</TableHead>
-                <TableHead className={`${HEAD}`}>Air date</TableHead>
+                <TableHead className={HEAD}>Air date</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
                 {episodeWatched !== null && <TableHead className={HEAD}>Watched</TableHead>}
                 <TableHead className={`${HEAD} w-48`}>
                   <EpisodeActivityHead />
                 </TableHead>
-                <TableHead className={`${HEAD}`}>Quality</TableHead>
+                <TableHead className={HEAD}>Quality</TableHead>
                 <TableHead className={`${HEAD} text-right`}>Size</TableHead>
                 <TableHead className={`${HEAD} w-px whitespace-nowrap`}>
                   <span className="sr-only">Actions</span>
