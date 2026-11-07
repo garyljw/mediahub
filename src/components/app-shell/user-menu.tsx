@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { ChevronsUpDown, Info, LogOut } from "lucide-react";
 import { signOut } from "@/app/(app)/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,12 @@ export function UserMenu({ name, email }: Props) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{email}</DropdownMenuLabel>
+        <DropdownMenuItem asChild>
+          <Link href="/about">
+            <Info className="size-4" aria-hidden="true" />
+            About
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOut}>
           <DropdownMenuItem asChild>

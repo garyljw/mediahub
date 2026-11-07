@@ -10,7 +10,7 @@ MediaHub is a hobby project. It started as an experiment in building a web app w
 - **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release.
 - **Queue:** what is downloading, with remove and force import.
 - **Calendar and History** for both Radarr and Sonarr.
-- **Phones and tablets:** on a narrower screen (a phone, or a tablet held upright) a tab bar along the bottom replaces the sidebar: **Home**, **Movie Focus**, **TV Focus**, **Queue** and **More**. **More** holds **Calendar**, **History**, **Settings** (admins) and **Sign out**. Queue and History show each item as a card, a series' page shows each episode as a card, and Calendar always shows the day list on a phone.
+- **Phones and tablets:** on a narrower screen (a phone, or a tablet held upright) a tab bar along the bottom replaces the sidebar: **Home**, **Movie Focus**, **TV Focus**, **Queue** and **More**. **More** holds **Calendar**, **History**, **Settings** (admins), **About** and **Sign out**. Queue and History show each item as a card, a series' page shows each episode as a card, and Calendar always shows the day list on a phone.
 - **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes. On Home, the **Any / Unwatched / Partly watched / Watched** chips show only titles in that state. Titles that aren't in Plex appear only under **Any**.
 - **Two roles:**
   - *Admins* can do everything. They sign in with the Plex account that owns your Plex server.
@@ -118,5 +118,7 @@ For the times you can't use the web page, `mediahub-tool.cmd` in the install fol
 - **A page says "Something went wrong":** press **Try again**. If it shows an error code, search for that code in `MediaHub.err.log` in `C:\ProgramData\MediaHub\logs` (open it as an administrator) to see what failed.
 - **"Port is already in use" during install:** another program uses that port. Pick a different one.
 
-## Licence
-[MIT](LICENSE). Use it however you like, at your own risk.
+## Licences
+MediaHub is released under the [MIT licence](LICENSE). Use it however you like, at your own risk.
+
+MediaHub is built on open-source projects, including Node.js and the WinSW service wrapper that the installer ships. Their licences and notices are in `THIRD_PARTY_NOTICES.txt` in `C:\Program Files\MediaHub\app`, and the **About** page lists them with their versions. On a phone, **About** is under **More**. The page also links to the full licence texts.
