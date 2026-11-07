@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useState, useTransition, type HTMLAttributes } from "react";
 import { markHistoryFailed } from "@/app/(app)/history/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
-import { CELL, HEAD, SELECT_CLASS } from "@/components/library/table-parts";
+import { toggleOnClick, CELL, HEAD, SELECT_CLASS } from "@/components/library/table-parts";
 import type { HistoryDetails, HistoryEntry } from "@/server/merge/history";
 import {
   HISTORY_EVENT_FILTERS,
@@ -46,6 +46,77 @@ function DetailList({ details }: { details: HistoryDetails }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/** One history event on narrow screens: the title and facts (all wrapping), the expand button, and Mark as failed. */
+function HistoryCard({
+  entry,
+  previewHandlers,
+  isOpen,
+  canMarkFailed,
+  onToggle,
+  onMarkFailed,
+}: {
+  entry: HistoryEntry;
+  /** The poster hover preview's handlers (mouse only), as on the table rows. */
+  previewHandlers: HTMLAttributes<HTMLLIElement>;
+  isOpen: boolean;
+  canMarkFailed: boolean;
+  onToggle: () => void;
+  onMarkFailed: (entry: HistoryEntry) => void;
+}) {
+  const detailsId = `history-card-details-${entry.key}`;
+  return (
+    <li className="cursor-pointer rounded-xl border bg-card p-3" {...previewHandlers} onClick={toggleOnClick(onToggle)}>
+      <div className="flex gap-3">
+        <Poster src={entry.posterSrc} />
+        <div className="flex min-w-0 flex-1 items-start gap-2" data-poster-anchor>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 break-words font-medium">
+                {entry.href !== null ? (
+                  <Link href={entry.href} className="hover:underline">
+                    {entry.title}
+                  </Link>
+                ) : (
+                  entry.title
+                )}
+              </span>
+              <Badge variant="outline" className="shrink-0">
+                {entry.kind === "movie" ? "Movie" : "TV"}
+              </Badge>
+            </div>
+            {entry.detail !== "" && <p className="break-words text-xs text-muted-foreground">{entry.detail}</p>}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <Badge className={HISTORY_EVENT_CLASS[entry.event]}>{HISTORY_EVENT_LABEL[entry.event]}</Badge>
+              <span className="whitespace-nowrap">{entry.quality ?? "—"}</span>
+              <span className="whitespace-nowrap text-muted-foreground">{entry.when}</span>
+            </div>
+            {canMarkFailed && entry.canMarkFailed && (
+              <Button variant="outline" size="sm" className="mt-1" onClick={() => onMarkFailed(entry)}>
+                Mark as failed
+              </Button>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            aria-controls={detailsId}
+            aria-label={`${isOpen ? "Hide" : "Show"} details for ${entry.title}`}
+            onClick={onToggle}
+            className="-mt-1 -mr-1 grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground"
+          >
+            {isOpen ? <ChevronDown className="size-4" aria-hidden="true" /> : <ChevronRight className="size-4" aria-hidden="true" />}
+          </button>
+        </div>
+      </div>
+      {isOpen && (
+        <div id={detailsId} data-card-details className="mt-3 cursor-auto border-t pt-3">
+          <DetailList details={entry.details} />
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -152,6 +223,8 @@ export function HistoryView({
       {entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">No history matches these filters.</p>
       ) : (
+        <>
+        <div className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -176,16 +249,20 @@ export function HistoryView({
               const detailsId = `history-details-${entry.key}`;
               return (
                 <Fragment key={entry.key}>
-                  <TableRow {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
-              title: entry.title,
-              kind: entry.kind === "movie" ? "movie" : "series",
-              peek: entry.peek,
-            })}>
+                  <TableRow
+                    className="cursor-pointer"
+                    {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
+                      title: entry.title,
+                      kind: entry.kind === "movie" ? "movie" : "series",
+                      peek: entry.peek,
+                    })}
+                    onClick={toggleOnClick(() => toggleExpanded(entry.key))}
+                  >
                     <TableCell className={`${CELL} whitespace-nowrap text-muted-foreground`}>{entry.when}</TableCell>
                     <TableCell className={CELL}>
                       <Poster src={entry.posterSrc} />
                     </TableCell>
-                    <TableCell className={`${CELL} max-w-0 w-full`} data-poster-anchor>
+                    <TableCell className={`${CELL} max-w-0 w-full min-w-48`} data-poster-anchor>
                       <div className="flex min-w-0 items-center gap-2">
                         <button
                           type="button"
@@ -247,6 +324,28 @@ export function HistoryView({
             })}
           </TableBody>
         </Table>
+        </div>
+        <ul className="space-y-2 lg:hidden">
+          {entries.map((entry) => (
+            <HistoryCard
+              key={entry.key}
+              previewHandlers={posterPreview.rowHandlers(entry.key, entry.posterSrc, {
+                title: entry.title,
+                kind: entry.kind === "movie" ? "movie" : "series",
+                peek: entry.peek,
+              })}
+              entry={entry}
+              isOpen={expanded.has(entry.key)}
+              canMarkFailed={canMarkFailed}
+              onToggle={() => toggleExpanded(entry.key)}
+              onMarkFailed={(target) => {
+                setShownTarget(target);
+                setMarking(target);
+              }}
+            />
+          ))}
+        </ul>
+        </>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">

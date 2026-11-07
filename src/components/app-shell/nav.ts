@@ -18,6 +18,19 @@ export function navItemsFor(isAdmin: boolean): NavItem[] {
   return NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly);
 }
 
+// Items on the bottom tab bar, in order. Everything else this user may see goes under "More".
+const TAB_HREFS = ["/", "/focus/movies", "/focus/tv", "/queue"];
+
+/** Split the user's items into the bottom tab bar and the More sheet. Every item is in exactly one list. */
+export function tabBarItems(isAdmin: boolean): { tabs: NavItem[]; more: NavItem[] } {
+  const items = navItemsFor(isAdmin);
+  const tabs = TAB_HREFS.map((href) => items.find((item) => item.href === href)).filter(
+    (item): item is NavItem => item !== undefined,
+  );
+  const more = items.filter((item) => !TAB_HREFS.includes(item.href));
+  return { tabs, more };
+}
+
 // A movie or series page, e.g. /movies/123. Its back link goes to Home, so Home is the nav item it highlights.
 const ITEM_PAGE = /^\/(movies|tv)\/[^/]+/;
 

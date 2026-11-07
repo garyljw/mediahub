@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -21,6 +21,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: "MediaHub", template: "%s · MediaHub" },
   description: "Movies and TV in one place.",
+};
+
+// viewportFit cover lets env(safe-area-inset-*) report the iPhone notch and home indicator.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Explicit props instead of the generated LayoutProps global, so typecheck passes before build (as in CI).

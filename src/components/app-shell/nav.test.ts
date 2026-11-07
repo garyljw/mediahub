@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActive, navItemsFor, NAV_ITEMS } from "./nav";
+import { isActive, navItemsFor, NAV_ITEMS, tabBarItems } from "./nav";
 
 const labels = (items: { label: string }[]) => items.map((item) => item.label);
 
@@ -13,6 +13,27 @@ describe("navItemsFor", () => {
   it("shows every item to an admin, in order", () => {
     expect(labels(navItemsFor(true))).toEqual(["Home", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Settings"]);
     expect(navItemsFor(true)).toEqual(NAV_ITEMS);
+  });
+});
+
+describe("tabBarItems", () => {
+  it("puts Settings under More for an admin, and not for a requester", () => {
+    expect(labels(tabBarItems(true).more)).toEqual(["Calendar", "History", "Settings"]);
+    expect(labels(tabBarItems(false).more)).toEqual(["Calendar", "History"]);
+  });
+
+  it("orders the tabs Home, Movie Focus, TV Focus, Queue", () => {
+    expect(labels(tabBarItems(true).tabs)).toEqual(["Home", "Movie Focus", "TV Focus", "Queue"]);
+    expect(labels(tabBarItems(false).tabs)).toEqual(["Home", "Movie Focus", "TV Focus", "Queue"]);
+  });
+
+  it("never lists an item in both the tabs and More", () => {
+    for (const isAdmin of [true, false]) {
+      const { tabs, more } = tabBarItems(isAdmin);
+      const hrefs = [...tabs, ...more].map((item) => item.href);
+      expect(new Set(hrefs).size).toBe(hrefs.length);
+      expect(hrefs.sort()).toEqual(navItemsFor(isAdmin).map((item) => item.href).sort());
+    }
   });
 });
 

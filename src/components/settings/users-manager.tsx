@@ -81,6 +81,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
             {note.message}
           </p>
         )}
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -97,6 +98,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
             ))}
           </TableBody>
         </Table>
+        </div>
       </section>
     </div>
   );
@@ -293,14 +295,14 @@ function AddRequesterForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={nameId} className="text-sm font-medium">
             Name
           </label>
           <Input id={nameId} value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" required />
           <p className="text-xs text-muted-foreground">Used to sign in, with the password. Must be unique.</p>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={emailId} className="text-sm font-medium">
             Email
           </label>
@@ -315,7 +317,7 @@ function AddRequesterForm() {
             required
           />
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={passwordId} className="text-sm font-medium">
             Password
           </label>
@@ -331,7 +333,7 @@ function AddRequesterForm() {
             {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters.
           </p>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor={confirmId} className="text-sm font-medium">
             Confirm password
           </label>

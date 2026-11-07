@@ -96,6 +96,70 @@ function rememberView(view: CalendarView) {
   document.cookie = `${CALENDAR_VIEW_COOKIE}=${view}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
+type PosterPreview = ReturnType<typeof usePosterPreview<string>>;
+
+/**
+ * The day-by-day list. Below sm it is the only view. From sm up it shows when the list view is chosen, and the grid
+ * view passes `className="sm:hidden"` to hide it.
+ */
+function DayList({
+  days,
+  byDate,
+  posterPreview,
+  className,
+}: {
+  days: CalendarDay[];
+  byDate: Map<string, CalendarEntry[]>;
+  posterPreview: PosterPreview;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-4", className)}>
+      {days.map((day) => {
+        const dayEntries = byDate.get(day.date) ?? [];
+        if (dayEntries.length === 0) return null;
+        return (
+          <section key={day.date} aria-label={day.label}>
+            <h2 className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+              {day.label}
+              {day.isToday && <Badge variant="secondary">Today</Badge>}
+            </h2>
+            <ul className="divide-y rounded-md border">
+              {dayEntries.map((entry) => (
+                <li
+                  key={entry.key}
+                  className="flex items-center gap-3 px-3 py-2"
+                  {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
+                    title: entry.title,
+                    kind: entry.kind === "movie" ? "movie" : "series",
+                    peek: entry.peek,
+                  })}
+                >
+                  <Poster src={entry.posterSrc} />
+                  <div className="min-w-0 flex-1" data-poster-anchor>
+                    <div className="truncate font-medium" title={entry.title}>
+                      {entry.href !== null ? (
+                        <Link href={entry.href} className="hover:underline">
+                          {entry.title}
+                        </Link>
+                      ) : (
+                        entry.title
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{entry.detail}</p>
+                  </div>
+                  <Badge variant="outline">{entry.kind === "movie" ? "Movie" : "TV"}</Badge>
+                  <Badge className={CALENDAR_STATUS_CLASS[entry.status]}>{CALENDAR_STATUS_LABEL[entry.status]}</Badge>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The Calendar page's interactive part: the view toggle, the filters, and the list or grid. The entries and days
  * arrive already built by the server, so no date is formatted in the browser.
@@ -145,7 +209,7 @@ export function CalendarView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div role="group" aria-label="View" className="flex gap-1">
+        <div role="group" aria-label="View" className="hidden gap-1 sm:flex">
           <Button
             variant={view === "list" ? "default" : "outline"}
             size="sm"
@@ -205,54 +269,17 @@ export function CalendarView({
 
       {visible.length === 0 && <p className="text-sm text-muted-foreground">Nothing in this range.</p>}
 
-      {view === "list" ? (
-        <div className="space-y-4">
-          {days.map((day) => {
-            const dayEntries = byDate.get(day.date) ?? [];
-            if (dayEntries.length === 0) return null;
-            return (
-              <section key={day.date} aria-label={day.label}>
-                <h2 className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-                  {day.label}
-                  {day.isToday && <Badge variant="secondary">Today</Badge>}
-                </h2>
-                <ul className="divide-y rounded-md border">
-                  {dayEntries.map((entry) => (
-                    <li
-                      key={entry.key}
-                      className="flex items-center gap-3 px-3 py-2"
-                      {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
-                        title: entry.title,
-                        kind: entry.kind === "movie" ? "movie" : "series",
-                        peek: entry.peek,
-                      })}
-                    >
-                      <Poster src={entry.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor>
-                        <div className="truncate font-medium" title={entry.title}>
-                          {entry.href !== null ? (
-                            <Link href={entry.href} className="hover:underline">
-                              {entry.title}
-                            </Link>
-                          ) : (
-                            entry.title
-                          )}
-                        </div>
-                        <p className="truncate text-xs text-muted-foreground">{entry.detail}</p>
-                      </div>
-                      <Badge variant="outline">{entry.kind === "movie" ? "Movie" : "TV"}</Badge>
-                      <Badge className={CALENDAR_STATUS_CLASS[entry.status]}>{CALENDAR_STATUS_LABEL[entry.status]}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
-      ) : (
+      <DayList
+        days={days}
+        byDate={byDate}
+        posterPreview={posterPreview}
+        className={view === "grid" ? "sm:hidden" : undefined}
+      />
+
+      {view === "grid" && (
         // The grid keeps a minimum width, so on a narrow screen it scrolls sideways rather than squashing the days.
         // Headings and days share one grid, so each weekday heading sits over its column.
-        <div className="overflow-x-auto rounded-md border">
+        <div className="hidden overflow-x-auto rounded-md border sm:block">
           <div className="grid min-w-[48rem] grid-cols-7">
             {WEEKDAY_HEADINGS.map((heading, column) => (
               <div
