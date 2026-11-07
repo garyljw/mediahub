@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FOCUS_NAME, type FocusKind } from "@/components/focus/focus-kinds";
+import { POSTER_GRID_CLASS } from "@/components/poster/poster-grid";
 
 /** Tells screen readers the page is loading, since the skeleton blocks themselves are hidden from them. */
 function LoadingStatus() {
@@ -13,10 +14,10 @@ function LoadingStatus() {
   );
 }
 
-/** The grid of poster tiles, with the same column classes as the Home grid. */
+/** The grid of poster tiles, with the same column classes as the Home and Focus grids. */
 export function PosterGridSkeleton({ count }: { count: number }) {
   return (
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
+    <ul className={POSTER_GRID_CLASS}>
       {Array.from({ length: count }, (_, index) => (
         <li key={index}>
           <Skeleton className="aspect-[2/3] w-full" />
@@ -44,7 +45,7 @@ export function HomeSkeleton() {
     <div aria-busy="true" className="space-y-4">
       <LoadingStatus />
       <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <Skeleton className="h-9 w-64 sm:max-w-sm" />
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-8 w-20 rounded-full" />
@@ -69,7 +70,7 @@ export function ItemPageSkeleton() {
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-          <div className="w-32 shrink-0 -rotate-[1.5deg] self-start rounded-md shadow-lg sm:w-40 md:w-48">
+          <div className="w-32 shrink-0 self-start rounded-md shadow-lg sm:w-40 md:w-48">
             <Skeleton className="aspect-[2/3] w-full" />
           </div>
           <div className="min-w-0 flex-1 space-y-3">

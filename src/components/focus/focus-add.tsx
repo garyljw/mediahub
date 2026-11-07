@@ -81,7 +81,7 @@ export function FocusAdd({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Counts searches and keystrokes. A reply whose number is no longer the latest is for an older term, so it is dropped.
   const requestRef = useRef(0);
-  const posterPreview = usePosterPreview<string>();
+  const posterPreview = usePosterPreview<string>({ side: "right" });
   const fieldId = useId();
 
   // Don't leave a search queued after the page goes away.
@@ -228,11 +228,7 @@ export function FocusAdd({
                 return (
                   <li key={key} className="p-3" {...posterPreview.rowHandlers(key, item.posterSrc)}>
                     <div className="flex items-center gap-3">
-                      <Poster src={item.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor>
-                        <p className="font-medium">{label}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex w-28 shrink-0 flex-wrap items-center gap-2">
                         {added ? (
                           <Badge variant="secondary">Added</Badge>
                         ) : (
@@ -247,6 +243,10 @@ export function FocusAdd({
                             {adding ? "Adding…" : "Add"}
                           </Button>
                         )}
+                      </div>
+                      <Poster src={item.posterSrc} />
+                      <div className="min-w-0 max-w-2xl flex-1" data-poster-anchor>
+                        <p className="font-medium">{label}</p>
                       </div>
                     </div>
                     {rowError !== undefined && (
@@ -297,13 +297,7 @@ export function FocusAdd({
                     peek: hit.year === null && hit.overview === "" ? null : { year: hit.year, genres: [], overview: hit.overview },
                   })}>
                     <div className="flex items-start gap-3">
-                      <Poster src={hit.posterSrc} />
-                      <div className="min-w-0 flex-1" data-poster-anchor>
-                        <p className="font-medium">{label}</p>
-                        {hit.network !== null && <p className="text-sm text-muted-foreground">{hit.network}</p>}
-                        {hit.overview !== "" && <p className="line-clamp-2 text-sm text-muted-foreground">{hit.overview}</p>}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <div className="flex w-28 shrink-0 flex-wrap items-center gap-2">
                         {added ? (
                           <Badge variant="secondary">Added</Badge>
                         ) : isAdmin ? (
@@ -337,6 +331,12 @@ export function FocusAdd({
                             {adding ? "Adding…" : "Add"}
                           </Button>
                         )}
+                      </div>
+                      <Poster src={hit.posterSrc} />
+                      <div className="min-w-0 max-w-2xl flex-1" data-poster-anchor>
+                        <p className="font-medium">{label}</p>
+                        {hit.network !== null && <p className="text-sm text-muted-foreground">{hit.network}</p>}
+                        {hit.overview !== "" && <p className="line-clamp-2 text-sm text-muted-foreground">{hit.overview}</p>}
                       </div>
                     </div>
 

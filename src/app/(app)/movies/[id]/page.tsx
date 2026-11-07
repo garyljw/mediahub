@@ -9,6 +9,7 @@ import { MovieActivity } from "@/components/movies/movie-activity";
 import { MovieDetailActions } from "@/components/movies/movie-detail-actions";
 import { MovieEditForm } from "@/components/movies/movie-edit-form";
 import { requirePageUser } from "@/server/authz";
+import { listFocusIds } from "@/server/focus/focus";
 import { ArrRequestError } from "@/server/arr/request";
 import { getMovieDetail, type MovieDetailPage } from "@/server/arr/movie-detail";
 import type { MovieCredits } from "@/server/arr/movie-credits";
@@ -52,7 +53,7 @@ function CastRow({ credits }: { credits: MovieCredits | null }) {
   );
 }
 
-function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean }) {
+function MovieView({ page, isAdmin, inFocus }: { page: MovieDetailPage; isAdmin: boolean; inFocus: boolean }) {
   const { detail, profiles, credits } = page;
   const meta = metaLine({ certification: detail.certification, runtime: detail.runtime, genres: detail.genres });
   const directors = credits === null ? null : directorsLine(credits.directors);
@@ -73,7 +74,9 @@ function MovieView({ page, isAdmin }: { page: MovieDetailPage; isAdmin: boolean 
       monitored={detail.monitored}
       qualityProfile={detail.qualityProfile}
       overview={detail.overview}
-      actions={<MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />}
+      actions={
+        <MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />
+      }
       activity={<MovieActivity movieId={detail.id} title={detail.title} />}
       typeSection={<CastRow credits={credits} />}
       facts={[
@@ -133,5 +136,5 @@ export default async function MovieDetailPage({ params }: { params: Promise<{ id
   }
 
   if (page === null) notFound();
-  return <MovieView page={page} isAdmin={isAdmin} />;
+  return <MovieView page={page} isAdmin={isAdmin} inFocus={listFocusIds("movie").includes(page.detail.id)} />;
 }

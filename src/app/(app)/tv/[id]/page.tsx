@@ -28,6 +28,7 @@ import {
   SeasonSearchButton,
 } from "@/components/tv/series-detail-actions";
 import { requirePageUser } from "@/server/authz";
+import { listFocusIds } from "@/server/focus/focus";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
 import { seasonWatchedState, toEpisodeWatched } from "@/server/merge/watched";
@@ -276,11 +277,14 @@ async function episodeWatchedFor(detail: SeriesDetail): Promise<Map<number, Watc
 function SeriesView({
   page,
   isAdmin,
+  inFocus,
   episodeWatched,
   watchFailed,
 }: {
   page: SeriesDetailPage;
   isAdmin: boolean;
+  /** Whether the series is in TV Focus, for the header's Focus button. */
+  inFocus: boolean;
   /** Each episode's Plex watched state, or null to leave the Watched column out. */
   episodeWatched: Map<number, WatchedState> | null;
   /** True when Plex couldn't be read, so a status line says so. */
@@ -312,7 +316,9 @@ function SeriesView({
         monitored={detail.monitored}
         qualityProfile={detail.qualityProfile}
         overview={detail.overview}
-        actions={<SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} />}
+        actions={
+          <SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />
+        }
         activity={<SeriesActivitySummary episodeIds={episodeIds} title={detail.title} />}
         typeSection={
           <section aria-label="Seasons" className="space-y-3">
@@ -409,6 +415,7 @@ export default async function SeriesDetailPage({ params }: { params: Promise<{ i
     <SeriesView
       page={page}
       isAdmin={isAdmin}
+      inFocus={listFocusIds("series").includes(page.detail.id)}
       episodeWatched={watched === "failed" ? null : watched}
       watchFailed={watched === "failed"}
     />

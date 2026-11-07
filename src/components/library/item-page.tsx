@@ -68,9 +68,9 @@ export function ItemPageLayout({
         {/* The poster's glow inside the card too: over the backdrop, behind the text. */}
         <PosterWashLayer />
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-          {/* self-start keeps the box at the poster's own height (a flex row would stretch it to the text column), so the tilt
-              and shadow fit the poster. Every poster tilts; the shadow takes the poster's colour only when it has a wash. */}
-          <div className="w-32 shrink-0 -rotate-[1.5deg] self-start rounded-md shadow-lg in-data-[washed]:shadow-[0_30px_60px_-18px_oklch(0.55_0.2_var(--h1)/.8)] sm:w-40 md:w-48">
+          {/* self-start keeps the box at the poster's own height (a flex row would stretch it to the text column), so the shadow
+              fits the poster. The shadow takes the poster's colour only when it has a wash. */}
+          <div className="w-32 shrink-0 self-start rounded-md shadow-lg in-data-[washed]:shadow-[0_30px_60px_-18px_oklch(0.55_0.2_var(--h1)/.8)] sm:w-40 md:w-48">
             <PosterTile src={posterSrc} />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
