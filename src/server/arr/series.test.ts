@@ -36,6 +36,7 @@ import {
   deleteSeries,
   editSeries,
   getSeriesBackdrop,
+  getSeriesPeek,
   getSeriesPoster,
   listSeries,
   listSeriesQualityProfiles,
@@ -798,5 +799,42 @@ describe("seriesExists", () => {
     const error = await rejectionOf(seriesExists(7));
     expect(error).toBeInstanceOf(ArrRequestError);
     expect((error as ArrRequestError).status).toBe(503);
+  });
+});
+
+describe("getSeriesPeek", () => {
+  it("returns only year, genres and overview, and asks for that id with the key in a header", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        id: 7,
+        title: "Fake Show",
+        year: 2010,
+        genres: ["Sci-Fi", "Mystery"],
+        overview: "A made-up plot.",
+        path: "/data/fake-show",
+        images: [{ coverType: "poster", url: "/MediaCover/7/poster.jpg" }],
+        apiKey: FAKE_KEY,
+      }),
+    );
+    const peek = await getSeriesPeek(7);
+    expect(peek).toEqual({ year: 2010, genres: ["Sci-Fi", "Mystery"], overview: "A made-up plot." });
+    expect(Object.keys(peek ?? {}).sort()).toEqual(["genres", "overview", "year"]);
+    expect(JSON.stringify(peek)).not.toContain(FAKE_KEY);
+    const req = requestAt(0);
+    expect(new URL(req.url).pathname).toBe("/api/v3/series/7");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(req.url).not.toContain("apikey");
+  });
+
+  it("is null when Sonarr answers 404", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+    expect(await getSeriesPeek(7)).toBeNull();
+  });
+
+  it("propagates other failures as ArrRequestError", async () => {
+    fetchMock.mockResolvedValue(new Response("", { status: 500 }));
+    const error = await rejectionOf(getSeriesPeek(7));
+    expect(error).toBeInstanceOf(ArrRequestError);
+    expect((error as ArrRequestError).status).toBe(500);
   });
 });
