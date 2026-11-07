@@ -291,7 +291,7 @@ function SeriesView({
   watchFailed: boolean;
 }) {
   const { detail, profiles } = page;
-  // The newest season that isn't Specials starts open. Seasons arrive newest first.
+  // The first season that isn't Specials starts open (usually Season 1). Seasons arrive in ascending order.
   const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
   // Every episode of the series, for the hero's queue line.
   const episodeIds = detail.seasons.flatMap((season) => season.episodes.map((episode) => episode.id));

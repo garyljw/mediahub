@@ -148,7 +148,7 @@ export function HistoryView({
   const [pending, startTransition] = useTransition();
   const posterPreview = usePosterPreview<string>();
 
-  const columnCount = canMarkFailed ? 7 : 6;
+  const columnCount = 3;
   const appName = shownTarget?.app === "sonarr" ? "Sonarr" : "Radarr";
   const release = shownTarget?.details.sourceTitle ?? shownTarget?.title ?? "";
   // The preview belongs to a row. Hide it when that row is gone (for example after a filter change).
@@ -233,14 +233,6 @@ export function HistoryView({
                 <span className="sr-only">Poster</span>
               </TableHead>
               <TableHead className={HEAD}>Title</TableHead>
-              <TableHead className={HEAD}>Type</TableHead>
-              <TableHead className={HEAD}>Event</TableHead>
-              <TableHead className={HEAD}>Quality</TableHead>
-              {canMarkFailed && (
-                <TableHead className={HEAD}>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -251,19 +243,16 @@ export function HistoryView({
                 <Fragment key={entry.key}>
                   <TableRow
                     className="cursor-pointer"
-                    {...posterPreview.rowHandlers(entry.key, entry.posterSrc, {
-                      title: entry.title,
-                      kind: entry.kind === "movie" ? "movie" : "series",
-                      peek: entry.peek,
-                    })}
                     onClick={toggleOnClick(() => toggleExpanded(entry.key))}
                   >
-                    <TableCell className={`${CELL} whitespace-nowrap text-muted-foreground`}>{entry.when}</TableCell>
-                    <TableCell className={CELL}>
-                      <Poster src={entry.posterSrc} />
+                    <TableCell className={`${CELL} align-top whitespace-nowrap text-muted-foreground`}>{entry.when}</TableCell>
+                    <TableCell className={`${CELL} align-top`}>
+                      <Poster src={entry.posterSrc} size="lg" />
                     </TableCell>
-                    <TableCell className={`${CELL} max-w-0 w-full min-w-48`} data-poster-anchor>
-                      <div className="flex min-w-0 items-center gap-2">
+                    {/* Everything about the event sits beside the poster, so on a wide screen nothing is far from the
+                        title. The synopsis is in the row, so the table needs no hover preview. */}
+                    <TableCell className={`${CELL} max-w-0 w-full min-w-48 align-top`}>
+                      <div className="flex min-w-0 items-start gap-2">
                         <button
                           type="button"
                           aria-expanded={isOpen}
@@ -285,32 +274,30 @@ export function HistoryView({
                             )}
                           </div>
                           {entry.detail !== "" && <p className="truncate text-xs text-muted-foreground">{entry.detail}</p>}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                            <Badge variant="outline">{entry.kind === "movie" ? "Movie" : "TV"}</Badge>
+                            <Badge className={HISTORY_EVENT_CLASS[entry.event]}>{HISTORY_EVENT_LABEL[entry.event]}</Badge>
+                            {entry.quality !== null && <span className="text-muted-foreground">{entry.quality}</span>}
+                            {canMarkFailed && entry.canMarkFailed && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7"
+                                onClick={() => {
+                                  setShownTarget(entry);
+                                  setMarking(entry);
+                                }}
+                              >
+                                Mark as failed
+                              </Button>
+                            )}
+                          </div>
+                          {entry.peek !== null && entry.peek.overview !== "" && (
+                            <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">{entry.peek.overview}</p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className={CELL}>
-                      <Badge variant="outline">{entry.kind === "movie" ? "Movie" : "TV"}</Badge>
-                    </TableCell>
-                    <TableCell className={CELL}>
-                      <Badge className={HISTORY_EVENT_CLASS[entry.event]}>{HISTORY_EVENT_LABEL[entry.event]}</Badge>
-                    </TableCell>
-                    <TableCell className={`${CELL} whitespace-nowrap`}>{entry.quality ?? "—"}</TableCell>
-                    {canMarkFailed && (
-                      <TableCell className={`${CELL} text-right`}>
-                        {entry.canMarkFailed && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setShownTarget(entry);
-                              setMarking(entry);
-                            }}
-                          >
-                            Mark as failed
-                          </Button>
-                        )}
-                      </TableCell>
-                    )}
                   </TableRow>
                   {isOpen && (
                     <TableRow id={detailsId}>

@@ -25,15 +25,11 @@ const HOVER_DELAY_MS = 250;
  * their title cell with data-poster-anchor, which sets that fallback edge. Mouse only, and rows without a live
  * thumbnail get none.
  *
- * `side` picks the side. Left is the default, so tables never have the preview cover their title. Use `side: "right"`
- * for lists whose thumbnail is the first thing after a narrow action column (Add, Focus search): the preview then
- * opens just past the title cell (data-poster-anchor), and falls back to the left when the right has no room.
- *
  * `key` identifies the row. `activeKey` says which row's preview is showing, so a list can hide a preview whose row is
  * no longer visible. `preview` is the node to render (null when nothing shows). Render it where it can't be clipped;
  * it is portalled to body either way.
  */
-export function usePosterPreview<K extends string | number>(options?: { side?: "left" | "right" }) {
+export function usePosterPreview<K extends string | number>() {
   const [active, setActive] = useState<ActivePreview<K> | null>(null);
   // The preview waiting for its delay. Cleared on leave, on scroll, on clear() and on unmount.
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,7 +86,7 @@ export function usePosterPreview<K extends string | number>(options?: { side?: "
           const rect = anchor
             ? { top: thumbRect.top, height: thumbRect.height, left: thumbRect.left, right: anchor.getBoundingClientRect().right }
             : thumbRect;
-          const position = previewPosition(rect, { width: window.innerWidth, height: window.innerHeight }, options?.side ?? "left", size);
+          const position = previewPosition(rect, { width: window.innerWidth, height: window.innerHeight }, "left", size);
           setActive({ key, src, card, ...position });
         }, HOVER_DELAY_MS);
       },

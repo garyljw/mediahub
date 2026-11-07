@@ -323,10 +323,28 @@ describe("toSeriesDetail", () => {
     });
   });
 
-  it("orders seasons newest first with Specials last, and labels them", () => {
+  it("orders seasons ascending with Specials first, and labels them", () => {
     const seasons = detail()?.seasons ?? [];
-    expect(seasons.map((s) => s.seasonNumber)).toEqual([3, 2, 1, 0]);
-    expect(seasons.map((s) => s.label)).toEqual(["Season 3", "Season 2", "Season 1", "Specials"]);
+    expect(seasons.map((s) => s.seasonNumber)).toEqual([0, 1, 2, 3]);
+    expect(seasons.map((s) => s.label)).toEqual(["Specials", "Season 1", "Season 2", "Season 3"]);
+  });
+
+  it("leaves out Specials when the show has no special episodes", () => {
+    const noSpecials = episodes.filter((e) => e.seasonNumber !== 0);
+    const seasons = (series.seasons ?? []).map((season) =>
+      season.seasonNumber === 0 ? { ...season, statistics: { ...season.statistics, episodeCount: 0, totalEpisodeCount: 0 } } : season,
+    );
+    expect(detail({ seasons }, noSpecials)?.seasons.map((s) => s.seasonNumber)).toEqual([1, 2, 3]);
+  });
+
+  it("keeps Specials when Sonarr counts special episodes it hasn't sent", () => {
+    const noSpecials = episodes.filter((e) => e.seasonNumber !== 0);
+    expect(detail({}, noSpecials)?.seasons.map((s) => s.seasonNumber)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("keeps Specials when an episode is in season 0, whatever the stats say", () => {
+    const seasons = (series.seasons ?? []).filter((season) => season.seasonNumber !== 0);
+    expect(detail({ seasons })?.seasons.map((s) => s.seasonNumber)).toEqual([0, 1, 2, 3]);
   });
 
   it("orders episodes within a season by episode number, whatever order Sonarr sends them in", () => {

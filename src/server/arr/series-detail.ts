@@ -136,17 +136,17 @@ function seasonPosterPath(season: SeasonResource | undefined): string | null {
   return tvdbImagePath(poster?.remoteUrl) ?? tvdbImagePath(poster?.url);
 }
 
-/** Season 0 is Specials and sorts last. Otherwise the highest season number comes first. */
+/** Seasons in ascending order, so Season 0 (Specials) comes first, then Season 1, 2 and so on. */
 function compareSeasons(a: number, b: number): number {
-  if (a === 0 && b !== 0) return 1;
-  if (b === 0 && a !== 0) return -1;
-  return b - a;
+  return a - b;
 }
 
 /**
  * Pure: maps one series, its episodes and the quality profiles to the detail page's shape. Returns null when
  * the series has no numeric id or no title. Episodes without a numeric id, season or episode number are skipped.
- * Every season that Sonarr lists or that an episode belongs to gets a row, so no episode is dropped.
+ * Every season that Sonarr lists or that an episode belongs to gets a row, so no episode is dropped. The one exception
+ * is Specials (season 0) when the show has none: no season 0 episodes and a total episode count of 0. Other empty
+ * seasons keep their row.
  */
 export function toSeriesDetail(
   series: SeriesResource,
@@ -181,6 +181,9 @@ export function toSeriesDetail(
   }
 
   const seasonNumbers = new Set([...seasonsByNumber.keys(), ...episodesBySeason.keys()]);
+  if (!episodesBySeason.has(0) && (seasonsByNumber.get(0)?.statistics?.totalEpisodeCount ?? 0) === 0) {
+    seasonNumbers.delete(0);
+  }
   const seasons: SeasonRow[] = [...seasonNumbers].sort(compareSeasons).map((seasonNumber) => {
     const season = seasonsByNumber.get(seasonNumber);
     // Counts are missing when Sonarr omits statistics, so they fall back to zero.
