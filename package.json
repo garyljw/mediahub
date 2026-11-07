@@ -15,6 +15,8 @@
     "create-user": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/create-user.ts",
     "create-admin": "npm run create-user -- --role admin",
     "reset-plex-admin": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/reset-plex-admin.ts",
+    "demo": "tsx scripts/demo/run.ts",
+    "demo:screenshots": "tsx scripts/demo/run.ts --screenshots",
     "test": "vitest run"
   },
   "dependencies": {
@@ -49,6 +51,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "openapi-typescript": "7.13.0",
+    "playwright": "1.64.1",
+    "sharp": "0.35.5",
     "tailwindcss": "^4",
     "tsx": "4.23.15",
     "typescript": "^5",
