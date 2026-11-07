@@ -6,7 +6,7 @@ import { STATUS_CLASS as MOVIE_STATUS_CLASS, STATUS_LABEL as MOVIE_STATUS_LABEL 
 import { EPISODE_STATUS_CLASS } from "@/components/tv/series-status";
 import moviesFixture from "./__fixtures__/home-movies.json";
 import seriesFixture from "./__fixtures__/home-series.json";
-import { toHomeItems } from "./library";
+import { homeWatched, homeWatchedByKey, toHomeItems } from "./library";
 import type { WatchedIndex } from "./watched";
 
 // The fixtures are already-reduced rows (the shape listMovies and listSeries return), so they are cast rather than inferred.
@@ -203,5 +203,70 @@ describe("toHomeItems: on disk", () => {
   it("is true for a series with at least one episode file, even when incomplete", () => {
     expect(seriesWith(1).onDisk).toBe(true);
     expect(seriesWith(3).onDisk).toBe(true);
+  });
+});
+
+describe("homeWatchedByKey", () => {
+  const index: WatchedIndex = {
+    movies: new Map([
+      [900001, "watched"],
+      [900003, "unwatched"],
+    ]),
+    series: new Map([
+      [100004, "partial"],
+      [100006, "unwatched"],
+    ]),
+    showKeys: new Map(),
+    itemKeys: { movie: new Map(), series: new Map() },
+  };
+
+  it("keys each matched item the way toHomeItems does, with its state", () => {
+    expect(homeWatchedByKey(movies, series, index)).toEqual({
+      "movie:1": "watched",
+      "movie:3": "unwatched",
+      "series:4": "partial",
+      "series:6": "unwatched",
+    });
+  });
+
+  it("leaves out rows with no match, and rows with no upstream id", () => {
+    const byKey = homeWatchedByKey(movies, series, index);
+    expect(byKey).not.toHaveProperty("movie:2");
+    expect(byKey).not.toHaveProperty("movie:4");
+    expect(byKey).not.toHaveProperty("series:5");
+    expect(byKey).not.toHaveProperty("series:7");
+  });
+
+  it("gives an empty map when no row matches", () => {
+    expect(homeWatchedByKey(movies, series, { ...index, movies: new Map(), series: new Map() })).toEqual({});
+  });
+
+  it("agrees with toHomeItems on every item it names", () => {
+    const byKey = homeWatchedByKey(movies, series, index);
+    const merged = toHomeItems(movies, series, index);
+    for (const item of merged) {
+      expect(item.watched).toBe(byKey[item.key] ?? null);
+    }
+  });
+});
+
+describe("homeWatched", () => {
+  const index: WatchedIndex = {
+    movies: new Map([[900001, "watched"]]),
+    series: new Map(),
+    showKeys: new Map(),
+    itemKeys: { movie: new Map(), series: new Map() },
+  };
+
+  it("is failed when Plex failed", () => {
+    expect(homeWatched(movies, series, "failed")).toEqual({ state: "failed" });
+  });
+
+  it("is none when no Plex data connection is set up", () => {
+    expect(homeWatched(movies, series, null)).toEqual({ state: "none" });
+  });
+
+  it("is ready with the matched states otherwise", () => {
+    expect(homeWatched(movies, series, index)).toEqual({ state: "ready", byKey: { "movie:1": "watched" } });
   });
 });

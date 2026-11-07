@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareHomeItems, filterHomeItems, hasWatchData, type HomeItem } from "./home-items";
+import { compareHomeItems, filterHomeItems, hasWatchData, withWatched, type HomeItem } from "./home-items";
 
 function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: HomeItem["kind"] }): HomeItem {
   return {
@@ -166,3 +166,41 @@ describe("compareHomeItems", () => {
     expect(sorted([high, low]).map((entry) => entry.id)).toEqual([2, 9]);
   });
 });
+
+describe("withWatched", () => {
+  const plain = [
+    item({ kind: "movie", id: 1, title: "Harbour Lights" }),
+    item({ kind: "series", id: 2, title: "Harbour Watch" }),
+  ];
+
+  it("sets the watched state from the key map, and null for a key not in it", () => {
+    const merged = withWatched(plain, { "movie:1": "watched" });
+    expect(merged[0].watched).toBe("watched");
+    expect(merged[1].watched).toBeNull();
+  });
+
+  it("gives every item null when the map is null", () => {
+    const withState = plain.map((entry) => ({ ...entry, watched: "partial" as const }));
+    expect(withItemStates(withWatched(withState, null))).toEqual([null, null]);
+  });
+
+  it("keeps the same object for an item whose state doesn't change", () => {
+    const merged = withWatched(plain, { "movie:1": "unwatched" });
+    expect(merged[1]).toBe(plain[1]);
+    expect(merged[0]).not.toBe(plain[0]);
+  });
+
+  it("returns the same array when no state changes", () => {
+    expect(withWatched(plain, {})).toBe(plain);
+    expect(withWatched(plain, null)).toBe(plain);
+  });
+
+  it("does not change the input items", () => {
+    withWatched(plain, { "movie:1": "watched" });
+    expect(plain[0].watched).toBeNull();
+  });
+});
+
+function withItemStates(list: HomeItem[]): (HomeItem["watched"])[] {
+  return list.map((entry) => entry.watched);
+}

@@ -83,6 +83,33 @@ export function hasWatchData(items: HomeItem[]): boolean {
   return items.some((item) => item.watched !== null);
 }
 
+/**
+ * The library as the Home page streams it: the merged items, and whether each app's library failed to load. Built on
+ * the server before the page is sent, and read by the grid with `use`. Never rejects.
+ */
+export type HomeLibrary = { items: HomeItem[]; moviesFailed: boolean; seriesFailed: boolean };
+
+/**
+ * The Plex watched status for the grid, as it streams in: "ready" with a state per item key (only the items Plex
+ * matched), "none" when no Plex data connection is set up, or "failed" when Plex couldn't be read. Never rejects.
+ */
+export type HomeWatched = { state: "ready"; byKey: Record<string, WatchedState> } | { state: "none" } | { state: "failed" };
+
+/**
+ * Sets each item's `watched` from a key map. A key that's missing, or a null map, gives null. An item whose state
+ * doesn't change keeps its object, so memoised tiles skip re-rendering.
+ */
+export function withWatched(items: HomeItem[], byKey: Record<string, WatchedState> | null): HomeItem[] {
+  let changed = false;
+  const next = items.map((item) => {
+    const watched = byKey?.[item.key] ?? null;
+    if (watched === item.watched) return item;
+    changed = true;
+    return { ...item, watched };
+  });
+  return changed ? next : items;
+}
+
 // Movies sort before series when everything else ties.
 const KIND_RANK: Record<HomeItem["kind"], number> = { movie: 0, series: 1 };
 

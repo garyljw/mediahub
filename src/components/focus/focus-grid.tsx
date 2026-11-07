@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type SyntheticEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type SyntheticEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -15,12 +15,12 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { EllipsisVertical } from "lucide-react";
+import { AlertTriangle, EllipsisVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { removeFocusItems, reorderFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
 import { PosterTile } from "@/components/poster/poster";
 import { HomeTile } from "@/components/home/home-grid";
-import type { HomeItem } from "@/components/home/home-items";
+import { withWatched, type HomeItem, type HomeWatched } from "@/components/home/home-items";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
@@ -43,19 +43,32 @@ type Order = { items: HomeItem[]; allIds: number[]; missing: number[] };
  * pending, drags and menu moves are ignored. A failed save goes back to the order from before that save.
  * `items` are the stored titles that are in the library, in Focus order. `allIds` is the whole stored list, which the
  * server checks. `missing` are stored titles no longer in the library; the notice above the grid removes them.
+ * `watched` is the Plex status, which arrives after the tiles: until then they show without banners.
  */
 export function FocusGrid({
   kind,
   items,
   allIds,
   missing,
+  watched,
 }: {
   kind: FocusKind;
   items: HomeItem[];
   allIds: number[];
   missing: number[];
+  watched: Promise<HomeWatched>;
 }) {
   const router = useRouter();
+  const [watchedState, setWatchedState] = useState<HomeWatched | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    watched.then((value) => {
+      if (!cancelled) setWatchedState(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [watched]);
   // The server's data is the source of truth. When the page is refreshed with new props, the local order follows
   // them, but never while a save is pending.
   const [source, setSource] = useState({ items, allIds, missing });
@@ -71,6 +84,11 @@ export function FocusGrid({
     setSource({ items, allIds, missing });
     setOrder({ items, allIds, missing });
   }
+
+  // The tiles shown: the order with the watched states applied. The order itself (and every save) works on the items
+  // without them, so the reorder logic is the same either way.
+  const watchedByKey = watchedState?.state === "ready" ? watchedState.byKey : null;
+  const shownItems = useMemo(() => withWatched(order.items, watchedByKey), [order.items, watchedByKey]);
 
   // `busy` blocks a second save synchronously, before React re-renders.
   const busy = useRef(false);
@@ -180,6 +198,12 @@ export function FocusGrid({
           </button>
         </div>
       )}
+      {watchedState?.state === "failed" && (
+        <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+          Couldn&apos;t load watched status from Plex.
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -194,7 +218,7 @@ export function FocusGrid({
       >
         <SortableContext items={order.items.map((item) => item.id)} strategy={rectSortingStrategy}>
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]">
-            {order.items.map((item, index) => (
+            {shownItems.map((item, index) => (
               <FocusTile
                 key={item.key}
                 item={item}
