@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ArrRequestError } from "@/server/arr/request";
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
@@ -33,7 +34,6 @@ vi.mock("@/server/settings/add-defaults", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 
 import { AuthzError } from "@/server/authz";
-import { ArrRequestError } from "@/server/arr/request";
 import { saveMovieDefaults, saveSeriesDefaults } from "./actions";
 
 const DENIED = "You don't have permission to change add defaults.";
@@ -55,23 +55,22 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 const movieInput = { profileId: 2, rootFolderId: 7 };
 const seriesInput = { profileId: 3, rootFolderId: 8, monitor: "future" };
 
-describe.each([
-  ["saveMovieDefaults", saveMovieDefaults, movieInput],
-  ["saveSeriesDefaults", saveSeriesDefaults, seriesInput],
-])("%s authorization", (_name, action, input) => {
-  it("checks for the admin role", async () => {
+describe("authorization", () => {
+  const actions = [
+    ["saveMovieDefaults", saveMovieDefaults, movieInput],
+    ["saveSeriesDefaults", saveSeriesDefaults, seriesInput],
+  ] as const;
+
+  it.each(actions)("%s checks for the admin role", async (_name, action, input) => {
     await action(input);
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
-  it("rejects a requester and never reads Arr or saves", async () => {
+  // A signed-out caller (401) gets the same AuthzError branch as a requester (403), so one status is enough.
+  it.each(actions)("%s refuses a requester and never reads Arr or saves", async (_name, action, input) => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
     expect(await action(input)).toEqual({ ok: false, message: DENIED });
@@ -84,20 +83,14 @@ describe.each([
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-out caller (401) and saves nothing", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await action(input)).toEqual({ ok: false, message: DENIED });
-    expect(mocks.saveMovieAddDefaults).not.toHaveBeenCalled();
-    expect(mocks.saveSeriesAddDefaults).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
+  it.each(actions)("%s rethrows errors that are not authorization failures", async (_name, action, input) => {
     mocks.requireRole.mockRejectedValue(new Error("database down"));
 
     await expect(action(input)).rejects.toThrow("database down");
     expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
     expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.saveMovieAddDefaults).not.toHaveBeenCalled();
+    expect(mocks.saveSeriesAddDefaults).not.toHaveBeenCalled();
   });
 });
 
@@ -124,16 +117,12 @@ describe("saveMovieDefaults", () => {
     expect(mocks.saveMovieAddDefaults).not.toHaveBeenCalled();
   });
 
-  it("refuses a profile that is not in Radarr's list", async () => {
-    expect(await saveMovieDefaults({ profileId: 99, rootFolderId: 7 })).toEqual({
-      ok: false,
-      message: "That quality profile or root folder no longer exists in Radarr.",
-    });
-    expect(mocks.saveMovieAddDefaults).not.toHaveBeenCalled();
-  });
-
-  it("refuses a root folder that is not in Radarr's list", async () => {
-    expect(await saveMovieDefaults({ profileId: 2, rootFolderId: 99 })).toEqual({
+  // The profile and the folder are each checked against Radarr's live list, so each gets its own row.
+  it.each([
+    ["profile", { profileId: 99, rootFolderId: 7 }],
+    ["root folder", { profileId: 2, rootFolderId: 99 }],
+  ])("refuses a %s that is not in Radarr's list without saving", async (_label, input) => {
+    expect(await saveMovieDefaults(input)).toEqual({
       ok: false,
       message: "That quality profile or root folder no longer exists in Radarr.",
     });
@@ -177,20 +166,16 @@ describe("saveSeriesDefaults", () => {
     expect(mocks.saveSeriesAddDefaults).not.toHaveBeenCalled();
   });
 
-  it("refuses a profile that is not in Sonarr's list", async () => {
-    expect(await saveSeriesDefaults({ ...seriesInput, profileId: 99 })).toEqual({
+  it.each([
+    ["profile", { ...seriesInput, profileId: 99 }],
+    ["root folder", { ...seriesInput, rootFolderId: 99 }],
+  ])("refuses a %s that is not in Sonarr's list without saving", async (_label, input) => {
+    expect(await saveSeriesDefaults(input)).toEqual({
       ok: false,
       message: "That quality profile or root folder no longer exists in Sonarr.",
     });
     expect(mocks.saveSeriesAddDefaults).not.toHaveBeenCalled();
-  });
-
-  it("refuses a root folder that is not in Sonarr's list", async () => {
-    expect(await saveSeriesDefaults({ ...seriesInput, rootFolderId: 99 })).toEqual({
-      ok: false,
-      message: "That quality profile or root folder no longer exists in Sonarr.",
-    });
-    expect(mocks.saveSeriesAddDefaults).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("reports an Arr failure without saving, and logs only the message", async () => {

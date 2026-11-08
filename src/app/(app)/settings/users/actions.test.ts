@@ -79,13 +79,14 @@ const actions = [
   ["deleteRequesterAccount", deleteRequesterAccount, USER_INPUT],
 ] as const;
 
-describe.each(actions)("%s authorization", (_name, action, input) => {
-  it("checks for the admin role", async () => {
+describe("authorization", () => {
+  it.each(actions)("%s checks for the admin role", async (_name, action, input) => {
     await action(input);
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
-  it("rejects a requester and never touches the users module", async () => {
+  // A signed-out caller (401) gets the same AuthzError branch as a requester (403), so one status is enough.
+  it.each(actions)("%s refuses a requester and never touches the users module", async (_name, action, input) => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
     expect(await action(input)).toEqual({ ok: false, message: DENIED });
@@ -96,17 +97,7 @@ describe.each(actions)("%s authorization", (_name, action, input) => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-out caller (401) and never touches the users module", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await action(input)).toEqual({ ok: false, message: DENIED });
-    expect(mocks.createRequester).not.toHaveBeenCalled();
-    expect(mocks.setRequesterPassword).not.toHaveBeenCalled();
-    expect(mocks.signOutUser).not.toHaveBeenCalled();
-    expect(mocks.deleteRequester).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
+  it.each(actions)("%s rethrows errors that are not authorization failures", async (_name, action, input) => {
     mocks.requireRole.mockRejectedValue(new Error("database down"));
 
     await expect(action(input)).rejects.toThrow("database down");
@@ -118,8 +109,10 @@ describe.each(actions)("%s authorization", (_name, action, input) => {
 });
 
 describe("addRequester", () => {
-  it("creates the requester with the parsed fields and revalidates the page", async () => {
-    expect(await addRequester({ ...ADD_INPUT, email: "  Fake.Person@Example.TEST " })).toEqual({ ok: true });
+  it("creates the requester with the trimmed, parsed fields and revalidates the page", async () => {
+    expect(
+      await addRequester({ name: "  Fake Person  ", email: "  Fake.Person@Example.TEST ", password: PASSWORD }),
+    ).toEqual({ ok: true });
     expect(mocks.createRequester).toHaveBeenCalledWith(mocks.context, {
       name: "Fake Person",
       email: "fake.person@example.test",
@@ -128,16 +121,12 @@ describe("addRequester", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/users");
   });
 
-  it("trims the name", async () => {
-    await addRequester({ ...ADD_INPUT, name: "  Fake Person  " });
-    expect(mocks.createRequester).toHaveBeenCalledWith(mocks.context, expect.objectContaining({ name: "Fake Person" }));
-  });
-
   it.each([
     ["an extra key", { ...ADD_INPUT, role: "admin" }],
     ["a missing name", { email: ADD_INPUT.email, password: PASSWORD }],
     ["an empty name", { ...ADD_INPUT, name: "   " }],
     ["a name over 100 characters", { ...ADD_INPUT, name: "n".repeat(101) }],
+    ["a name containing @", { ...ADD_INPUT, name: "fake@example.test" }],
     ["a bad email", { ...ADD_INPUT, email: "not-an-email" }],
     ["a password of 11 characters", { ...ADD_INPUT, password: "a".repeat(11) }],
     ["a password of 129 characters", { ...ADD_INPUT, password: "a".repeat(129) }],
@@ -148,26 +137,13 @@ describe("addRequester", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("maps a taken name to a message and does not revalidate", async () => {
-    mocks.createRequester.mockResolvedValue({ ok: false, reason: "name-taken" });
+  it.each([
+    ["email-taken", "A user with that email already exists."],
+    ["name-taken", "A user with that name already exists. Names are used to sign in, so each must be different."],
+  ])("maps a %s refusal to a message and does not revalidate", async (reason, message) => {
+    mocks.createRequester.mockResolvedValue({ ok: false, reason });
 
-    expect(await addRequester(ADD_INPUT)).toEqual({
-      ok: false,
-      message: "A user with that name already exists. Names are used to sign in, so each must be different.",
-    });
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
-  });
-
-  it("refuses a name containing @ without calling the users module", async () => {
-    expect(await addRequester({ ...ADD_INPUT, name: "fake@example.test" })).toEqual({ ok: false, message: INVALID_ADD });
-    expect(mocks.createRequester).not.toHaveBeenCalled();
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
-  });
-
-  it("maps an existing email to a message and does not revalidate", async () => {
-    mocks.createRequester.mockResolvedValue({ ok: false, reason: "email-taken" });
-
-    expect(await addRequester(ADD_INPUT)).toEqual({ ok: false, message: "A user with that email already exists." });
+    expect(await addRequester(ADD_INPUT)).toEqual({ ok: false, message });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -217,16 +193,21 @@ describe("resetRequesterPassword", () => {
     expect(mocks.setRequesterPassword).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
+});
 
-  it("maps a missing user to a message", async () => {
-    mocks.setRequesterPassword.mockResolvedValue({ ok: false, reason: "not-found" });
-    expect(await resetRequesterPassword(RESET_INPUT)).toEqual({ ok: false, message: NOT_FOUND });
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
-  });
+// The three actions that act on an existing user share one refusal mapping: missing user, or an admin.
+describe.each([
+  { name: "resetRequesterPassword", call: () => resetRequesterPassword(RESET_INPUT), upstream: mocks.setRequesterPassword },
+  { name: "signOutRequester", call: () => signOutRequester(USER_INPUT), upstream: mocks.signOutUser },
+  { name: "deleteRequesterAccount", call: () => deleteRequesterAccount(USER_INPUT), upstream: mocks.deleteRequester },
+])("$name refusals", ({ call, upstream }) => {
+  it.each([
+    ["not-found", NOT_FOUND],
+    ["not-requester", NOT_REQUESTER],
+  ])("maps %s to a message and does not revalidate", async (reason, message) => {
+    upstream.mockResolvedValueOnce({ ok: false, reason });
 
-  it("maps a non-requester to the Plex message", async () => {
-    mocks.setRequesterPassword.mockResolvedValue({ ok: false, reason: "not-requester" });
-    expect(await resetRequesterPassword(RESET_INPUT)).toEqual({ ok: false, message: NOT_REQUESTER });
+    expect(await call()).toEqual({ ok: false, message });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 });
@@ -237,24 +218,6 @@ describe("signOutRequester", () => {
     expect(mocks.signOutUser).toHaveBeenCalledWith(mocks.context, "fake-user-1");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/users");
   });
-
-  it.each([
-    ["an extra key", { ...USER_INPUT, password: PASSWORD }],
-    ["a missing user id", {}],
-    ["a user id that is not a string", { userId: ["fake-user-1"] }],
-  ])("refuses %s without calling the users module", async (_label, input) => {
-    expect(await signOutRequester(input)).toEqual({ ok: false, message: INVALID_USER });
-    expect(mocks.signOutUser).not.toHaveBeenCalled();
-  });
-
-  it("maps a non-requester and a missing user to messages", async () => {
-    mocks.signOutUser.mockResolvedValueOnce({ ok: false, reason: "not-requester" });
-    expect(await signOutRequester(USER_INPUT)).toEqual({ ok: false, message: NOT_REQUESTER });
-
-    mocks.signOutUser.mockResolvedValueOnce({ ok: false, reason: "not-found" });
-    expect(await signOutRequester(USER_INPUT)).toEqual({ ok: false, message: NOT_FOUND });
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
-  });
 });
 
 describe("deleteRequesterAccount", () => {
@@ -263,22 +226,18 @@ describe("deleteRequesterAccount", () => {
     expect(mocks.deleteRequester).toHaveBeenCalledWith(mocks.context, "fake-user-1");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/users");
   });
+});
 
+describe("user id input", () => {
   it.each([
-    ["an extra key", { ...USER_INPUT, email: "fake@example.test" }],
-    ["a missing user id", {}],
-    ["a user id that is not a string", { userId: true }],
-  ])("refuses %s without calling the users module", async (_label, input) => {
-    expect(await deleteRequesterAccount(input)).toEqual({ ok: false, message: INVALID_USER });
-    expect(mocks.deleteRequester).not.toHaveBeenCalled();
-  });
-
-  it("maps a non-requester and a missing user to messages", async () => {
-    mocks.deleteRequester.mockResolvedValueOnce({ ok: false, reason: "not-requester" });
-    expect(await deleteRequesterAccount(USER_INPUT)).toEqual({ ok: false, message: NOT_REQUESTER });
-
-    mocks.deleteRequester.mockResolvedValueOnce({ ok: false, reason: "not-found" });
-    expect(await deleteRequesterAccount(USER_INPUT)).toEqual({ ok: false, message: NOT_FOUND });
-    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    ["signOutRequester", signOutRequester, mocks.signOutUser, "an extra key", { ...USER_INPUT, password: PASSWORD }],
+    ["signOutRequester", signOutRequester, mocks.signOutUser, "a missing user id", {}],
+    ["signOutRequester", signOutRequester, mocks.signOutUser, "a user id that is not a string", { userId: ["fake-user-1"] }],
+    ["deleteRequesterAccount", deleteRequesterAccount, mocks.deleteRequester, "an extra key", { ...USER_INPUT, email: "fake@example.test" }],
+    ["deleteRequesterAccount", deleteRequesterAccount, mocks.deleteRequester, "a missing user id", {}],
+    ["deleteRequesterAccount", deleteRequesterAccount, mocks.deleteRequester, "a user id that is not a string", { userId: true }],
+  ])("%s refuses %s without calling the users module", async (_name, action, upstream, _label, input) => {
+    expect(await action(input)).toEqual({ ok: false, message: INVALID_USER });
+    expect(upstream).not.toHaveBeenCalled();
   });
 });
