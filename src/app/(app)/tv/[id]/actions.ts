@@ -15,6 +15,7 @@ import { deleteSeries, editSeries, listSeriesQualityProfiles, type SeriesEdit } 
 import { ArrRequestError } from "@/server/arr/request";
 import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
 import { grabSeriesRelease as sendSeriesRelease, searchSeriesReleases } from "@/server/arr/series-releases";
+import { recordReplaceGrab } from "@/server/replace/replace-grabs";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { SERIES_TYPE_OPTIONS } from "@/components/tv/series-add";
 import { NEW_ITEM_MONITOR_OPTIONS } from "@/components/tv/series-edit";
@@ -233,10 +234,24 @@ export async function findSeriesReleases(input: unknown): Promise<ReleaseSearchR
   }
 }
 
-// strictObject rejects unknown keys. The browser sends only the token from a search result.
+// strictObject rejects unknown keys. The browser sends the token from a search result, and whether the admin ticked
+// "Replace existing file". A non-boolean there is refused.
 const SeriesReleaseGrabInput = z.strictObject({
   token: z.uuid(),
+  replaceExisting: z.boolean().optional(),
 });
+
+/**
+ * Remembers a grab for the auto-import worker. The app already accepted the grab, so a failure here is only logged,
+ * and the caller still reports success. The guid is never sent to the browser.
+ */
+function rememberReplaceGrab(guid: string): void {
+  try {
+    recordReplaceGrab("sonarr", guid);
+  } catch {
+    console.error("Replace grab: couldn't remember the grab");
+  }
+}
 
 /**
  * Sends a release from an earlier search to Sonarr's download client (admin only). Same shape as the other actions:
@@ -257,6 +272,7 @@ export async function grabSeriesRelease(input: unknown): Promise<GrabResult> {
 
   try {
     const grabbed = await sendSeriesRelease(parsed.data.token);
+    if (parsed.data.replaceExisting === true) rememberReplaceGrab(grabbed.guid);
     return { ok: true, title: grabbed.title };
   } catch (error) {
     // Sonarr answers 404 both when it no longer has the release and when it can't match it to episodes.

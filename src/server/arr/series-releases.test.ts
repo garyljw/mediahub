@@ -242,11 +242,14 @@ describe("grabSeriesRelease", () => {
     expect("episodeId" in body).toBe(false);
   });
 
-  it("returns the title from the server's cache", async () => {
+  it("returns the title and guid from the server's cache", async () => {
     const token = await firstToken(SEASON);
     serve({ grab: () => json({}) });
 
-    await expect(grabSeriesRelease(token)).resolves.toEqual({ title: "Breaking.Bad.S02.1080p.BluRay.x264-GRP" });
+    await expect(grabSeriesRelease(token)).resolves.toEqual({
+      title: "Breaking.Bad.S02.1080p.BluRay.x264-GRP",
+      guid: "https://indexer.test/details/s2",
+    });
   });
 
   it("refuses a token the server never issued, without calling Sonarr", async () => {
@@ -319,7 +322,10 @@ describe("grabSeriesRelease", () => {
     expect(error.message).not.toContain(FAKE_KEY);
 
     serve({ grab: () => json({}) });
-    await expect(grabSeriesRelease(token)).resolves.toEqual({ title: "Breaking.Bad.S02.1080p.BluRay.x264-GRP" });
+    await expect(grabSeriesRelease(token)).resolves.toEqual({
+      title: "Breaking.Bad.S02.1080p.BluRay.x264-GRP",
+      guid: "https://indexer.test/details/s2",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

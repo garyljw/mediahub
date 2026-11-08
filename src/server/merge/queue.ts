@@ -146,19 +146,25 @@ export function firstQueuedId(items: readonly { id?: number | null }[], ids: rea
   return ids.find((id) => queued.has(id)) ?? null;
 }
 
+/** The download ids, per app, of the grabs MediaHub will import over the existing file. */
+export type ReplacingDownloadIds = { radarr: ReadonlySet<string>; sonarr: ReadonlySet<string> };
+
+const NO_REPLACING: ReplacingDownloadIds = { radarr: new Set(), sonarr: new Set() };
+
 /**
  * Pure: builds the Queue rows from Radarr's queue (one row per item) and Sonarr's queue (one row per download, so a
  * season pack's per-episode items become one row). Items whose id isn't a positive integer are skipped, and so is any
  * repeat of an id already seen. A Sonarr row's state, severity, progress and ETA come from its worst item (see
  * pickWorst). Its key uses the smallest item id in the group, so the key doesn't depend on the order the app lists
  * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters),
- * messages, details and canForceImport are left out. Sorted by compareQueueRows.
+ * messages, details and canForceImport are left out. `replacing` marks the rows whose download id is in it (see
+ * ReplacingDownloadIds). Sorted by compareQueueRows.
  */
 export function toQueueRows(
   movieItems: MovieQueueItem[],
   episodeItems: EpisodeQueueItem[],
   now: number,
-  { includeDetails }: { includeDetails: boolean },
+  { includeDetails, replacing = NO_REPLACING }: { includeDetails: boolean; replacing?: ReplacingDownloadIds },
 ): QueueRow[] {
   const rows: QueueRow[] = [];
 
@@ -184,6 +190,7 @@ export function toQueueRows(
       peek: toPeek(movie),
       ...factsOf(item, state, severity, now, includeDetails),
       canForceImport: includeDetails && canManualImport(item),
+      replacing: typeof item.downloadId === "string" && replacing.radarr.has(item.downloadId),
     });
   }
 
@@ -205,6 +212,7 @@ export function toQueueRows(
       peek: toPeek(seriesSource.series),
       ...factsOf(winner, state, severity, now, includeDetails),
       canForceImport: includeDetails && group.items.some(canManualImport),
+      replacing: group.items.some((item) => typeof item.downloadId === "string" && replacing.sonarr.has(item.downloadId)),
     });
   }
 

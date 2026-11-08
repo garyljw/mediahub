@@ -453,11 +453,14 @@ describe("grabRelease", () => {
     expect(await sentBody(0)).toStrictEqual({ guid: "https://indexer.test/details/1", indexerId: 1 });
   });
 
-  it("returns the title from the server's cache", async () => {
+  it("returns the title and guid from the server's cache", async () => {
     const token = await firstToken();
     serve({ grab: () => json({}) });
 
-    await expect(grabRelease(token)).resolves.toEqual({ title: "Starfall.Protocol.2019.2160p.BluRay.x265-GRP" });
+    await expect(grabRelease(token)).resolves.toEqual({
+      title: "Starfall.Protocol.2019.2160p.BluRay.x265-GRP",
+      guid: "https://indexer.test/details/1",
+    });
   });
 
   it("gives the grab the longer grab timeout", async () => {
@@ -534,7 +537,10 @@ describe("grabRelease", () => {
     expect(error.message).not.toContain(FAKE_KEY);
 
     serve({ grab: () => json({}) });
-    await expect(grabRelease(token)).resolves.toEqual({ title: "Starfall.Protocol.2019.2160p.BluRay.x265-GRP" });
+    await expect(grabRelease(token)).resolves.toEqual({
+      title: "Starfall.Protocol.2019.2160p.BluRay.x265-GRP",
+      guid: "https://indexer.test/details/1",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

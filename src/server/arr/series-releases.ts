@@ -43,9 +43,9 @@ export async function searchSeriesReleases(target: SeriesReleaseTarget): Promise
 /**
  * Sends one release, found by an earlier search, to Sonarr's download client. The browser sends only the token.
  * The guid, indexer id and the series or episode id come from the server's cache, and the body sent to Sonarr has
- * nothing else.
+ * nothing else. Returns the title, and the guid for the action to remember (the guid is never sent to the browser).
  */
-export async function grabSeriesRelease(token: string): Promise<{ title: string }> {
+export async function grabSeriesRelease(token: string): Promise<{ title: string; guid: string }> {
   // Build the client first, so an unconfigured app does not use up the token.
   const client = sonarrClient();
   const taken = releaseCache.take(token, "sonarr");
@@ -60,5 +60,5 @@ export async function grabSeriesRelease(token: string): Promise<{ title: string 
     failGrab(error, taken);
   }
 
-  return { title: release.title };
+  return { title: release.title, guid: release.guid };
 }

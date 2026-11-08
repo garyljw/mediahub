@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   searchSeriesReleases: vi.fn(),
   grabSeriesRelease: vi.fn(),
+  recordReplaceGrab: vi.fn(),
   deleteSeries: vi.fn(),
   editSeries: vi.fn(),
   listSeriesQualityProfiles: vi.fn(),
@@ -36,6 +37,8 @@ vi.mock("@/server/arr/series-releases", () => ({
   searchSeriesReleases: mocks.searchSeriesReleases,
   grabSeriesRelease: mocks.grabSeriesRelease,
 }));
+
+vi.mock("@/server/replace/replace-grabs", () => ({ recordReplaceGrab: mocks.recordReplaceGrab }));
 
 // AuthzError must be a real class: the actions check `instanceof AuthzError`.
 vi.mock("@/server/authz", () => {
@@ -105,7 +108,8 @@ beforeEach(() => {
   mocks.searchSeason.mockResolvedValue(undefined);
   mocks.searchEpisode.mockResolvedValue(undefined);
   mocks.searchSeriesReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
-  mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02.1080p" });
+  mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02.1080p", guid: "https://indexer.test/details/s2" });
+  mocks.recordReplaceGrab.mockImplementation(() => {});
   mocks.deleteSeries.mockResolvedValue(undefined);
   mocks.editSeries.mockResolvedValue(undefined);
   mocks.listSeriesQualityProfiles.mockResolvedValue([
@@ -421,6 +425,7 @@ describe("findSeriesReleases and grabSeriesRelease", () => {
       ["a number token", { token: 12 }],
       ["an extra key", { token: release.token, guid: "https://indexer.test/details/1" }],
       ["an extra episode id", { token: release.token, episodeId: 202 }],
+      ["a replaceExisting that is not a boolean", { token: release.token, replaceExisting: "yes" }],
       ["null", null],
     ])("rejects %s without calling Sonarr", async (_name, input) => {
       expect(await grabSeriesRelease(input)).toEqual({ ok: false, error: "Invalid grab." });
@@ -428,13 +433,48 @@ describe("findSeriesReleases and grabSeriesRelease", () => {
     });
 
     it("returns the title on success, and does not re-render the page", async () => {
-      mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02" });
+      mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02", guid: "https://indexer.test/details/s2" });
 
       const result = await grabSeriesRelease({ token: release.token });
 
       expect(mocks.grabSeriesRelease).toHaveBeenCalledWith(release.token);
-      expect(result).toEqual({ ok: true, title: "Breaking.Bad.S02" });
+      expect(result).toStrictEqual({ ok: true, title: "Breaking.Bad.S02" });
       expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("remembers a successful grab with the server's guid when Replace existing file is ticked, and sends no guid back", async () => {
+      mocks.grabSeriesRelease.mockResolvedValue({ title: "Breaking.Bad.S02", guid: "https://indexer.test/details/s2" });
+
+      const result = await grabSeriesRelease({ token: release.token, replaceExisting: true });
+
+      expect(mocks.recordReplaceGrab).toHaveBeenCalledWith("sonarr", "https://indexer.test/details/s2");
+      expect(result).toStrictEqual({ ok: true, title: "Breaking.Bad.S02" });
+    });
+
+    it.each([
+      ["omitted", {}],
+      ["false", { replaceExisting: false }],
+    ])("does not remember the grab when Replace existing file is %s", async (_name, extra) => {
+      await grabSeriesRelease({ token: release.token, ...extra });
+      expect(mocks.recordReplaceGrab).not.toHaveBeenCalled();
+    });
+
+    it("does not remember a grab that failed", async () => {
+      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 409", "http", 409));
+      await grabSeriesRelease({ token: release.token, replaceExisting: true });
+      expect(mocks.recordReplaceGrab).not.toHaveBeenCalled();
+    });
+
+    it("still returns the success and logs only the safe message when the grab can't be remembered", async () => {
+      mocks.recordReplaceGrab.mockImplementation(() => {
+        throw new Error("disk full at /private/path");
+      });
+
+      const result = await grabSeriesRelease({ token: release.token, replaceExisting: true });
+
+      expect(result).toStrictEqual({ ok: true, title: "Breaking.Bad.S02.1080p" });
+      expect(console.error).toHaveBeenCalledWith("Replace grab: couldn't remember the grab");
+      expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("/private/path");
     });
 
     it("says the result can no longer be used on a token miss or an expired release", async () => {

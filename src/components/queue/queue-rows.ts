@@ -59,6 +59,11 @@ export type QueueRow = {
    * download, any of its items). Always false for requesters.
    */
   canForceImport: boolean;
+  /**
+   * True when the download was grabbed with "Replace existing file" ticked, so MediaHub will import it over the existing
+   * file. Only this flag reaches the browser, never the download id.
+   */
+  replacing: boolean;
 };
 
 /** Plain code-point comparison, not localeCompare, so the order is the same on the server and in the browser. */

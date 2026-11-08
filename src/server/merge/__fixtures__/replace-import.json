@@ -1,0 +1,59 @@
+[
+  {
+    "id": 1,
+    "name": "Show.S01E01.1080p",
+    "rejections": [{ "type": "permanent", "reason": "Not an upgrade for existing episode file(s). Existing quality: WEBDL-1080p. New Quality WEBDL-480p." }]
+  },
+  {
+    "id": 2,
+    "name": "Show.S01E02.Revision",
+    "rejections": [{ "type": "permanent", "reason": "Not a quality revision upgrade for existing episode file(s). Existing quality: WEBDL-1080p." }]
+  },
+  {
+    "id": 3,
+    "name": "Show.S01E03.CustomFormat",
+    "rejections": [{ "type": "permanent", "reason": "Not a Custom Format upgrade for existing episode file(s). Existing score: 0." }]
+  },
+  {
+    "id": 4,
+    "name": "Show.S01E04.Sample",
+    "rejections": [{ "type": "permanent", "reason": "Sample" }]
+  },
+  {
+    "id": 5,
+    "name": "Show.S01E05.Mixed",
+    "rejections": [
+      { "type": "permanent", "reason": "Not an upgrade for existing episode file(s). Existing quality: WEBDL-1080p. New Quality WEBDL-480p." },
+      { "type": "permanent", "reason": "Sample" }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Show.S01E06.Clean",
+    "rejections": []
+  },
+  {
+    "id": 7,
+    "name": "Show.S01E07.NoRejectionsField"
+  },
+  {
+    "id": 0,
+    "name": "Show.S01E08.ZeroId",
+    "rejections": [{ "type": "permanent", "reason": "Not an upgrade for existing episode file(s). Existing quality: WEBDL-1080p." }]
+  },
+  {
+    "id": -3,
+    "name": "Show.S01E09.NegativeId",
+    "rejections": [{ "type": "permanent", "reason": "Not an upgrade for existing episode file(s). Existing quality: WEBDL-1080p." }]
+  },
+  {
+    "id": 10,
+    "name": "Show.S01E10.BlankReason",
+    "rejections": [{ "type": "permanent", "reason": null }]
+  },
+  {
+    "id": 11,
+    "name": "Movie.2001.Upgrade",
+    "rejections": [{ "type": "permanent", "reason": "Not an upgrade for existing movie file. Existing quality: Bluray-1080p. New Quality: HD-720p." }]
+  }
+]
