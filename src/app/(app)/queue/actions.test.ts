@@ -295,6 +295,11 @@ describe("removeQueueItem and force import: upstream failures", () => {
     expect(await call()).toEqual({ ok: false, error: message });
     expect(console.error).toHaveBeenCalledWith(log);
     expectNoWrites();
+    // A failed queue read must stop the action before it scans for files.
+    if (fail === mocks.fetchMovieQueue || fail === mocks.fetchEpisodeQueue) {
+      expect(mocks.fetchMovieManualImport).not.toHaveBeenCalled();
+      expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
+    }
   });
 
   const WRITE_FAILURES = [
@@ -305,6 +310,14 @@ describe("removeQueueItem and force import: upstream failures", () => {
       call: () => removeQueueItem(input({ app: "radarr", queueIds: [7] })),
       message: "Radarr didn't accept it. Try again.",
       log: "Queue remove: Radarr queue remove request failed: HTTP 404",
+    },
+    {
+      name: "removeQueueItem, Radarr answers 500",
+      fail: mocks.removeMovieQueueItem,
+      error: new ArrRequestError("Radarr queue remove request failed: HTTP 500", "http", 500),
+      call: () => removeQueueItem(input({ app: "radarr", queueIds: [7] })),
+      message: "Radarr didn't confirm it. It may still have been removed, so check the queue.",
+      log: "Queue remove: Radarr queue remove request failed: HTTP 500",
     },
     {
       name: "removeQueueItem, Sonarr times out",
