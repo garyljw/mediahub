@@ -166,7 +166,7 @@ export function ReleaseDialog({
         {outcome === null && (
           <div role="status" aria-busy={searching} className="flex flex-col gap-4 py-2">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-1/3 rounded-full bg-brand animate-marquee" />
+              <div className="h-full w-1/3 rounded-full bg-brand animate-marquee motion-reduce:w-full" />
             </div>
             <p className="text-center text-sm text-muted-foreground">Searching indexers… this can take a minute.</p>
             {/* Placeholder rows in the same list style as the results. Decorative, so hidden from screen readers. */}

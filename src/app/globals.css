@@ -163,14 +163,13 @@
 }
 
 /* Indeterminate progress: a bar a third as wide as its track slides across it and starts again, for waits of unknown
-   length. The track needs overflow: hidden. Reduced motion shows a still bar across the whole track, so it never
-   looks like a progress bar stuck part-way. */
+   length. The track needs overflow: hidden. Reduced motion stops it; give the bar motion-reduce:w-full so it then
+   fills the track and never looks like a progress bar stuck part-way. */
 @utility animate-marquee {
   animation: marquee 1.4s ease-in-out infinite;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
-    width: 100%;
   }
 }
 
