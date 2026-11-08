@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { ArrRequestError } from "@/server/arr/request";
 
 const mocks = vi.hoisted(() => ({
@@ -43,165 +43,111 @@ import { deleteMovie, updateMovie } from "./actions";
 
 const DENIED = "You don't have permission to delete movies.";
 const INVALID = "Invalid delete.";
-const valid = { movieId: 7, deleteFiles: false, addImportExclusion: false };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
-  mocks.deleteMovies.mockResolvedValue(undefined);
-  mocks.editMovie.mockResolvedValue(undefined);
-  mocks.listQualityProfiles.mockResolvedValue([
-    { id: 1, name: "HD-1080p" },
-    { id: 2, name: "Any" },
-  ]);
-  vi.spyOn(console, "error").mockImplementation(() => {});
-});
-
-describe("deleteMovie authorization", () => {
-  it("checks for the admin role only", async () => {
-    await expect(deleteMovie(valid)).rejects.toThrow("NEXT_REDIRECT /");
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-  });
-
-  it("rejects a requester and never calls Radarr or redirects", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    expect(await deleteMovie(valid)).toEqual({ ok: false, error: DENIED });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-    expect(mocks.redirect).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Radarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await deleteMovie(valid)).toEqual({ ok: false, error: DENIED });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(deleteMovie(valid)).rejects.toThrow("database down");
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-});
-
-describe("deleteMovie input", () => {
-  it("refuses an extra key, such as a stray moveFiles", async () => {
-    expect(await deleteMovie({ ...valid, moveFiles: true })).toEqual({ ok: false, error: INVALID });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-
-  it("refuses a movie id that is not a positive integer", async () => {
-    for (const movieId of [0, -1, 1.5, "7"]) {
-      expect(await deleteMovie({ ...valid, movieId })).toEqual({ ok: false, error: INVALID });
-    }
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-  });
-
-  it("refuses a missing boolean, so a missing choice is never read as no", async () => {
-    expect(await deleteMovie({ movieId: 7, addImportExclusion: false })).toEqual({ ok: false, error: INVALID });
-    expect(await deleteMovie({ movieId: 7, deleteFiles: false })).toEqual({ ok: false, error: INVALID });
-    expect(mocks.deleteMovies).not.toHaveBeenCalled();
-    expect(mocks.redirect).not.toHaveBeenCalled();
-  });
-});
-
-describe("deleteMovie success", () => {
-  it("sends exactly one movie id with both booleans, and redirects to Home", async () => {
-    await expect(deleteMovie({ movieId: 7, deleteFiles: true, addImportExclusion: true })).rejects.toThrow(
-      "NEXT_REDIRECT /",
-    );
-
-    expect(mocks.deleteMovies).toHaveBeenCalledWith({ movieIds: [7], deleteFiles: true, addImportExclusion: true });
-    expect(mocks.redirect).toHaveBeenCalledWith("/", "replace");
-  });
-
-  it("does not refresh on success, because it redirects instead", async () => {
-    await expect(deleteMovie(valid)).rejects.toThrow("NEXT_REDIRECT");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-});
-
-describe("deleteMovie Radarr failures", () => {
-  it("says Radarr may still be deleting after a timeout", async () => {
-    mocks.deleteMovies.mockRejectedValue(new ArrRequestError("Radarr movie delete request failed: timed out", "timeout"));
-
-    const result = await deleteMovie(valid);
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("may still be deleting");
-    expect(result.error).toContain("refreshed");
-    expect(mocks.redirect).not.toHaveBeenCalled();
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("says Radarr didn't confirm for any other failure", async () => {
-    mocks.deleteMovies.mockRejectedValue(new ArrRequestError("Radarr movie delete request failed: HTTP 504", "http", 504));
-
-    const result = await deleteMovie(valid);
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("didn't confirm");
-    expect(result.error).toContain("refreshed");
-    expect(mocks.redirect).not.toHaveBeenCalled();
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("logs the upstream message", async () => {
-    mocks.deleteMovies.mockRejectedValue(new ArrRequestError("Radarr movie delete request failed: HTTP 500", "http", 500));
-
-    await deleteMovie(valid);
-
-    expect(console.error).toHaveBeenCalledWith("Movie delete: Radarr movie delete request failed: HTTP 500");
-  });
-
-  it("rethrows errors that are not Radarr request failures", async () => {
-    mocks.deleteMovies.mockRejectedValue(new Error("unexpected"));
-
-    await expect(deleteMovie(valid)).rejects.toThrow("unexpected");
-    expect(mocks.redirect).not.toHaveBeenCalled();
-  });
-});
-
 const EDIT_DENIED = "You don't have permission to edit movies.";
 const EDIT_INVALID = "Invalid edit.";
+const valid = { movieId: 7, deleteFiles: false, addImportExclusion: false };
 const movieEdit = { movieId: 7, monitored: true };
 const MOVIE_PROFILES = [
   { id: 1, name: "HD-1080p" },
   { id: 2, name: "Any" },
 ];
 
-describe("updateMovie authorization", () => {
-  it("checks for the admin role only", async () => {
-    await updateMovie(movieEdit);
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.requireRole.mockResolvedValue({ user: { id: "u1", email: "a@example.test", name: "A", role: "admin" } });
+  mocks.deleteMovies.mockResolvedValue(undefined);
+  mocks.editMovie.mockResolvedValue(undefined);
+  mocks.listQualityProfiles.mockResolvedValue(MOVIE_PROFILES);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
 
+/** deleteMovie succeeds by redirecting, which throws in the mock. Swallow only that, and rethrow anything else. */
+async function settle(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("NEXT_REDIRECT ")) return undefined;
+    throw error;
+  }
+}
+
+describe("authorization", () => {
+  type AuthRow = { name: string; call: () => Promise<unknown>; denied: string; upstream: Mock[] };
+
+  // Both actions need the admin role. A 401 and a 403 take the same branch, so one 403 row covers both.
+  const rows: AuthRow[] = [
+    { name: "deleteMovie", call: () => deleteMovie(valid), denied: DENIED, upstream: [mocks.deleteMovies] },
+    { name: "updateMovie", call: () => updateMovie(movieEdit), denied: EDIT_DENIED, upstream: [mocks.editMovie, mocks.listQualityProfiles] },
+  ];
+
+  it.each(rows)("$name asks for the admin role", async ({ call }) => {
+    await settle(call());
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  });
+
+  it.each(rows)("$name refuses a denied caller, and calls no upstream function, refresh or redirect", async ({ call, denied, upstream }) => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+
+    expect(await call()).toEqual({ ok: false, error: denied });
+    for (const mock of upstream) expect(mock).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
-  it("rejects a requester and never calls Radarr or refreshes", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+  it.each(rows)("$name rethrows a non-authorization error, and calls no upstream function", async ({ call, upstream }) => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
 
-    expect(await updateMovie(movieEdit)).toEqual({ ok: false, error: EDIT_DENIED });
-    expect(mocks.editMovie).not.toHaveBeenCalled();
-    expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
+    await expect(call()).rejects.toThrow("database down");
+    for (const mock of upstream) expect(mock).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteMovie input", () => {
+  const invalid: [string, unknown][] = [
+    ["an extra key, such as a stray moveFiles", { ...valid, moveFiles: true }],
+    ["a zero id", { ...valid, movieId: 0 }],
+    ["a negative id", { ...valid, movieId: -1 }],
+    ["a fractional id", { ...valid, movieId: 1.5 }],
+    ["a string id", { ...valid, movieId: "7" }],
+    ["a missing deleteFiles", { movieId: 7, addImportExclusion: false }],
+    ["a missing addImportExclusion", { movieId: 7, deleteFiles: false }],
+  ];
+
+  it.each(invalid)("rejects %s without calling Radarr or redirecting", async (_name, input) => {
+    expect(await deleteMovie(input)).toEqual({ ok: false, error: INVALID });
+    expect(mocks.deleteMovies).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteMovie success and Radarr failures", () => {
+  it("sends exactly one movie id with both booleans, redirects to Home without refreshing", async () => {
+    await settle(deleteMovie({ movieId: 7, deleteFiles: true, addImportExclusion: true }));
+
+    expect(mocks.deleteMovies).toHaveBeenCalledWith({ movieIds: [7], deleteFiles: true, addImportExclusion: true });
+    expect(mocks.redirect).toHaveBeenCalledWith("/", "replace");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-out caller (401) and never calls Radarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
+  // The timeout and the other failures get different messages, so each needs its own row.
+  it.each([
+    {
+      name: "a timeout",
+      error: new ArrRequestError("Radarr movie delete request failed: timed out", "timeout"),
+      message: "Radarr is taking a long time and may still be deleting. The page has been refreshed; check it before trying again.",
+    },
+    {
+      name: "an HTTP 504",
+      error: new ArrRequestError("Radarr movie delete request failed: HTTP 504", "http", 504),
+      message: "Radarr didn't confirm the delete, so the movie may already be gone. The page has been refreshed; check it before trying again.",
+    },
+  ])("says the delete is unconfirmed after $name, logs only the safe message, and refreshes instead of redirecting", async ({ error, message }) => {
+    mocks.deleteMovies.mockRejectedValue(error);
 
-    expect(await updateMovie(movieEdit)).toEqual({ ok: false, error: EDIT_DENIED });
-    expect(mocks.editMovie).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(updateMovie(movieEdit)).rejects.toThrow("database down");
-    expect(mocks.editMovie).not.toHaveBeenCalled();
+    expect(await deleteMovie(valid)).toEqual({ ok: false, error: message });
+    expect(console.error).toHaveBeenCalledWith(`Movie delete: ${error.message}`);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 });
 
@@ -243,16 +189,16 @@ describe("updateMovie input validation", () => {
 });
 
 describe("updateMovie edits", () => {
-  it("sends the id and a monitored flag, without checking profiles", async () => {
+  it("sends the id and a monitored flag, without checking profiles, then refreshes", async () => {
     expect(await updateMovie({ movieId: 7, monitored: false })).toEqual({ ok: true });
 
     expect(mocks.editMovie).toHaveBeenCalledWith({ movieId: 7, monitored: false });
     expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("checks that a chosen quality profile still exists, then sends it", async () => {
-    mocks.listQualityProfiles.mockResolvedValue(MOVIE_PROFILES);
-
     expect(await updateMovie({ movieId: 7, qualityProfileId: 2 })).toEqual({ ok: true });
 
     expect(mocks.listQualityProfiles).toHaveBeenCalledTimes(1);
@@ -270,8 +216,6 @@ describe("updateMovie edits", () => {
   );
 
   it("sends every field together, and exactly those fields", async () => {
-    mocks.listQualityProfiles.mockResolvedValue(MOVIE_PROFILES);
-
     await updateMovie({ movieId: 7, qualityProfileId: 1, monitored: true, minimumAvailability: "released" });
 
     expect(mocks.editMovie).toHaveBeenCalledTimes(1);
@@ -283,15 +227,7 @@ describe("updateMovie edits", () => {
     });
   });
 
-  it("refreshes the page after a successful edit", async () => {
-    await updateMovie(movieEdit);
-
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
   it("refuses a quality profile that no longer exists, without editing, and refreshes so the form gets the current profiles", async () => {
-    mocks.listQualityProfiles.mockResolvedValue(MOVIE_PROFILES);
-
     const result = await updateMovie({ movieId: 7, qualityProfileId: 99 });
 
     expect(result).toEqual({ ok: false, error: "That quality profile no longer exists." });
@@ -299,39 +235,37 @@ describe("updateMovie edits", () => {
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("gives the friendly error when Radarr rejects the edit, and logs only the safe message", async () => {
-    mocks.editMovie.mockRejectedValue(new ArrRequestError("Radarr movie edit request failed: HTTP 500", "http", 500));
-
-    const result = await updateMovie(movieEdit);
-
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the change. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Movie edit: Radarr movie edit request failed: HTTP 500");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("gives the same friendly error after a timeout", async () => {
-    mocks.editMovie.mockRejectedValue(new ArrRequestError("Radarr movie edit request failed: timed out", "timeout"));
+  // Radarr's message is the same for an HTTP error and a timeout, so both rows share one expected result.
+  it.each([
+    ["an HTTP 500", new ArrRequestError("Radarr movie edit request failed: HTTP 500", "http", 500)],
+    ["a timeout", new ArrRequestError("Radarr movie edit request failed: timed out", "timeout")],
+  ])("gives the friendly error after %s, logs only the safe message, and does not refresh", async (_name, error) => {
+    mocks.editMovie.mockRejectedValue(error);
 
     expect(await updateMovie(movieEdit)).toEqual({ ok: false, error: "Radarr didn't accept the change. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Movie edit: Radarr movie edit request failed: timed out");
+    expect(console.error).toHaveBeenCalledWith(`Movie edit: ${error.message}`);
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("gives the friendly error when the profile list cannot be fetched, and does not edit", async () => {
-    mocks.listQualityProfiles.mockRejectedValue(
-      new ArrRequestError("Radarr quality profile request failed: timed out", "timeout"),
-    );
+    mocks.listQualityProfiles.mockRejectedValue(new ArrRequestError("Radarr quality profile request failed: timed out", "timeout"));
 
-    const result = await updateMovie({ movieId: 7, qualityProfileId: 1 });
-
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept the change. Try again." });
+    expect(await updateMovie({ movieId: 7, qualityProfileId: 1 })).toEqual({ ok: false, error: "Radarr didn't accept the change. Try again." });
     expect(mocks.editMovie).not.toHaveBeenCalled();
   });
+});
 
-  it("rethrows errors that are not Radarr request failures", async () => {
-    mocks.editMovie.mockRejectedValue(new Error("config broken"));
+describe("errors that are not Radarr request failures are rethrown", () => {
+  const rethrowRows: [string, Mock, () => Promise<unknown>][] = [
+    ["deleteMovie", mocks.deleteMovies, () => deleteMovie(valid)],
+    ["updateMovie", mocks.editMovie, () => updateMovie(movieEdit)],
+  ];
 
-    await expect(updateMovie(movieEdit)).rejects.toThrow("config broken");
+  it.each(rethrowRows)("%s rethrows an error that is not a Radarr request failure, and does not refresh or redirect", async (_name, mock, call) => {
+    mock.mockRejectedValue(new Error("unexpected"));
+
+    await expect(call()).rejects.toThrow("unexpected");
     expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 });
