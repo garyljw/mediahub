@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { ArrRequestError } from "@/server/arr/request";
 
 const mocks = vi.hoisted(() => ({
@@ -84,6 +84,18 @@ import { ReleaseGrabError } from "@/server/arr/releases";
 const MONITOR_DENIED = "You don't have permission to change monitoring.";
 const SEARCH_DENIED = "You don't have permission to search for episodes.";
 const PICK_DENIED = "You don't have permission to pick releases.";
+const DELETE_DENIED = "You don't have permission to delete series.";
+const DELETE_INVALID = "Invalid delete.";
+const SERIES_EDIT_DENIED = "You don't have permission to edit series.";
+const SERIES_EDIT_INVALID = "Invalid edit.";
+
+const release = { token: "00000000-0000-4000-8000-000000000002" };
+const validDelete = { seriesId: 4, deleteFiles: false, addImportListExclusion: false };
+const seriesEdit = { seriesId: 10, monitored: true };
+const SERIES_PROFILES = [
+  { id: 1, name: "HD-1080p" },
+  { id: 2, name: "Any" },
+];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -103,88 +115,57 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-describe("setEpisodeMonitoring authorization", () => {
-  it("checks for the admin role", async () => {
-    await setEpisodeMonitoring({ episodeId: 1, monitored: true });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+/** deleteSeriesItem succeeds by redirecting, which throws in the mock. Swallow only that, and rethrow anything else. */
+async function settle(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("NEXT_REDIRECT ")) return undefined;
+    throw error;
+  }
+}
+
+describe("authorization", () => {
+  type AuthRow = {
+    name: string;
+    call: () => Promise<unknown>;
+    roles: string[];
+    denied: string;
+    upstream: Mock[];
+  };
+
+  // One row per action. `roles` are the role arguments requireRole must get. `upstream` lists the calls that must
+  // not happen when the caller is refused. Every call uses valid input, so only the role check can stop it.
+  const rows: AuthRow[] = [
+    { name: "setEpisodeMonitoring", call: () => setEpisodeMonitoring({ episodeId: 1, monitored: true }), roles: ["admin"], denied: MONITOR_DENIED, upstream: [mocks.setEpisodeMonitored] },
+    { name: "setSeasonMonitoring", call: () => setSeasonMonitoring({ seriesId: 1, seasonNumber: 2, monitored: true }), roles: ["admin"], denied: MONITOR_DENIED, upstream: [mocks.setSeasonMonitored] },
+    { name: "searchSeasonNow", call: () => searchSeasonNow({ seriesId: 1, seasonNumber: 2 }), roles: ["admin", "requester"], denied: SEARCH_DENIED, upstream: [mocks.searchSeason] },
+    { name: "searchEpisodeNow", call: () => searchEpisodeNow({ episodeId: 3 }), roles: ["admin", "requester"], denied: SEARCH_DENIED, upstream: [mocks.searchEpisode] },
+    { name: "findSeriesReleases", call: () => findSeriesReleases({ seriesId: 10, seasonNumber: 2 }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.searchSeriesReleases] },
+    { name: "grabSeriesRelease", call: () => grabSeriesRelease({ token: release.token }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.grabSeriesRelease] },
+    { name: "deleteSeriesItem", call: () => deleteSeriesItem(validDelete), roles: ["admin"], denied: DELETE_DENIED, upstream: [mocks.deleteSeries, mocks.redirect] },
+    { name: "updateSeriesItem", call: () => updateSeriesItem(seriesEdit), roles: ["admin"], denied: SERIES_EDIT_DENIED, upstream: [mocks.editSeries, mocks.listSeriesQualityProfiles] },
+  ];
+
+  it.each(rows)("$name asks for $roles", async ({ call, roles }) => {
+    await settle(call());
+    expect(mocks.requireRole).toHaveBeenCalledWith(...roles);
   });
 
-  it("rejects a requester and never calls Sonarr", async () => {
+  it.each(rows)("$name refuses a denied caller, and calls no upstream function", async ({ call, denied, upstream }) => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
-    const result = await setEpisodeMonitoring({ episodeId: 1, monitored: true });
-
-    expect(result).toEqual({ ok: false, error: MONITOR_DENIED });
-    expect(mocks.setEpisodeMonitored).not.toHaveBeenCalled();
+    expect(await call()).toEqual({ ok: false, error: denied });
+    for (const mock of upstream) expect(mock).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-    expect(await setEpisodeMonitoring({ episodeId: 1, monitored: true })).toEqual({ ok: false, error: MONITOR_DENIED });
-    expect(mocks.setEpisodeMonitored).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
+  it.each(rows)("$name rethrows a non-authorization error, and calls no upstream function", async ({ call, upstream }) => {
     mocks.requireRole.mockRejectedValue(new Error("database down"));
-    await expect(setEpisodeMonitoring({ episodeId: 1, monitored: true })).rejects.toThrow("database down");
-    expect(mocks.setEpisodeMonitored).not.toHaveBeenCalled();
-  });
-});
 
-describe("setSeasonMonitoring authorization", () => {
-  it("checks for the admin role", async () => {
-    await setSeasonMonitoring({ seriesId: 1, seasonNumber: 2, monitored: true });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-  });
-
-  it("rejects a requester and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    const result = await setSeasonMonitoring({ seriesId: 1, seasonNumber: 2, monitored: true });
-
-    expect(result).toEqual({ ok: false, error: MONITOR_DENIED });
-    expect(mocks.setSeasonMonitored).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-    expect(await setSeasonMonitoring({ seriesId: 1, seasonNumber: 2, monitored: true })).toEqual({ ok: false, error: MONITOR_DENIED });
-    expect(mocks.setSeasonMonitored).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-    await expect(setSeasonMonitoring({ seriesId: 1, seasonNumber: 2, monitored: true })).rejects.toThrow("database down");
-    expect(mocks.setSeasonMonitored).not.toHaveBeenCalled();
-  });
-});
-
-describe("searchSeasonNow and searchEpisodeNow authorization", () => {
-  it("allows both admin and requester for a season search", async () => {
-    await searchSeasonNow({ seriesId: 1, seasonNumber: 2 });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-  });
-
-  it("allows both admin and requester for an episode search", async () => {
-    await searchEpisodeNow({ episodeId: 3 });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-  });
-
-  it("rejects a signed-out caller and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await searchSeasonNow({ seriesId: 1, seasonNumber: 2 })).toEqual({ ok: false, error: SEARCH_DENIED });
-    expect(await searchEpisodeNow({ episodeId: 3 })).toEqual({ ok: false, error: SEARCH_DENIED });
-    expect(mocks.searchSeason).not.toHaveBeenCalled();
-    expect(mocks.searchEpisode).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-    await expect(searchSeasonNow({ seriesId: 1, seasonNumber: 2 })).rejects.toThrow("database down");
-    await expect(searchEpisodeNow({ episodeId: 3 })).rejects.toThrow("database down");
+    await expect(call()).rejects.toThrow("database down");
+    for (const mock of upstream) expect(mock).not.toHaveBeenCalled();
   });
 });
 
@@ -267,20 +248,13 @@ describe("setEpisodeMonitoring success and failure", () => {
   it("says Sonarr didn't accept a 4xx, logs only the safe message, and does not refresh", async () => {
     mocks.setEpisodeMonitored.mockRejectedValue(new ArrRequestError("Sonarr episode monitor request failed: HTTP 400", "http", 400));
 
-    expect(await setEpisodeMonitoring({ episodeId: 42, monitored: true })).toEqual({
-      ok: false,
-      error: "Sonarr didn't accept the change. Try again.",
-    });
+    expect(await setEpisodeMonitoring({ episodeId: 42, monitored: true })).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
     expect(console.error).toHaveBeenCalledWith("Episode monitor: Sonarr episode monitor request failed: HTTP 400");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["a 5xx", new ArrRequestError("Sonarr episode monitor request failed: HTTP 502", "http", 502)],
-    ["a dropped connection", new ArrRequestError("Sonarr episode monitor request failed: network error", "network")],
-    ["an unreadable reply", new ArrRequestError("Sonarr episode monitor request failed: invalid response", "invalid")],
-  ])("says the change may have been saved after %s", async (_name, error) => {
-    mocks.setEpisodeMonitored.mockRejectedValue(error);
+  it("says the change may have been saved after a 5xx, and does not refresh", async () => {
+    mocks.setEpisodeMonitored.mockRejectedValue(new ArrRequestError("Sonarr episode monitor request failed: HTTP 502", "http", 502));
 
     expect(await setEpisodeMonitoring({ episodeId: 42, monitored: true })).toEqual({ ok: false, error: "Sonarr didn't confirm the change. It may still have been saved, so reload the page to check." });
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -291,16 +265,8 @@ describe("setEpisodeMonitoring success and failure", () => {
 
     const result = await setEpisodeMonitoring({ episodeId: 42, monitored: true });
 
-    expect(result).toEqual({
-      ok: false,
-      error: "Sonarr took too long to answer. The change may still have been saved, so reload the page to check.",
-    });
+    expect(result).toEqual({ ok: false, error: "Sonarr took too long to answer. The change may still have been saved, so reload the page to check." });
     expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.setEpisodeMonitored.mockRejectedValue(new Error("config broken"));
-    await expect(setEpisodeMonitoring({ episodeId: 42, monitored: true })).rejects.toThrow("config broken");
   });
 });
 
@@ -314,10 +280,7 @@ describe("setSeasonMonitoring success and failure", () => {
   it("says the season no longer exists when Sonarr has no such season, and does not refresh", async () => {
     mocks.setSeasonMonitored.mockRejectedValue(new SeasonNotFoundError());
 
-    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({
-      ok: false,
-      error: "That season no longer exists.",
-    });
+    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({ ok: false, error: "That season no longer exists." });
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
   });
@@ -333,17 +296,15 @@ describe("setSeasonMonitoring success and failure", () => {
   it("says Sonarr didn't accept a 4xx on the write, and logs only the safe message", async () => {
     failAfterSend(new ArrRequestError("Sonarr series update request failed: HTTP 400", "http", 400));
 
-    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({
-      ok: false,
-      error: "Sonarr didn't accept the change. Try again.",
-    });
+    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
     expect(console.error).toHaveBeenCalledWith("Season monitor: Sonarr series update request failed: HTTP 400");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
+  // A 5xx after the write was sent must not be read as "nothing changed": only the read's failures mean that.
   it.each([
+    ["a dropped connection", new ArrRequestError("Sonarr series update request failed: network error", "network")],
     ["a 5xx", new ArrRequestError("Sonarr series update request failed: HTTP 500", "http", 500)],
-    ["an unreadable reply", new ArrRequestError("Sonarr series update request failed: invalid response", "invalid")],
   ])("says the change may have been saved after %s on the write", async (_name, error) => {
     failAfterSend(error);
 
@@ -352,28 +313,9 @@ describe("setSeasonMonitoring success and failure", () => {
   });
 
   it("says a timeout on the write may have saved the change, and does not refresh", async () => {
-    mocks.setSeasonMonitored.mockImplementation(async (_id: number, _season: number, _monitored: boolean, onSend: () => void) => {
-      onSend();
-      throw new ArrRequestError("Sonarr series update request failed: timed out", "timeout");
-    });
+    failAfterSend(new ArrRequestError("Sonarr series update request failed: timed out", "timeout"));
 
-    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({
-      ok: false,
-      error: "Sonarr took too long to answer. The change may still have been saved, so reload the page to check.",
-    });
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says the change may have been saved when the connection drops after the write was sent", async () => {
-    mocks.setSeasonMonitored.mockImplementation(async (_id: number, _season: number, _monitored: boolean, onSend: () => void) => {
-      onSend();
-      throw new ArrRequestError("Sonarr series update request failed: network error", "network");
-    });
-
-    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({
-      ok: false,
-      error: "Sonarr didn't confirm the change. It may still have been saved, so reload the page to check.",
-    });
+    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({ ok: false, error: "Sonarr took too long to answer. The change may still have been saved, so reload the page to check." });
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
@@ -383,117 +325,38 @@ describe("setSeasonMonitoring success and failure", () => {
   ])("says nothing changed when the read %s before anything was written", async (_name, error) => {
     mocks.setSeasonMonitored.mockRejectedValue(error);
 
-    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({
-      ok: false,
-      error: "Couldn't load the series from Sonarr, so nothing changed. Try again.",
-    });
+    expect(await setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).toEqual({ ok: false, error: "Couldn't load the series from Sonarr, so nothing changed. Try again." });
     expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.setSeasonMonitored.mockRejectedValue(new Error("config broken"));
-    await expect(setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })).rejects.toThrow("config broken");
   });
 });
 
-describe("searchSeasonNow success and failure", () => {
-  it("calls searchSeason with exactly the validated values, and does not refresh", async () => {
-    expect(await searchSeasonNow({ seriesId: 5, seasonNumber: 0 })).toEqual({ ok: true });
-    expect(mocks.searchSeason).toHaveBeenCalledWith(5, 0);
+describe("season and episode searches", () => {
+  const searches = [
+    { action: "searchSeasonNow", call: () => searchSeasonNow({ seriesId: 5, seasonNumber: 2 }), mock: mocks.searchSeason, args: [5, 2], http500: new ArrRequestError("Sonarr season search command request failed: HTTP 500", "http", 500), logLine: "Season search: Sonarr season search command request failed: HTTP 500", timeout: new ArrRequestError("Sonarr season search command request failed: timed out", "timeout") },
+    { action: "searchEpisodeNow", call: () => searchEpisodeNow({ episodeId: 9 }), mock: mocks.searchEpisode, args: [9], http500: new ArrRequestError("Sonarr episode search command request failed: HTTP 500", "http", 500), logLine: "Episode search: Sonarr episode search command request failed: HTTP 500", timeout: new ArrRequestError("Sonarr episode search command request failed: timed out", "timeout") },
+  ];
+
+  it.each(searches)("$action calls Sonarr with exactly the validated values, and does not refresh", async ({ call, mock, args }) => {
+    expect(await call()).toEqual({ ok: true });
+    expect(mock).toHaveBeenCalledWith(...args);
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("gives the friendly error when Sonarr rejects the search, and logs only the safe message", async () => {
-    mocks.searchSeason.mockRejectedValue(new ArrRequestError("Sonarr season search command request failed: HTTP 500", "http", 500));
+  it.each(searches)("$action says Sonarr didn't start the search on a 500, and logs only the safe message", async ({ call, mock, http500, logLine }) => {
+    mock.mockRejectedValue(http500);
 
-    expect(await searchSeasonNow({ seriesId: 5, seasonNumber: 2 })).toEqual({
-      ok: false,
-      error: "Sonarr didn't start the search. Try again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Season search: Sonarr season search command request failed: HTTP 500");
+    expect(await call()).toEqual({ ok: false, error: "Sonarr didn't start the search. Try again." });
+    expect(console.error).toHaveBeenCalledWith(logLine);
   });
 
-  it("says a timed-out search may have started, so the user checks before retrying", async () => {
-    mocks.searchSeason.mockRejectedValue(new ArrRequestError("Sonarr season search command request failed: timed out", "timeout"));
+  it.each(searches)("$action says a timed-out search may have started, so the user checks before retrying", async ({ call, mock, timeout }) => {
+    mock.mockRejectedValue(timeout);
 
-    expect(await searchSeasonNow({ seriesId: 5, seasonNumber: 2 })).toEqual({
-      ok: false,
-      error: "Sonarr took too long to answer. The search may still have started, so check Sonarr before trying again.",
-    });
-  });
-
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.searchSeason.mockRejectedValue(new Error("config broken"));
-    await expect(searchSeasonNow({ seriesId: 5, seasonNumber: 2 })).rejects.toThrow("config broken");
-  });
-});
-
-describe("searchEpisodeNow success and failure", () => {
-  it("calls searchEpisode with exactly the validated id, and does not refresh", async () => {
-    expect(await searchEpisodeNow({ episodeId: 9 })).toEqual({ ok: true });
-    expect(mocks.searchEpisode).toHaveBeenCalledWith(9);
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("gives the friendly error when Sonarr rejects the search, and logs only the safe message", async () => {
-    mocks.searchEpisode.mockRejectedValue(new ArrRequestError("Sonarr episode search command request failed: HTTP 500", "http", 500));
-
-    expect(await searchEpisodeNow({ episodeId: 9 })).toEqual({
-      ok: false,
-      error: "Sonarr didn't start the search. Try again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Episode search: Sonarr episode search command request failed: HTTP 500");
-  });
-
-  it("says a timed-out search may have started, so the user checks before retrying", async () => {
-    mocks.searchEpisode.mockRejectedValue(new ArrRequestError("Sonarr episode search command request failed: timed out", "timeout"));
-
-    expect(await searchEpisodeNow({ episodeId: 9 })).toEqual({
-      ok: false,
-      error: "Sonarr took too long to answer. The search may still have started, so check Sonarr before trying again.",
-    });
-  });
-
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.searchEpisode.mockRejectedValue(new Error("config broken"));
-    await expect(searchEpisodeNow({ episodeId: 9 })).rejects.toThrow("config broken");
+    expect(await call()).toEqual({ ok: false, error: "Sonarr took too long to answer. The search may still have started, so check Sonarr before trying again." });
   });
 });
 
 describe("findSeriesReleases and grabSeriesRelease", () => {
-  const release = { token: "00000000-0000-4000-8000-000000000002" };
-
-  describe("authorization", () => {
-    it.each([
-      ["findSeriesReleases", () => findSeriesReleases({ seriesId: 10, seasonNumber: 2 })],
-      ["grabSeriesRelease", () => grabSeriesRelease({ token: release.token })],
-    ])("checks for the admin role only in %s", async (_name, call) => {
-      await call();
-      expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-    });
-
-    it.each([
-      ["requester (403)", 403],
-      ["signed-out (401)", 401],
-    ] as const)("rejects a %s and never calls Sonarr", async (_label, status) => {
-      mocks.requireRole.mockRejectedValue(new AuthzError(status));
-
-      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({ ok: false, error: PICK_DENIED });
-      expect(await findSeriesReleases({ episodeId: 202 })).toEqual({ ok: false, error: PICK_DENIED });
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: PICK_DENIED });
-      expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
-      expect(mocks.grabSeriesRelease).not.toHaveBeenCalled();
-    });
-
-    it("rethrows errors that are not authorization failures", async () => {
-      mocks.requireRole.mockRejectedValue(new Error("database down"));
-      await expect(findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).rejects.toThrow("database down");
-      await expect(grabSeriesRelease({ token: release.token })).rejects.toThrow("database down");
-      expect(mocks.searchSeriesReleases).not.toHaveBeenCalled();
-      expect(mocks.grabSeriesRelease).not.toHaveBeenCalled();
-    });
-  });
-
   describe("findSeriesReleases input", () => {
     it.each([
       ["a series id alone", { seriesId: 10 }],
@@ -536,32 +399,18 @@ describe("findSeriesReleases and grabSeriesRelease", () => {
 
     it("says it timed out, and logs only the safe message", async () => {
       mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: timed out", "timeout"));
-      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({
-        ok: false,
-        error: "Sonarr took too long searching the indexers. Try again in a moment.",
-      });
+      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({ ok: false, error: "Sonarr took too long searching the indexers. Try again in a moment." });
       expect(console.error).toHaveBeenCalledWith("Release search: Sonarr release search request failed: timed out");
     });
 
     it("says the season or episode is gone on a 404", async () => {
       mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: HTTP 404", "http", 404));
-      expect(await findSeriesReleases({ episodeId: 202 })).toEqual({
-        ok: false,
-        error: "That season or episode is no longer in Sonarr. Close this and reload the page.",
-      });
+      expect(await findSeriesReleases({ episodeId: 202 })).toEqual({ ok: false, error: "That season or episode is no longer in Sonarr. Close this and reload the page." });
     });
 
     it("gives the generic message for other Sonarr failures", async () => {
       mocks.searchSeriesReleases.mockRejectedValue(new ArrRequestError("Sonarr release search request failed: HTTP 400", "http", 400));
-      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({
-        ok: false,
-        error: "Sonarr couldn't search the indexers. Try again.",
-      });
-    });
-
-    it("rethrows errors that are not Sonarr request failures", async () => {
-      mocks.searchSeriesReleases.mockRejectedValue(new Error("config broken"));
-      await expect(findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).rejects.toThrow("config broken");
+      expect(await findSeriesReleases({ seriesId: 10, seasonNumber: 2 })).toEqual({ ok: false, error: "Sonarr couldn't search the indexers. Try again." });
     });
   });
 
@@ -590,85 +439,33 @@ describe("findSeriesReleases and grabSeriesRelease", () => {
 
     it("says the result can no longer be used on a token miss or an expired release", async () => {
       mocks.grabSeriesRelease.mockRejectedValue(new ReleaseGrabError("expired"));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "Sonarr can no longer use that result: it may have expired, or Sonarr couldn't match it to episodes. Search again or pick another one.",
-      });
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: "Sonarr can no longer use that result: it may have expired, or Sonarr couldn't match it to episodes. Search again or pick another one." });
     });
 
     it("warns about a possible grab after a timeout", async () => {
       mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: timed out", "timeout"));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "Sonarr took too long to answer. The release may still have been grabbed, so check the queue before trying again.",
-      });
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: "Sonarr took too long to answer. The release may still have been grabbed, so check the queue before trying again." });
       expect(console.error).toHaveBeenCalledWith("Release grab: Sonarr release grab request failed: timed out");
     });
 
     it("says the indexer did not hand over the release on a 409", async () => {
       mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 409", "http", 409));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "The indexer didn't hand over that release. Try again, or pick another one.",
-      });
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: "The indexer didn't hand over that release. Try again, or pick another one." });
     });
 
     it("gives the plain refusal message for other 4xx errors", async () => {
       mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 400", "http", 400));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "Sonarr didn't grab the release. Try again.",
-      });
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: "Sonarr didn't grab the release. Try again." });
     });
 
     it("warns about a possible grab after a 5xx, since Sonarr may have sent the release first", async () => {
       mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: HTTP 500", "http", 500));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
-      });
-    });
-
-    it("warns about a possible grab after a network error", async () => {
-      mocks.grabSeriesRelease.mockRejectedValue(new ArrRequestError("Sonarr release grab request failed: network error", "network"));
-      expect(await grabSeriesRelease({ token: release.token })).toEqual({
-        ok: false,
-        error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again.",
-      });
-    });
-
-    it("rethrows errors that are not Sonarr request failures", async () => {
-      mocks.grabSeriesRelease.mockRejectedValue(new Error("config broken"));
-      await expect(grabSeriesRelease({ token: release.token })).rejects.toThrow("config broken");
+      expect(await grabSeriesRelease({ token: release.token })).toEqual({ ok: false, error: "Sonarr didn't confirm the grab. It may still have been sent, so check the queue before trying again." });
     });
   });
 });
 
 describe("deleteSeriesItem", () => {
-  const DELETE_DENIED = "You don't have permission to delete series.";
-  const DELETE_INVALID = "Invalid delete.";
-  const validDelete = { seriesId: 4, deleteFiles: false, addImportListExclusion: false };
-
-  it("checks for the admin role only", async () => {
-    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("NEXT_REDIRECT /");
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-  });
-
-  it("rejects a requester and never calls Sonarr or redirects", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    expect(await deleteSeriesItem(validDelete)).toEqual({ ok: false, error: DELETE_DENIED });
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-    expect(mocks.redirect).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-    await expect(deleteSeriesItem(validDelete)).rejects.toThrow("database down");
-    expect(mocks.deleteSeries).not.toHaveBeenCalled();
-  });
-
   it("refuses an extra key, a non-positive id, or a missing boolean", async () => {
     expect(await deleteSeriesItem({ ...validDelete, moveFiles: true })).toEqual({ ok: false, error: DELETE_INVALID });
     expect(await deleteSeriesItem({ ...validDelete, seriesId: 0 })).toEqual({ ok: false, error: DELETE_INVALID });
@@ -714,46 +511,6 @@ describe("deleteSeriesItem", () => {
   });
 });
 
-const SERIES_EDIT_DENIED = "You don't have permission to edit series.";
-const SERIES_EDIT_INVALID = "Invalid edit.";
-const seriesEdit = { seriesId: 10, monitored: true };
-const SERIES_PROFILES = [
-  { id: 1, name: "HD-1080p" },
-  { id: 2, name: "Any" },
-];
-
-describe("updateSeriesItem authorization", () => {
-  it("checks for the admin role only", async () => {
-    await updateSeriesItem(seriesEdit);
-
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
-    expect(mocks.redirect).not.toHaveBeenCalled();
-  });
-
-  it("rejects a requester and never calls Sonarr or refreshes", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: SERIES_EDIT_DENIED });
-    expect(mocks.editSeries).not.toHaveBeenCalled();
-    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: SERIES_EDIT_DENIED });
-    expect(mocks.editSeries).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(updateSeriesItem(seriesEdit)).rejects.toThrow("database down");
-    expect(mocks.editSeries).not.toHaveBeenCalled();
-  });
-});
-
 describe("updateSeriesItem input validation", () => {
   const invalid: [string, unknown][] = [
     ["not an object", "series"],
@@ -793,11 +550,12 @@ describe("updateSeriesItem input validation", () => {
 });
 
 describe("updateSeriesItem edits", () => {
-  it("sends the id and a monitored flag, without checking profiles", async () => {
+  it("sends the id and a monitored flag, without checking profiles, then refreshes", async () => {
     expect(await updateSeriesItem({ seriesId: 10, monitored: false })).toEqual({ ok: true });
 
     expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, monitored: false });
     expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("checks that a chosen quality profile still exists, then sends it", async () => {
@@ -809,23 +567,21 @@ describe("updateSeriesItem edits", () => {
     expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, qualityProfileId: 2 });
   });
 
-  it.each(["standard", "daily", "anime"] as const)("sends series type %s alone", async (seriesType) => {
-    expect(await updateSeriesItem({ seriesId: 10, seriesType })).toEqual({ ok: true });
-
-    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, seriesType });
-    expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
-  });
-
   it("sends a false season folder flag, which is a real change", async () => {
     expect(await updateSeriesItem({ seriesId: 10, seasonFolder: false })).toEqual({ ok: true });
 
     expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, seasonFolder: false });
   });
 
-  it.each(["all", "none"] as const)("sends new-season monitoring %s alone", async (monitorNewItems) => {
-    expect(await updateSeriesItem({ seriesId: 10, monitorNewItems })).toEqual({ ok: true });
-
-    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, monitorNewItems });
+  it.each([
+    ["seriesType", "standard"],
+    ["seriesType", "daily"],
+    ["seriesType", "anime"],
+    ["monitorNewItems", "all"],
+    ["monitorNewItems", "none"],
+  ] as const)("accepts and sends %s %s, which the form offers", async (field, value) => {
+    expect(await updateSeriesItem({ seriesId: 10, [field]: value })).toEqual({ ok: true });
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, [field]: value });
   });
 
   it("sends every field together, and exactly those fields", async () => {
@@ -851,12 +607,6 @@ describe("updateSeriesItem edits", () => {
     });
   });
 
-  it("refreshes the page after a successful edit", async () => {
-    await updateSeriesItem(seriesEdit);
-
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
   it("refuses a quality profile that no longer exists, without editing, and refreshes so the form gets the current profiles", async () => {
     mocks.listSeriesQualityProfiles.mockResolvedValue(SERIES_PROFILES);
 
@@ -877,14 +627,6 @@ describe("updateSeriesItem edits", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("gives the same friendly error after a timeout", async () => {
-    mocks.editSeries.mockRejectedValue(new ArrRequestError("Sonarr series edit request failed: timed out", "timeout"));
-
-    expect(await updateSeriesItem(seriesEdit)).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Series edit: Sonarr series edit request failed: timed out");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
   it("gives the friendly error when the profile list cannot be fetched, and does not edit", async () => {
     mocks.listSeriesQualityProfiles.mockRejectedValue(
       new ArrRequestError("Sonarr quality profile request failed: timed out", "timeout"),
@@ -895,11 +637,23 @@ describe("updateSeriesItem edits", () => {
     expect(result).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
     expect(mocks.editSeries).not.toHaveBeenCalled();
   });
+});
 
-  it("rethrows errors that are not Sonarr request failures", async () => {
-    mocks.editSeries.mockRejectedValue(new Error("config broken"));
+describe("errors that are not Sonarr request failures are rethrown", () => {
+  const rethrowRows: [string, Mock, () => Promise<unknown>][] = [
+    ["setEpisodeMonitoring", mocks.setEpisodeMonitored, () => setEpisodeMonitoring({ episodeId: 42, monitored: true })],
+    ["setSeasonMonitoring", mocks.setSeasonMonitored, () => setSeasonMonitoring({ seriesId: 5, seasonNumber: 3, monitored: true })],
+    ["searchSeasonNow", mocks.searchSeason, () => searchSeasonNow({ seriesId: 5, seasonNumber: 2 })],
+    ["searchEpisodeNow", mocks.searchEpisode, () => searchEpisodeNow({ episodeId: 9 })],
+    ["findSeriesReleases", mocks.searchSeriesReleases, () => findSeriesReleases({ seriesId: 10, seasonNumber: 2 })],
+    ["grabSeriesRelease", mocks.grabSeriesRelease, () => grabSeriesRelease({ token: release.token })],
+    ["updateSeriesItem", mocks.editSeries, () => updateSeriesItem(seriesEdit)],
+  ];
 
-    await expect(updateSeriesItem(seriesEdit)).rejects.toThrow("config broken");
+  it.each(rethrowRows)("%s rethrows an error that is not a Sonarr request failure, and does not refresh", async (_name, mock, call) => {
+    mock.mockRejectedValue(new Error("config broken"));
+
+    await expect(call()).rejects.toThrow("config broken");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
