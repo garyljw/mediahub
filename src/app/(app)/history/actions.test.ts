@@ -45,22 +45,14 @@ describe("markHistoryFailed authorization", () => {
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
-  it("rejects a requester and never calls Radarr or Sonarr", async () => {
+  // A signed-out caller (401) gets the same AuthzError branch as a requester (403), so one status is enough.
+  it("refuses a requester and never calls Radarr or Sonarr", async () => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
-    const result = await markHistoryFailed({ app: "radarr", historyId: 1 });
-
-    expect(result).toEqual({ ok: false, error: DENIED });
+    expect(await markHistoryFailed({ app: "radarr", historyId: 1 })).toEqual({ ok: false, error: DENIED });
     expect(mocks.markMovieHistoryFailed).not.toHaveBeenCalled();
     expect(mocks.markEpisodeHistoryFailed).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rejects a signed-out caller (401) and never calls Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await markHistoryFailed({ app: "sonarr", historyId: 1 })).toEqual({ ok: false, error: DENIED });
-    expect(mocks.markEpisodeHistoryFailed).not.toHaveBeenCalled();
   });
 
   it("rethrows errors that are not authorization failures", async () => {
@@ -90,55 +82,42 @@ describe("markHistoryFailed input validation", () => {
 });
 
 describe("markHistoryFailed routing and results", () => {
-  it("marks a Radarr item through the movie function, then refreshes", async () => {
-    expect(await markHistoryFailed({ app: "radarr", historyId: 12 })).toEqual({ ok: true });
-    expect(mocks.markMovieHistoryFailed).toHaveBeenCalledWith(12);
-    expect(mocks.markEpisodeHistoryFailed).not.toHaveBeenCalled();
+  it.each([
+    ["radarr", 12, "markMovieHistoryFailed", "markEpisodeHistoryFailed"],
+    ["sonarr", 34, "markEpisodeHistoryFailed", "markMovieHistoryFailed"],
+  ] as const)("marks a %s item through its own function, then refreshes", async (app, historyId, called, other) => {
+    expect(await markHistoryFailed({ app, historyId })).toEqual({ ok: true });
+    expect(mocks[called]).toHaveBeenCalledWith(historyId);
+    expect(mocks[other]).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("marks a Sonarr item through the episode function, then refreshes", async () => {
-    expect(await markHistoryFailed({ app: "sonarr", historyId: 34 })).toEqual({ ok: true });
-    expect(mocks.markEpisodeHistoryFailed).toHaveBeenCalledWith(34);
-    expect(mocks.markMovieHistoryFailed).not.toHaveBeenCalled();
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("says the app didn't accept a 4xx, names it, logs only the safe message, and does not refresh", async () => {
-    mocks.markMovieHistoryFailed.mockRejectedValue(
+  // Each row is a branch of writeFailureMessage. A timeout or a 5xx may have been done, so those rows say so.
+  it.each([
+    [
+      "radarr",
+      "markMovieHistoryFailed",
       new ArrRequestError("Radarr mark failed request failed: HTTP 404", "http", 404),
-    );
-
-    const result = await markHistoryFailed({ app: "radarr", historyId: 12 });
-
-    expect(result).toEqual({ ok: false, error: "Radarr didn't accept it. Try again." });
-    expect(console.error).toHaveBeenCalledWith("History mark failed: Radarr mark failed request failed: HTTP 404");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says Sonarr didn't confirm a timeout and that the item may have been marked", async () => {
-    mocks.markEpisodeHistoryFailed.mockRejectedValue(
+      "Radarr didn't accept it. Try again.",
+    ],
+    [
+      "sonarr",
+      "markEpisodeHistoryFailed",
       new ArrRequestError("Sonarr mark failed request failed: timed out", "timeout"),
-    );
-
-    const result = await markHistoryFailed({ app: "sonarr", historyId: 34 });
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Sonarr didn't confirm it. It may still have been marked failed, so reload the page to check.",
-    });
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says Radarr didn't confirm a 5xx, since it may have been done", async () => {
-    mocks.markMovieHistoryFailed.mockRejectedValue(
+      "Sonarr didn't confirm it. It may still have been marked failed, so reload the page to check.",
+    ],
+    [
+      "radarr",
+      "markMovieHistoryFailed",
       new ArrRequestError("Radarr mark failed request failed: HTTP 500", "http", 500),
-    );
+      "Radarr didn't confirm it. It may still have been marked failed, so reload the page to check.",
+    ],
+  ] as const)("says what happened for %s and does not refresh", async (app, upstream, error, message) => {
+    mocks[upstream].mockRejectedValue(error);
 
-    expect(await markHistoryFailed({ app: "radarr", historyId: 12 })).toEqual({
-      ok: false,
-      error: "Radarr didn't confirm it. It may still have been marked failed, so reload the page to check.",
-    });
+    expect(await markHistoryFailed({ app, historyId: 12 })).toEqual({ ok: false, error: message });
+    expect(console.error).toHaveBeenCalledWith(`History mark failed: ${error.message}`);
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("rethrows errors that are not Arr request failures", async () => {

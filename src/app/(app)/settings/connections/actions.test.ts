@@ -64,17 +64,19 @@ afterEach(() => {
 });
 
 const input = { app: "radarr", url: "http://radarr.test:7878", apiKey: KEY };
-
-describe.each([
+const actions = [
   ["testConnection", testConnection],
   ["saveConnectionSettings", saveConnectionSettings],
-])("%s authorization", (_name, action) => {
-  it("checks for the admin role", async () => {
+] as const;
+
+describe("authorization", () => {
+  it.each(actions)("%s checks for the admin role", async (_name, action) => {
     await action(input);
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
-  it("rejects a requester and never calls Radarr or saves", async () => {
+  // A signed-out caller (401) gets the same AuthzError branch as a requester (403), so one status is enough.
+  it.each(actions)("%s refuses a requester and never calls Radarr or saves", async (_name, action) => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
     expect(await action(input)).toEqual({ ok: false, message: DENIED });
@@ -83,15 +85,7 @@ describe.each([
     expect(mocks.resetArrClients).not.toHaveBeenCalled();
   });
 
-  it("rejects a signed-out caller (401) and never calls Radarr or saves", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await action(input)).toEqual({ ok: false, message: DENIED });
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(mocks.saveConnection).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
+  it.each(actions)("%s rethrows errors that are not authorization failures", async (_name, action) => {
     mocks.requireRole.mockRejectedValue(new Error("database down"));
 
     await expect(action(input)).rejects.toThrow("database down");
@@ -147,15 +141,12 @@ describe("testConnection", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // Each row is a branch of failureText, so each keeps its own message.
   it.each([
     ["an unauthorised key", () => new Response("no", { status: 401 }), "The API key was refused."],
     ["another HTTP error", () => new Response("no", { status: 500 }), "It answered with HTTP 500."],
     ["a network failure", () => Promise.reject(new TypeError("fetch failed")), "Couldn't reach it. Check the address."],
-    [
-      "a timeout",
-      () => Promise.reject(new DOMException("timed out", "TimeoutError")),
-      "Timed out.",
-    ],
+    ["a timeout", () => Promise.reject(new DOMException("timed out", "TimeoutError")), "Timed out."],
     ["a reply that is not a status", () => json({ hello: "world" }), "That doesn't look like Radarr."],
   ])("maps %s to fixed text", async (_label, reply, message) => {
     fetchMock.mockImplementation(async () => reply());
@@ -197,20 +188,13 @@ describe("saveConnectionSettings", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("saves with the stored key when the origin matches and no key is typed", async () => {
-    mocks.getConnection.mockReturnValue({ url: "http://radarr.test:7878", apiKey: STORED_KEY });
-
-    await saveConnectionSettings({ app: "radarr", url: "http://radarr.test:7878", apiKey: "" });
-
-    expect(requestAt(0).headers.get("X-Api-Key")).toBe(STORED_KEY);
-    expect(mocks.saveConnection).toHaveBeenCalledWith("radarr", { url: "http://radarr.test:7878", apiKey: STORED_KEY });
-  });
-
-  it("returns no stored key in any result", async () => {
+  it("saves with the stored key when the origin matches, and returns no stored key in the result", async () => {
     mocks.getConnection.mockReturnValue({ url: "http://radarr.test:7878", apiKey: STORED_KEY });
 
     const result = await saveConnectionSettings({ app: "radarr", url: "http://radarr.test:7878", apiKey: "" });
 
+    expect(requestAt(0).headers.get("X-Api-Key")).toBe(STORED_KEY);
+    expect(mocks.saveConnection).toHaveBeenCalledWith("radarr", { url: "http://radarr.test:7878", apiKey: STORED_KEY });
     expect(JSON.stringify(result)).not.toContain(STORED_KEY);
   });
 });

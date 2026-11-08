@@ -37,7 +37,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("checkForUpdatesNow", () => {
+describe("checkForUpdatesNow authorization", () => {
+  it("checks for the admin role", async () => {
+    await checkForUpdatesNow();
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  });
+
   it("denies a requester and never asks the updater", async () => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
     expect(await checkForUpdatesNow()).toEqual({ ok: false, message: DENIED });
@@ -45,15 +50,21 @@ describe("checkForUpdatesNow", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("queues a check for an admin and revalidates the page", async () => {
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(checkForUpdatesNow()).rejects.toThrow("database down");
+    expect(mocks.requestUpdateCheck).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkForUpdatesNow", () => {
+  // Both outcomes count as success: an already-queued check is still the check the user asked for.
+  it.each(["queued", "already-queued"])("treats a %s check as success and revalidates the page", async (outcome) => {
+    mocks.requestUpdateCheck.mockReturnValue(outcome);
+
     expect(await checkForUpdatesNow()).toEqual({ ok: true, queued: true });
     expect(mocks.requestUpdateCheck).toHaveBeenCalledTimes(1);
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/updates");
-  });
-
-  it("treats an already-queued check as success", async () => {
-    mocks.requestUpdateCheck.mockReturnValue("already-queued");
-    expect(await checkForUpdatesNow()).toEqual({ ok: true, queued: true });
   });
 
   it("explains when updates are not available", async () => {

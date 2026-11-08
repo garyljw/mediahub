@@ -135,6 +135,24 @@ function storedRow(identifier: string): unknown {
   return row ? JSON.parse(row.value) : undefined;
 }
 
+/** Which fake server an address answers as. The Friend's pinned https address does not answer. */
+function identityOf(conn: { url: string }): string {
+  if (conn.url.includes("192-168-10-5") || conn.url.startsWith("http://192.168.10.5")) return HOME.id;
+  if (conn.url.startsWith("http://198.51.100.20")) return FRIEND.id;
+  return "fakeotherserver";
+}
+
+/** Stores the Friend's plain http address as the Plex data connection. */
+function storeFriendConnection() {
+  savePlexDataConnection({
+    url: "http://198.51.100.20:32400",
+    pinAddress: null,
+    token: FRIEND.token,
+    serverId: FRIEND.id,
+    serverName: FRIEND.name,
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.rows.clear();
@@ -151,11 +169,7 @@ beforeEach(() => {
   mocks.getVisibleServers.mockResolvedValue(visibleServers().map((server) => ({ ...server, owned: true })));
   // Each server's addresses answer only as that server. The Home pinned https address works; the Friend's pinned
   // address does not, so only its plain http address passes.
-  mocks.getServerIdentity.mockImplementation(async (conn: { url: string }) => {
-    if (conn.url.includes("192-168-10-5") || conn.url.startsWith("http://192.168.10.5")) return HOME.id;
-    if (conn.url.startsWith("http://198.51.100.20")) return FRIEND.id;
-    return "fakeotherserver";
-  });
+  mocks.getServerIdentity.mockImplementation(async (conn: { url: string }) => identityOf(conn));
   mocks.getLibrarySections.mockResolvedValue([
     { key: "1", type: "movie", title: "Movies" },
     { key: "2", type: "show", title: "TV Shows" },
@@ -179,9 +193,10 @@ describe("authorization", () => {
     ["disconnectPlex", () => disconnectPlex()],
   ];
 
-  it.each(calls)("%s: a requester gets DENIED and nothing is called", async (_name, call) => {
+  it.each(calls)("%s: checks the admin role first, then a requester gets DENIED and nothing is called", async (_name, call) => {
     asRequester();
     expect(await call()).toEqual({ ok: false, message: DENIED });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
     expect(mocks.createPin).not.toHaveBeenCalled();
     expect(mocks.checkPin).not.toHaveBeenCalled();
     expect(mocks.getServerIdentity).not.toHaveBeenCalled();
@@ -189,9 +204,10 @@ describe("authorization", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it.each(calls)("%s: checks the admin role first", async (_name, call) => {
-    await call();
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+  it.each(calls)("%s: rethrows an error that is not an AuthzError", async (_name, call) => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+    await expect(call()).rejects.toThrow("database down");
+    expect(mocks.createPin).not.toHaveBeenCalled();
   });
 });
 
@@ -316,8 +332,7 @@ describe("checkPlexConnection", () => {
   it("still lists the other servers when one server's check fails unexpectedly", async () => {
     mocks.getServerIdentity.mockImplementation(async (conn: { url: string }) => {
       if (conn.url.startsWith("http://198.51.100.20")) throw new Error("fake unexpected failure");
-      if (conn.url.includes("192-168-10-5") || conn.url.startsWith("http://192.168.10.5")) return HOME.id;
-      return "fakeotherserver";
+      return identityOf(conn);
     });
     await started();
 
@@ -460,27 +475,15 @@ describe("savePlexConnection", () => {
 
 describe("testPlexConnection", () => {
   it("lists the section titles once the chosen server answers as itself", async () => {
-    savePlexDataConnection({
-      url: "http://198.51.100.20:32400",
-      pinAddress: null,
-      token: FRIEND.token,
-      serverId: FRIEND.id,
-      serverName: FRIEND.name,
-    });
-    mocks.getServerIdentity.mockImplementation(async () => FRIEND.id);
+    storeFriendConnection();
+    mocks.getServerIdentity.mockResolvedValue(FRIEND.id);
 
     expect(await testPlexConnection()).toEqual({ ok: true, sections: ["Movies", "TV Shows"] });
     expect(mocks.getLibrarySections).toHaveBeenCalledWith({ url: "http://198.51.100.20:32400", pinAddress: null }, FRIEND.token);
   });
 
   it("refuses when the stored address now answers as a different server", async () => {
-    savePlexDataConnection({
-      url: "http://198.51.100.20:32400",
-      pinAddress: null,
-      token: FRIEND.token,
-      serverId: FRIEND.id,
-      serverName: FRIEND.name,
-    });
+    storeFriendConnection();
     mocks.getServerIdentity.mockResolvedValue(HOME.id);
 
     expect(await testPlexConnection()).toEqual({
@@ -491,13 +494,7 @@ describe("testPlexConnection", () => {
   });
 
   it("says the token was refused on a 401, and the message holds no upstream text", async () => {
-    savePlexDataConnection({
-      url: "http://198.51.100.20:32400",
-      pinAddress: null,
-      token: FRIEND.token,
-      serverId: FRIEND.id,
-      serverName: FRIEND.name,
-    });
+    storeFriendConnection();
     mocks.getServerIdentity.mockResolvedValue(FRIEND.id);
     mocks.getLibrarySections.mockRejectedValue(new PlexRequestError("Plex library sections request failed: HTTP 401", "http", 401));
 
@@ -513,13 +510,7 @@ describe("testPlexConnection", () => {
 
 describe("disconnectPlex", () => {
   it("clears the stored connection and revalidates the page; the summary never holds the token", async () => {
-    savePlexDataConnection({
-      url: "http://198.51.100.20:32400",
-      pinAddress: null,
-      token: FRIEND.token,
-      serverId: FRIEND.id,
-      serverName: FRIEND.name,
-    });
+    storeFriendConnection();
     expect(getPlexDataSummary()).toEqual({ connected: true, url: "http://198.51.100.20:32400", serverName: FRIEND.name });
     expect(JSON.stringify(getPlexDataSummary())).not.toContain(FRIEND.token);
 
