@@ -194,7 +194,7 @@ describe("updateMovie edits", () => {
 
     expect(mocks.editMovie).toHaveBeenCalledWith({ movieId: 7, monitored: false });
     expect(mocks.listQualityProfiles).not.toHaveBeenCalled();
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("checks that a chosen quality profile still exists, then sends it", async () => {
