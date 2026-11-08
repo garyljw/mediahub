@@ -10,23 +10,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SELECT_CLASS } from "@/components/library/table-parts";
+import { formatCount } from "@/components/library/format";
 import {
   PACK_FILTERS,
   PROTOCOL_FILTERS,
+  RELEASE_SORTS,
   filterReleases,
+  HIDE_NOT_IN_PROFILE_KEY,
   PACK_CHOICE_KEY,
+  SORT_CHOICE_KEY,
   parsePackFilter,
+  parseReleaseSort,
   protocolChoiceKey,
   parseProtocolFilter,
   readChoice,
   releaseCountLine,
   releaseDetails,
   releaseTotal,
+  sortReleases,
   writeChoice,
   type GrabResult,
   type PackFilter,
   type ProtocolFilter,
   type ReleaseSearchResult,
+  type ReleaseSort,
 } from "@/components/library/release";
 
 /**
@@ -65,6 +72,9 @@ export function ReleaseDialog({
   const [pack, setPack] = useState<PackFilter>(() =>
     kind === "season" ? parsePackFilter(readChoice(PACK_CHOICE_KEY)) : "all",
   );
+  const [sort, setSort] = useState<ReleaseSort>(() => parseReleaseSort(readChoice(SORT_CHOICE_KEY)));
+  // On by default. Only an explicit "false" from an earlier untick turns it off.
+  const [hideNotInProfile, setHideNotInProfile] = useState(() => readChoice(HIDE_NOT_IN_PROFILE_KEY) !== "false");
 
   function changeProtocol(value: string) {
     const next = parseProtocolFilter(value);
@@ -76,6 +86,17 @@ export function ReleaseDialog({
     const next = parsePackFilter(value);
     setPack(next);
     writeChoice(PACK_CHOICE_KEY, next);
+  }
+
+  function changeSort(value: string) {
+    const next = parseReleaseSort(value);
+    setSort(next);
+    writeChoice(SORT_CHOICE_KEY, next);
+  }
+
+  function changeHideNotInProfile(checked: boolean) {
+    setHideNotInProfile(checked);
+    writeChoice(HIDE_NOT_IN_PROFILE_KEY, checked ? "true" : "false");
   }
 
   useEffect(() => {
@@ -110,10 +131,17 @@ export function ReleaseDialog({
     });
   }
 
-  const visible = outcome?.ok ? filterReleases(outcome.releases, protocol, pack) : [];
+  // Rows the protocol and pack filters let through, before and after the hide box.
+  const matching = outcome?.ok ? filterReleases(outcome.releases, protocol, pack) : [];
+  const visible = sortReleases(hideNotInProfile ? matching.filter((r) => !r.notInProfile) : matching, sort);
+  const hiddenCount = matching.length - visible.length;
   // No packs match, but other releases do. The count line already says so; offer a one-off switch to show them.
   const packsMissing =
-    kind === "season" && pack === "packs" && outcome?.ok === true && visible.length === 0 && filterReleases(outcome.releases, protocol, "all").length > 0;
+    kind === "season" &&
+    pack === "packs" &&
+    outcome?.ok === true &&
+    visible.length === 0 &&
+    filterReleases(outcome.releases, protocol, "all", hideNotInProfile).length > 0;
 
   return (
     <Dialog
@@ -129,15 +157,28 @@ export function ReleaseDialog({
           {/* Live, so a screen reader hears the new count when the protocol filter changes. */}
           <DialogDescription aria-live="polite">
             {outcome?.ok
-              ? releaseCountLine(visible.length, releaseTotal(outcome.totals, protocol, pack), protocol, pack)
+              ? // The server's totals count the hidden rows too, so take away the ones the box hid.
+                releaseCountLine(visible.length, releaseTotal(outcome.totals, protocol, pack) - hiddenCount, protocol, pack)
               : "Choose a release to send to the download client."}
           </DialogDescription>
         </DialogHeader>
 
         {outcome === null && (
-          <p role="status" aria-busy={searching} className="py-6 text-center text-sm text-muted-foreground">
-            Searching indexers… this can take a minute.
-          </p>
+          <div role="status" aria-busy={searching} className="flex flex-col gap-4 py-2">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-1/3 rounded-full bg-brand animate-marquee motion-reduce:w-full" />
+            </div>
+            <p className="text-center text-sm text-muted-foreground">Searching indexers… this can take a minute.</p>
+            {/* Placeholder rows in the same list style as the results. Decorative, so hidden from screen readers. */}
+            <ul className="divide-y rounded-md border">
+              {Array.from({ length: 4 }, (_, index) => (
+                <li key={index} aria-hidden="true" className="flex flex-col gap-2 px-3 py-3">
+                  <div className="h-4 w-3/4 rounded skeleton" />
+                  <div className="h-3 w-1/2 rounded skeleton" />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {outcome !== null && !outcome.ok && (
@@ -185,12 +226,35 @@ export function ReleaseDialog({
                   ))}
                 </select>
               )}
+              <select
+                aria-label="Sort"
+                value={sort}
+                onChange={(e) => changeSort(e.target.value)}
+                className={SELECT_CLASS}
+              >
+                {RELEASE_SORTS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={hideNotInProfile}
+                  onChange={(e) => changeHideNotInProfile(e.target.checked)}
+                />
+                Hide qualities not in profile
+              </label>
               {grabError && (
                 <p role="alert" className="text-sm text-destructive">
                   {grabError}
                 </p>
               )}
             </div>
+            {hiddenCount > 0 && (
+              <p className="text-xs text-muted-foreground">{formatCount(hiddenCount)} hidden: quality not in profile.</p>
+            )}
             {packsMissing && (
               <div>
                 {/* Only for this dialog: the remembered choice stays on season packs. */}

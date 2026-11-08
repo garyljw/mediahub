@@ -44,14 +44,72 @@ export function parsePackFilter(value: string | null): PackFilter {
   return PACK_FILTERS.find((option) => option.value === value)?.value ?? "packs";
 }
 
-/** Pure: the releases that match both filters, in the order given (the app's best-first order). */
-export function filterReleases(releases: ReleaseRow[], protocol: ProtocolFilter, pack: PackFilter = "all"): ReleaseRow[] {
-  if (protocol === "all" && pack === "all") return releases;
+/** How the release list is ordered. "app" is the app's own best-match order. The other keys always sort the same way. */
+export type ReleaseSort = "app" | "quality" | "size" | "age" | "seeders";
+
+/** The sort dropdown's options, in order. */
+export const RELEASE_SORTS: { value: ReleaseSort; label: string }[] = [
+  { value: "app", label: "Best match" },
+  { value: "quality", label: "Quality" },
+  { value: "size", label: "Size" },
+  { value: "age", label: "Age" },
+  { value: "seeders", label: "Seeders" },
+];
+
+/** The dropdown's value as a ReleaseSort. Best match comes first, so anything unexpected (including null) means "app". */
+export function parseReleaseSort(value: string | null): ReleaseSort {
+  return RELEASE_SORTS.find((option) => option.value === value)?.value ?? "app";
+}
+
+/** Pure: the releases that match the filters, in the order given (the app's best-first order). */
+export function filterReleases(
+  releases: ReleaseRow[],
+  protocol: ProtocolFilter,
+  pack: PackFilter = "all",
+  hideNotInProfile = false,
+): ReleaseRow[] {
+  if (protocol === "all" && pack === "all" && !hideNotInProfile) return releases;
   return releases.filter(
     (release) =>
       (protocol === "all" || release.protocol === protocol) &&
-      (pack === "all" || (pack === "packs") === release.fullSeason),
+      (pack === "all" || (pack === "packs") === release.fullSeason) &&
+      !(hideNotInProfile && release.notInProfile),
   );
+}
+
+/** Peers as one number for sorting: seeders count for much more than leechers. Missing counts count as 0. */
+function peerScore(release: ReleaseRow): number {
+  return (release.seeders ?? 0) * 1_000_000 + (release.leechers ?? 0);
+}
+
+/**
+ * Pure: the releases in the chosen order, as a new array (the input is never changed). Equal keys keep the app's
+ * order. "app" returns the input array itself. Fixed directions: best quality, largest size, newest age and most
+ * peers come first. A release with no age sorts last by age. A release that isn't a torrent (no peer counts) sorts
+ * last by seeders.
+ */
+export function sortReleases(releases: ReleaseRow[], sort: ReleaseSort): ReleaseRow[] {
+  if (sort === "app") return releases;
+  // Array.prototype.sort is stable, so equal keys keep the order they came in.
+  const copy = [...releases];
+  switch (sort) {
+    case "quality":
+      return copy.sort((a, b) => b.qualityWeight - a.qualityWeight);
+    case "size":
+      return copy.sort((a, b) => b.size - a.size);
+    case "age":
+      return copy.sort((a, b) => {
+        if (a.ageHours === null || b.ageHours === null) return (a.ageHours === null ? 1 : 0) - (b.ageHours === null ? 1 : 0);
+        return a.ageHours - b.ageHours;
+      });
+    case "seeders":
+      return copy.sort((a, b) => {
+        const aPeers = a.seeders !== null || a.leechers !== null;
+        const bPeers = b.seeders !== null || b.leechers !== null;
+        if (aPeers !== bPeers) return aPeers ? -1 : 1;
+        return peerScore(b) - peerScore(a);
+      });
+  }
 }
 
 /** The total for one protocol and pack filter, from the search totals. Episodes are the usable releases that aren't packs. */
@@ -68,6 +126,12 @@ export function protocolChoiceKey(kind: "movie" | "season" | "episode"): string 
 
 /** Where the season dialog remembers its pack choice. */
 export const PACK_CHOICE_KEY = "mediahub.releaseDialog.season.pack";
+
+/** Where every dialog kind remembers its sort choice. */
+export const SORT_CHOICE_KEY = "mediahub.releaseDialog.sort";
+
+/** Where every dialog kind remembers whether qualities outside the profile are hidden. */
+export const HIDE_NOT_IN_PROFILE_KEY = "mediahub.releaseDialog.hideNotInProfile";
 
 /** Remembered dialog choices. Storage can be missing or throw (private mode, blocked site data), so failures are ignored. */
 export function readChoice(key: string): string | null {
