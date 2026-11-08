@@ -113,4 +113,19 @@ export const focusItem = sqliteTable(
   ],
 );
 
-export const schema = { user, session, account, verification, setting, focusItem };
+// A release the admin grabbed with "Replace existing file" ticked. The worker in src/server/replace/auto-import.ts
+// reads it, and removes the row once the download has left the queue (or after 7 days). `downloadId` is filled in
+// from the app's history, a little after the grab. `createdAt` is ms since epoch.
+export const replaceGrab = sqliteTable(
+  "replace_grab",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    app: text("app", { enum: ["radarr", "sonarr"] }).notNull(),
+    guid: text("guid").notNull(),
+    downloadId: text("download_id"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [check("replace_grab_app_check", sql.raw(`${t.app.name} IN ('radarr', 'sonarr')`))],
+);
+
+export const schema = { user, session, account, verification, setting, focusItem, replaceGrab };

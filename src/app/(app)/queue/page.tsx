@@ -2,6 +2,7 @@ import { requirePageUser } from "@/server/authz";
 import { fetchEpisodeQueue, fetchMovieQueue } from "@/server/arr/queue";
 import { settledOrNull } from "@/server/arr/request";
 import { toQueueRows, type QueueRow } from "@/server/merge/queue";
+import { replacingDownloadIds } from "@/server/replace/replace-grabs";
 import { QueueView } from "@/components/queue/queue-view";
 import type { QueueFailures } from "@/components/queue/queue-rows";
 
@@ -20,7 +21,8 @@ async function loadQueue(showDetails: boolean): Promise<{ rows: QueueRow[]; fail
   ]);
   const movies = settledOrNull(movieResult, "Queue page");
   const episodes = settledOrNull(episodeResult, "Queue page");
-  const rows = toQueueRows(movies ?? [], episodes ?? [], Date.now(), { includeDetails: showDetails });
+  const replacing = { radarr: replacingDownloadIds("radarr"), sonarr: replacingDownloadIds("sonarr") };
+  const rows = toQueueRows(movies ?? [], episodes ?? [], Date.now(), { includeDetails: showDetails, replacing });
   return { rows, failed: { radarr: movies === null, sonarr: episodes === null } };
 }
 

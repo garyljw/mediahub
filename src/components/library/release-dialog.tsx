@@ -54,7 +54,7 @@ export function ReleaseDialog({
   subject: string;
   kind: "movie" | "season" | "episode";
   search: () => Promise<ReleaseSearchResult>;
-  grab: (token: string) => Promise<GrabResult>;
+  grab: (token: string, options: { replaceExisting: boolean }) => Promise<GrabResult>;
   onClose: () => void;
   onGrabbed: (title: string) => void;
 }) {
@@ -75,6 +75,8 @@ export function ReleaseDialog({
   const [sort, setSort] = useState<ReleaseSort>(() => parseReleaseSort(readChoice(SORT_CHOICE_KEY)));
   // On by default. Only an explicit "false" from an earlier untick turns it off.
   const [hideNotInProfile, setHideNotInProfile] = useState(() => readChoice(HIDE_NOT_IN_PROFILE_KEY) !== "false");
+  // Off every time the dialog opens: replacing a file is a deliberate choice for one grab, so it is not remembered.
+  const [replaceExisting, setReplaceExisting] = useState(false);
 
   function changeProtocol(value: string) {
     const next = parseProtocolFilter(value);
@@ -122,7 +124,7 @@ export function ReleaseDialog({
     setGrabError(null);
     startGrab(async () => {
       try {
-        const result = await grab(token);
+        const result = await grab(token, { replaceExisting });
         if (result.ok) onGrabbed(result.title);
         else setGrabError(result.error);
       } catch {
@@ -246,12 +248,21 @@ export function ReleaseDialog({
                 />
                 Hide qualities not in profile
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} />
+                Replace existing file
+              </label>
               {grabError && (
                 <p role="alert" className="text-sm text-destructive">
                   {grabError}
                 </p>
               )}
             </div>
+            {replaceExisting && (
+              <p className="text-xs text-muted-foreground">
+                If this download can&apos;t be imported because it isn&apos;t an upgrade, MediaHub imports it anyway and the existing file is replaced.
+              </p>
+            )}
             {hiddenCount > 0 && (
               <p className="text-xs text-muted-foreground">{formatCount(hiddenCount)} hidden: quality not in profile.</p>
             )}

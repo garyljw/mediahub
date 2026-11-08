@@ -317,3 +317,33 @@ describe("toQueueRows canForceImport", () => {
     expect(rowsOut[0].canForceImport).toBe(false);
   });
 });
+
+describe("toQueueRows replacing flag", () => {
+  it("is false on every row when no download ids are given", () => {
+    expect(rows().every((row) => row.replacing === false)).toBe(true);
+  });
+
+  it("is set only on the rows whose download id is in that app's set", () => {
+    const list = toQueueRows(movieItems, episodeItems, NOW, {
+      includeDetails: true,
+      replacing: { radarr: new Set(["LEAK-DL-ALPHA"]), sonarr: new Set(["LEAK-DL-PACK"]) },
+    });
+    expect(list.filter((row) => row.replacing).map((row) => row.key).sort()).toEqual(["radarr-1", "sonarr-101"]);
+  });
+
+  it("does not match a download id under the other app", () => {
+    const list = toQueueRows(movieItems, episodeItems, NOW, {
+      includeDetails: true,
+      replacing: { radarr: new Set(["LEAK-DL-PACK"]), sonarr: new Set(["LEAK-DL-ALPHA"]) },
+    });
+    expect(list.some((row) => row.replacing)).toBe(false);
+  });
+
+  it("is never set for requesters", () => {
+    const list = toQueueRows(movieItems, episodeItems, NOW, {
+      includeDetails: false,
+      replacing: { radarr: new Set(["LEAK-DL-ALPHA"]), sonarr: new Set(["LEAK-DL-PACK"]) },
+    });
+    expect(list.some((row) => row.replacing)).toBe(false);
+  });
+});

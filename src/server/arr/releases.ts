@@ -287,8 +287,9 @@ export function failGrab(error: unknown, taken: Pick<TakenRelease, "restore">): 
 /**
  * Sends one release, found by an earlier search, to Radarr's download client. The browser sends only the
  * token. The guid and indexer id come from the server's cache, and the body sent to Radarr has nothing else.
+ * Returns the title, and the guid for the action to remember (the guid is never sent to the browser).
  */
-export async function grabRelease(token: string): Promise<{ title: string }> {
+export async function grabRelease(token: string): Promise<{ title: string; guid: string }> {
   // Build the client first, so an unconfigured app does not use up the token.
   const client = radarrClient();
   const taken = releaseCache.take(token, "radarr");
@@ -304,5 +305,5 @@ export async function grabRelease(token: string): Promise<{ title: string }> {
     failGrab(error, taken);
   }
 
-  return { title: release.title };
+  return { title: release.title, guid: release.guid };
 }

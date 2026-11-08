@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   getMovieAddDefaults: vi.fn(),
   searchReleases: vi.fn(),
   grabRelease: vi.fn(),
+  recordReplaceGrab: vi.fn(),
 }));
+
+vi.mock("@/server/replace/replace-grabs", () => ({ recordReplaceGrab: mocks.recordReplaceGrab }));
 
 vi.mock("@/server/settings/add-defaults", () => ({ getMovieAddDefaults: mocks.getMovieAddDefaults }));
 
@@ -85,6 +88,7 @@ const REFRESH_DENIED = "You don't have permission to refresh movies.";
 const PICK_DENIED = "You don't have permission to pick releases.";
 const validAdd = { tmdbId: 910001 };
 const release = { token: "00000000-0000-4000-8000-000000000001", title: "Starfall.2019.1080p" };
+const GUID = "https://indexer.test/details/1";
 const ROOT_FOLDERS = [
   { id: 7, path: "/invented/movies/", freeSpace: 1 },
   { id: 8, path: "/invented/other/", freeSpace: 2 },
@@ -108,7 +112,8 @@ beforeEach(() => {
   mocks.searchMovieReleases.mockResolvedValue(undefined);
   mocks.refreshMovies.mockResolvedValue(undefined);
   mocks.searchReleases.mockResolvedValue({ rows: [], totals: { all: 0, usenet: 0, torrent: 0 } });
-  mocks.grabRelease.mockResolvedValue({ title: release.title });
+  mocks.grabRelease.mockResolvedValue({ title: release.title, guid: GUID });
+  mocks.recordReplaceGrab.mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -485,16 +490,51 @@ describe("grabMovieRelease", () => {
     ["a token that is not a UUID", { token: "not-a-uuid" }],
     ["a number token", { token: 12 }],
     ["an extra key", { token: release.token, guid: "https://indexer.test/details/1" }],
+    ["a replaceExisting that is not a boolean", { token: release.token, replaceExisting: "yes" }],
     ["null", null],
   ])("rejects %s without calling Radarr", async (_name, input) => {
     expect(await grabMovieRelease(input)).toEqual({ ok: false, error: "Invalid grab." });
     expect(mocks.grabRelease).not.toHaveBeenCalled();
+    expect(mocks.recordReplaceGrab).not.toHaveBeenCalled();
   });
 
   it("returns the title on success, and does not re-render the page", async () => {
-    expect(await grabMovieRelease({ token: release.token })).toEqual({ ok: true, title: release.title });
+    expect(await grabMovieRelease({ token: release.token })).toStrictEqual({ ok: true, title: release.title });
     expect(mocks.grabRelease).toHaveBeenCalledWith(release.token);
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("remembers a successful grab with the server's guid when Replace existing file is ticked, and sends no guid back", async () => {
+    const result = await grabMovieRelease({ token: release.token, replaceExisting: true });
+
+    expect(mocks.recordReplaceGrab).toHaveBeenCalledWith("radarr", GUID);
+    expect(result).toStrictEqual({ ok: true, title: release.title });
+  });
+
+  it.each([
+    ["omitted", {}],
+    ["false", { replaceExisting: false }],
+  ])("does not remember the grab when Replace existing file is %s", async (_name, extra) => {
+    await grabMovieRelease({ token: release.token, ...extra });
+    expect(mocks.recordReplaceGrab).not.toHaveBeenCalled();
+  });
+
+  it("does not remember a grab that Radarr refused", async () => {
+    mocks.grabRelease.mockRejectedValue(new ArrRequestError("Radarr release grab request failed: HTTP 409", "http", 409));
+    await grabMovieRelease({ token: release.token, replaceExisting: true });
+    expect(mocks.recordReplaceGrab).not.toHaveBeenCalled();
+  });
+
+  it("still returns the success, and logs only the safe message, when the grab can't be remembered", async () => {
+    mocks.recordReplaceGrab.mockImplementation(() => {
+      throw new Error("disk full at /private/path");
+    });
+
+    const result = await grabMovieRelease({ token: release.token, replaceExisting: true });
+
+    expect(result).toStrictEqual({ ok: true, title: release.title });
+    expect(console.error).toHaveBeenCalledWith("Replace grab: couldn't remember the grab");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("/private/path");
   });
 
   it("says the result expired when the token is unknown or used up", async () => {

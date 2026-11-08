@@ -282,7 +282,7 @@ function ReleasePickButton({
           subject={subject}
           kind={kind}
           search={search}
-          grab={(token) => grabSeriesRelease({ token })}
+          grab={(token, options) => grabSeriesRelease({ token, replaceExisting: options.replaceExisting })}
           onClose={() => setOpen(false)}
           onGrabbed={(title) => {
             setOpen(false);

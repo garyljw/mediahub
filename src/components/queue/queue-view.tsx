@@ -61,6 +61,9 @@ function DetailList({ row, details }: { row: QueueRow; details: QueueRowDetails 
   );
 }
 
+/** Shown on a row whose download was grabbed with "Replace existing file" ticked. */
+const REPLACING_LABEL = "Will replace existing file";
+
 /** The status with its icon, in the colour of its severity. Same markup in the table and on the cards. */
 function StatusLabel({ row }: { row: QueueRow }) {
   const Icon = ACTIVITY_ICON[row.state];
@@ -163,6 +166,7 @@ function QueueCard({
               <StatusLabel row={row} />
               {showProgress && <span className="text-muted-foreground">{`· ${row.progress}%`}</span>}
               {eta !== null && <span className="text-muted-foreground">{`· ${eta}`}</span>}
+              {row.replacing && <span className="text-xs text-muted-foreground">{REPLACING_LABEL}</span>}
             </div>
             {row.messages.length > 0 && <p className="break-words text-xs text-muted-foreground">{row.messages[0]}</p>}
             {showDetails && (
@@ -348,6 +352,7 @@ export function QueueView({
                     {/* Like the Activity column: the first message (admins only) shows under the state, all of them on hover. */}
                     <TableCell className={CELL} title={[stateLabel(row.state), ...row.messages].join("\n")}>
                       <StatusLabel row={row} />
+                      {row.replacing && <p className="mt-0.5 text-xs text-muted-foreground">{REPLACING_LABEL}</p>}
                       {row.messages.length > 0 && (
                         <p className="mt-0.5 max-w-64 truncate text-xs text-muted-foreground">{row.messages[0]}</p>
                       )}

@@ -101,7 +101,7 @@ export function MovieDetailActions({
           subject={title}
           kind="movie"
           search={() => findMovieReleases({ movieId })}
-          grab={(token) => grabMovieRelease({ token })}
+          grab={(token, options) => grabMovieRelease({ token, replaceExisting: options.replaceExisting })}
           onClose={() => setPicking(false)}
           onGrabbed={(grabbedTitle) => {
             setPicking(false);

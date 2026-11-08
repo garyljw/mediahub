@@ -45,8 +45,8 @@ The screenshots show a made-up demo library, not a real one.
 ## What it does
 - **Home:** one poster grid of everything in Radarr and Sonarr, with one search box that covers your library and finds new titles to add (from TMDB and TVDB). Rest the pointer on a poster for half a second and its year, genres and synopsis appear beside it, on Home and on the Focus lists.
 - **Adding:** one click adds a movie or series using the defaults an admin has chosen. Admins can also pick the quality profile and other options.
-- **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release. A season's release list starts on season packs, with a switch to show episodes or everything. The release list can be sorted by best match, quality, size, age or seeders, and it hides qualities your profile doesn't allow unless you untick that.
-- **Queue:** what is downloading, with remove and force import.
+- **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release. A season's release list starts on season packs, with a switch to show episodes or everything. The release list can be sorted by best match, quality, size, age or seeders, and it hides qualities your profile doesn't allow unless you untick that. When picking a release, an admin can tick **Replace existing file**. If that download then isn't imported because it isn't an upgrade, MediaHub imports it anyway, replacing the existing file. The old file goes to the Recycle Bin set in Radarr's or Sonarr's Media Management settings; with none set, it is deleted for good.
+- **Queue:** what is downloading, with remove and force import. A download grabbed with **Replace existing file** ticked shows **Will replace existing file** until it is imported.
 - **Calendar and History** for both Radarr and Sonarr.
 - **Phones and tablets:** on a narrower screen (a phone, or a tablet held upright) a tab bar along the bottom replaces the sidebar: **Home**, **Movie Focus**, **TV Focus**, **Queue** and **More**. **More** holds **Calendar**, **History**, **Settings** (admins), **About** and **Sign out**. Queue and History show each item as a card, a series' page shows each episode as a card, and Calendar always shows the day list on a phone.
 - **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes. On Home, the **Any / Unwatched / Partly watched / Watched** chips show only titles in that state. Titles that aren't in Plex appear only under **Any**.
@@ -81,6 +81,7 @@ MediaHub is meant for a home network only. Don't expose it to the internet.
    A silent install (`/VERYSILENT`) uses the defaults.
 3. When it finishes, MediaHub opens in your browser. **Finish setup straight away:** sign in with Plex and pick the Plex server you own. That Plex account becomes MediaHub's admin. Until setup is finished, the first person on your network to complete it becomes the admin.
 4. As the admin, open **Settings → Connections** and add Radarr and Sonarr (address and API key). Each connection is tested before it's saved. You can also connect Plex there to show watched status.
+The **Imports** section on that page has one switch, **Auto-import downloads matched by ID**, which is off by default: when it's on, MediaHub imports the clean files of a finished download that Radarr or Sonarr held back only because it matched the movie or series by ID.
 5. Under **Settings → Add defaults**, choose what a one-click add uses: the quality profile, the root folder and, for series, what to monitor.
 6. Under **Settings → Users**, add requesters.
 

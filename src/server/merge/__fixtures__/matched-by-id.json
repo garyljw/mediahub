@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "Show.S01E01.Clean", "series": { "id": 10, "title": "Fake Show" }, "rejections": [] },
+  { "id": 2, "name": "Show.S01E02.Sample", "series": { "id": 10, "title": "Fake Show" }, "rejections": [{ "type": "permanent", "reason": "Sample" }] },
+  { "id": 3, "name": "Show.S01E03.Clean", "series": { "id": 10, "title": "Fake Show" }, "rejections": [] },
+  { "id": 4, "name": "Show.S01E04.NoRejectionField", "series": { "id": 10, "title": "Fake Show" } },
+  { "id": 5, "name": "Unmatched.file", "rejections": [] }
+]

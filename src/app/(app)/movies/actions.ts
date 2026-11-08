@@ -7,6 +7,7 @@ import { lookupMovies, type LookupResult } from "@/server/arr/movie-add";
 import { ArrRequestError } from "@/server/arr/request";
 import { addMovieAs, type AddResult } from "@/server/add/movie-add";
 import { ReleaseGrabError, grabRelease, grabWasRefused, searchReleases } from "@/server/arr/releases";
+import { recordReplaceGrab } from "@/server/replace/replace-grabs";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
 import { MAX_TERM_LENGTH } from "@/components/library/add";
 import { MAX_SEARCH_MOVIES } from "@/components/movies/movie-search";
@@ -182,10 +183,24 @@ export async function findMovieReleases(input: unknown): Promise<ReleaseSearchRe
   }
 }
 
-// strictObject rejects unknown keys. The browser sends only the token from a search result.
+// strictObject rejects unknown keys. The browser sends the token from a search result, and whether the admin ticked
+// "Replace existing file". A non-boolean there is refused.
 const ReleaseGrabInput = z.strictObject({
   token: z.uuid(),
+  replaceExisting: z.boolean().optional(),
 });
+
+/**
+ * Remembers a grab for the auto-import worker. The app already accepted the grab, so a failure here is only logged,
+ * and the caller still reports success. The guid is never sent to the browser.
+ */
+function rememberReplaceGrab(guid: string): void {
+  try {
+    recordReplaceGrab("radarr", guid);
+  } catch {
+    console.error("Replace grab: couldn't remember the grab");
+  }
+}
 
 /**
  * Sends a release from an earlier search to Radarr's download client (admin only). Same shape as the other
@@ -206,6 +221,7 @@ export async function grabMovieRelease(input: unknown): Promise<GrabResult> {
 
   try {
     const grabbed = await grabRelease(parsed.data.token);
+    if (parsed.data.replaceExisting === true) rememberReplaceGrab(grabbed.guid);
     return { ok: true, title: grabbed.title };
   } catch (error) {
     if (error instanceof ReleaseGrabError) return { ok: false, error: "That result has expired. Search again." };

@@ -26,6 +26,7 @@ function row(overrides: Partial<QueueRow> & Pick<QueueRow, "key">): QueueRow {
     messages: [],
     details: null,
     canForceImport: false,
+    replacing: false,
     ...overrides,
   };
 }
