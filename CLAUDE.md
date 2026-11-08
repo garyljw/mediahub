@@ -35,8 +35,18 @@ Next.js 16 (App Router, TypeScript, `src/` dir) · Tailwind v4 + shadcn/ui · Ta
 - Keep runtime memory small: no extra services, and no heavy dependencies without a reason.
 - Before finishing a task, run `npm run lint && npm run typecheck && npm test`. All three must pass.
 
+## Testing
+Each test must catch a mistake that no other test catches. More tests cost review time on every later change.
+- Test behaviour through the result: what an action or function returns, what it sends upstream, and what it must not call. Don't test private helpers on their own when a test through the caller already covers them.
+- **Auth in server actions:** one table-driven test per action file, with mocked `requireRole`. Each row covers one action: it asserts the role arguments (`expect(requireRole).toHaveBeenCalledWith("admin")`), and that an `AuthzError` gives the action's denial (its error result, or the rethrown error if that's what it does) and calls no upstream function (and no `refresh`/`redirect`). One more test in the file checks that an error other than `AuthzError` is rethrown. If the action treats 401 and 403 the same, one row with either is enough. `server-actions-auth.test.ts` checks that the role check comes first, but not which role, so the table must check the role. `authz.test.ts` checks that `requireRole` refuses the wrong role, which is why action tests can mock it.
+- **Input validation:** one test per action that bad input is refused before any upstream call (`it.each` over the bad inputs), plus edge cases the schema allows on purpose (e.g. season 0).
+- **Errors:** one test per distinct message the user can see. For logging (security rule 6), test through the action, once for each error helper or `catch` that logs (such as `monitorFailure`), that only the safe message is logged. Don't repeat that check in every failure test that goes through the same helper.
+- **No tests** for generated code, pass-through wrappers that add no logic, constants, or layout and styling.
+- Keep the `src/server/arr/*` and `src/server/plex/*` tests that use saved upstream replies, the merge tests, and the guards (`pages-auth.test.ts`, `server-actions-auth.test.ts`).
+- The task brief's acceptance criteria list the tests the change needs. The implementer writes those, plus the auth and validation tests above for any new or changed action even if the brief leaves them out, plus any case a bug turns up.
+
 ## Workflow (Opus or Sonnet plans, Haiku codes)
-1. The planner writes a scoped task brief with acceptance criteria. Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
+1. The planner writes a scoped task brief with acceptance criteria, including the tests needed (see "Testing"). Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
    - If a task needs Opus planning and this session isn't on Opus, tell Gary to run `/model opus` before planning starts. Don't plan in a subagent: planning needs this conversation.
    - Any agent that runs a step 3 review is started with `model: "opus"`, because a subagent's default model may be cheaper than the session's.
    - A session that isn't on Opus runs the step 3 reviews in such an agent (`effort: "high"`; that is the agent's reasoning effort, and `/code-review` still runs at the level step 3 gives), and checks that the agent's report shows each review actually ran.
