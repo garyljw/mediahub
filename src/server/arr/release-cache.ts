@@ -93,10 +93,10 @@ export type ReleaseCache = ReturnType<typeof createReleaseCache>;
 export const RELEASE_TTL_MS = 25 * 60_000;
 
 /**
- * Most releases held at once. Each search adds one entry per grabbable returned release, up to 600 (200 per
- * protocol, unknown included), so this keeps a few recent searches. Each entry is a guid and a short title.
+ * Most releases held at once. One search adds up to 2000 entries (1000 season packs and 1000 others), so this
+ * keeps a few recent searches. Each entry is a guid and a short title, a few MB at most.
  */
-export const MAX_CACHED_RELEASES = 2000;
+export const MAX_CACHED_RELEASES = 6000;
 
 // Next's dev server reloads modules, and a bundle can be loaded twice. Keeping the cache on globalThis under
 // a shared symbol means every copy of this module uses the same cache, so a token made in one copy can be

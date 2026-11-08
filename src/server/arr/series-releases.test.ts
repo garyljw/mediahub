@@ -134,7 +134,7 @@ describe("searchSeriesReleases", () => {
 
     const result = await searchSeriesReleases(SEASON);
 
-    expect(result.totals).toEqual({ all: 5, usenet: 3, torrent: 2 });
+    expect(result.totals).toEqual({ all: 5, usenet: 3, torrent: 2, packs: { all: 1, usenet: 1, torrent: 0 } });
     expect(result.rows.map((row) => row.title)).toEqual([
       "Breaking.Bad.S02.1080p.BluRay.x264-GRP",
       "Breaking.Bad.S02E05.720p.WEB-DL.x264-TOR",

@@ -99,6 +99,7 @@ export function MovieDetailActions({
       {isAdmin && picking && (
         <ReleaseDialog
           subject={title}
+          kind="movie"
           search={() => findMovieReleases({ movieId })}
           grab={(token) => grabMovieRelease({ token })}
           onClose={() => setPicking(false)}

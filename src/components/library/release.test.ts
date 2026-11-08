@@ -6,9 +6,11 @@ import {
   formatAge,
   formatPeers,
   grabbedMessage,
+  parsePackFilter,
   parseProtocolFilter,
   releaseCountLine,
   releaseDetails,
+  releaseTotal,
   twoDigits,
 } from "./release";
 
@@ -93,6 +95,16 @@ describe("releaseCountLine", () => {
   it("says how many were cut when only the top ones are shown", () => {
     expect(releaseCountLine(200, 1234)).toBe("Showing the top 200 of 1,234 releases");
   });
+
+  it("names season packs when the pack filter is packs", () => {
+    expect(releaseCountLine(0, 0, "all", "packs")).toBe("No season packs found.");
+    expect(releaseCountLine(1, 1, "usenet", "packs")).toBe("1 Usenet season pack");
+    expect(releaseCountLine(1000, 1200, "torrent", "packs")).toBe("Showing the top 1,000 of 1,200 torrent season packs");
+  });
+
+  it("names episode releases when the pack filter is episodes", () => {
+    expect(releaseCountLine(0, 0, "all", "episodes")).toBe("No episode releases found.");
+  });
 });
 
 describe("releaseDetails", () => {
@@ -112,6 +124,7 @@ describe("releaseDetails", () => {
     approved: true,
     rejections: [],
     episodes: null,
+    fullSeason: false,
   };
 
   it("lists quality, size, age, protocol, indexer and score in that order", () => {
@@ -152,7 +165,7 @@ describe("releaseDetails", () => {
 });
 
 describe("filterReleases", () => {
-  function row(token: string, protocol: ReleaseRow["protocol"]): ReleaseRow {
+  function row(token: string, protocol: ReleaseRow["protocol"], fullSeason = false): ReleaseRow {
     return {
       token,
       title: token,
@@ -169,6 +182,7 @@ describe("filterReleases", () => {
       approved: true,
       rejections: [],
       episodes: null,
+      fullSeason,
     };
   }
   const releases = [row("a", "torrent"), row("b", "usenet"), row("c", "unknown"), row("d", "torrent")];
@@ -181,6 +195,36 @@ describe("filterReleases", () => {
     expect(filterReleases(releases, "torrent").map((r) => r.token)).toEqual(["a", "d"]);
     expect(filterReleases(releases, "usenet").map((r) => r.token)).toEqual(["b"]);
   });
+
+  it("filters by pack, in the original order, and combines with the protocol", () => {
+    const mixed = [
+      row("a", "torrent", true),
+      row("b", "usenet", false),
+      row("c", "unknown", true),
+      row("d", "torrent", false),
+      row("e", "torrent", true),
+    ];
+    expect(filterReleases(mixed, "all", "packs").map((r) => r.token)).toEqual(["a", "c", "e"]);
+    expect(filterReleases(mixed, "all", "episodes").map((r) => r.token)).toEqual(["b", "d"]);
+    expect(filterReleases(mixed, "torrent", "packs").map((r) => r.token)).toEqual(["a", "e"]);
+    expect(filterReleases(mixed, "usenet", "episodes").map((r) => r.token)).toEqual(["b"]);
+  });
+});
+
+describe("releaseTotal", () => {
+  const totals = { all: 10, usenet: 6, torrent: 4, packs: { all: 3, usenet: 2, torrent: 1 } };
+
+  it("gives the protocol total when every release is shown", () => {
+    expect(releaseTotal(totals, "all", "all")).toBe(10);
+    expect(releaseTotal(totals, "usenet", "all")).toBe(6);
+  });
+
+  it("gives the pack total, and episodes as the rest", () => {
+    expect(releaseTotal(totals, "all", "packs")).toBe(3);
+    expect(releaseTotal(totals, "all", "episodes")).toBe(7);
+    expect(releaseTotal(totals, "torrent", "packs")).toBe(1);
+    expect(releaseTotal(totals, "torrent", "episodes")).toBe(3);
+  });
 });
 
 describe("releaseCountLine with a protocol", () => {
@@ -192,10 +236,21 @@ describe("releaseCountLine with a protocol", () => {
 });
 
 describe("parseProtocolFilter", () => {
-  it("accepts the three options and falls back to all for anything else", () => {
+  it("accepts the three options and falls back to all for anything else, including null", () => {
     expect(parseProtocolFilter("usenet")).toBe("usenet");
     expect(parseProtocolFilter("torrent")).toBe("torrent");
     expect(parseProtocolFilter("all")).toBe("all");
     expect(parseProtocolFilter("unknown")).toBe("all");
+    expect(parseProtocolFilter(null)).toBe("all");
+  });
+});
+
+describe("parsePackFilter", () => {
+  it("accepts the three options and falls back to season packs for anything else, including null", () => {
+    expect(parsePackFilter("packs")).toBe("packs");
+    expect(parsePackFilter("episodes")).toBe("episodes");
+    expect(parsePackFilter("all")).toBe("all");
+    expect(parsePackFilter(null)).toBe("packs");
+    expect(parsePackFilter("junk")).toBe("packs");
   });
 });

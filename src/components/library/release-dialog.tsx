@@ -11,12 +11,20 @@ import {
 } from "@/components/ui/dialog";
 import { SELECT_CLASS } from "@/components/library/table-parts";
 import {
+  PACK_FILTERS,
   PROTOCOL_FILTERS,
   filterReleases,
+  PACK_CHOICE_KEY,
+  parsePackFilter,
+  protocolChoiceKey,
   parseProtocolFilter,
+  readChoice,
   releaseCountLine,
   releaseDetails,
+  releaseTotal,
+  writeChoice,
   type GrabResult,
+  type PackFilter,
   type ProtocolFilter,
   type ReleaseSearchResult,
 } from "@/components/library/release";
@@ -25,9 +33,11 @@ import {
  * Lists one app's interactive search results and sends the chosen one to its download client. Used for movies and
  * for TV seasons and episodes. The caller passes the search and the grab as functions, so this stays app-neutral.
  * Mounted only while open. The search starts once on mount, and is repeated only by "Search again".
+ * The protocol choice is remembered per kind, and the season pack choice is remembered for seasons.
  */
 export function ReleaseDialog({
   subject,
+  kind,
   search,
   grab,
   onClose,
@@ -35,6 +45,7 @@ export function ReleaseDialog({
 }: {
   /** What the search is for, shown in the heading: a movie title, or "Breaking Bad · Season 2". */
   subject: string;
+  kind: "movie" | "season" | "episode";
   search: () => Promise<ReleaseSearchResult>;
   grab: (token: string) => Promise<GrabResult>;
   onClose: () => void;
@@ -48,8 +59,24 @@ export function ReleaseDialog({
   const [searching, startSearch] = useTransition();
   const [grabbing, startGrab] = useTransition();
   const [grabError, setGrabError] = useState<string | null>(null);
-  // Kept across "Search again", so a fresh search shows the same kind of releases.
-  const [protocol, setProtocol] = useState<ProtocolFilter>("all");
+  // Kept across "Search again", so a fresh search shows the same kind of releases. Also remembered across dialogs.
+  const [protocol, setProtocol] = useState<ProtocolFilter>(() => parseProtocolFilter(readChoice(protocolChoiceKey(kind))));
+  // Only seasons have the pack choice. Movies and episodes always show every release.
+  const [pack, setPack] = useState<PackFilter>(() =>
+    kind === "season" ? parsePackFilter(readChoice(PACK_CHOICE_KEY)) : "all",
+  );
+
+  function changeProtocol(value: string) {
+    const next = parseProtocolFilter(value);
+    setProtocol(next);
+    writeChoice(protocolChoiceKey(kind), next);
+  }
+
+  function changePack(value: string) {
+    const next = parsePackFilter(value);
+    setPack(next);
+    writeChoice(PACK_CHOICE_KEY, next);
+  }
 
   useEffect(() => {
     if (startedAttempt.current >= attempt) return;
@@ -83,7 +110,10 @@ export function ReleaseDialog({
     });
   }
 
-  const visible = outcome?.ok ? filterReleases(outcome.releases, protocol) : [];
+  const visible = outcome?.ok ? filterReleases(outcome.releases, protocol, pack) : [];
+  // No packs match, but other releases do. The count line already says so; offer a one-off switch to show them.
+  const packsMissing =
+    kind === "season" && pack === "packs" && outcome?.ok === true && visible.length === 0 && filterReleases(outcome.releases, protocol, "all").length > 0;
 
   return (
     <Dialog
@@ -99,7 +129,7 @@ export function ReleaseDialog({
           {/* Live, so a screen reader hears the new count when the protocol filter changes. */}
           <DialogDescription aria-live="polite">
             {outcome?.ok
-              ? releaseCountLine(visible.length, outcome.totals[protocol], protocol)
+              ? releaseCountLine(visible.length, releaseTotal(outcome.totals, protocol, pack), protocol, pack)
               : "Choose a release to send to the download client."}
           </DialogDescription>
         </DialogHeader>
@@ -132,7 +162,7 @@ export function ReleaseDialog({
               <select
                 aria-label="Protocol"
                 value={protocol}
-                onChange={(e) => setProtocol(parseProtocolFilter(e.target.value))}
+                onChange={(e) => changeProtocol(e.target.value)}
                 className={SELECT_CLASS}
               >
                 {PROTOCOL_FILTERS.map((option) => (
@@ -141,12 +171,34 @@ export function ReleaseDialog({
                   </option>
                 ))}
               </select>
+              {kind === "season" && (
+                <select
+                  aria-label="Season packs"
+                  value={pack}
+                  onChange={(e) => changePack(e.target.value)}
+                  className={SELECT_CLASS}
+                >
+                  {PACK_FILTERS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
               {grabError && (
                 <p role="alert" className="text-sm text-destructive">
                   {grabError}
                 </p>
               )}
             </div>
+            {packsMissing && (
+              <div>
+                {/* Only for this dialog: the remembered choice stays on season packs. */}
+                <Button variant="outline" size="sm" onClick={() => setPack("all")}>
+                  Show all releases
+                </Button>
+              </div>
+            )}
             {visible.length > 0 && (
               // Two lines per release instead of a wide table, so the dialog stays the same size as Add movie.
               <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border">
