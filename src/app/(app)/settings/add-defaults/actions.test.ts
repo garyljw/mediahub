@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArrRequestError } from "@/server/arr/request";
 
 const mocks = vi.hoisted(() => ({
@@ -44,6 +44,10 @@ const RADARR_PROFILES = [{ id: 4, name: "Any" }, { id: 2, name: "HD-1080p" }];
 const RADARR_FOLDERS = [{ id: 7, path: "/invented/movies/", freeSpace: null }];
 const SONARR_PROFILES = [{ id: 3, name: "Standard" }];
 const SONARR_FOLDERS = [{ id: 8, path: "/invented/tv/", freeSpace: null }];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
