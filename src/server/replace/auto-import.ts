@@ -28,6 +28,8 @@ export const REPLACE_IMPORT_INTERVAL_MS = 2 * 60_000;
 
 /** How many of the newest grabbed events the history read asks for. A grab's record is near the top. */
 const HISTORY_LIMIT = 100;
+/** How old a grab must be before its absence from the queue means the download has left it. */
+const QUEUE_GRACE_MS = 10 * 60_000;
 /** Radarr's and Sonarr's history event type for a grab (eventType 1 in both apps). */
 const GRABBED_EVENT = 1;
 
@@ -94,7 +96,7 @@ async function planImportOverExisting(
 }
 
 /** Works through one app's remembered grabs. Errors from the app's requests propagate to runReplaceImports. */
-async function processApp(app: ReplaceApp, rows: PendingReplaceGrab[]): Promise<void> {
+async function processApp(app: ReplaceApp, rows: PendingReplaceGrab[], now: number): Promise<void> {
   await resolveDownloadIds(app, rows);
   const tracked = rows.flatMap((row) => (row.downloadId === null ? [] : [{ row, downloadId: row.downloadId }]));
   if (tracked.length === 0) return;
@@ -107,9 +109,10 @@ async function processApp(app: ReplaceApp, rows: PendingReplaceGrab[]): Promise<
 
   for (const { row, downloadId } of tracked) {
     const items = queue.filter((item) => item.downloadId === downloadId);
-    // Gone from the queue: imported normally, or removed. Nothing left to do.
     if (items.length === 0) {
-      deleteReplaceGrab(row.id);
+      // Gone from the queue: imported normally, or removed. A fresh grab may not be listed yet, because the app
+      // refreshes its queue on its own schedule, so only a grab older than QUEUE_GRACE_MS counts as gone.
+      if (now - row.createdAt >= QUEUE_GRACE_MS) deleteReplaceGrab(row.id);
       continue;
     }
     // Still downloading, or finished without a warning: wait.
@@ -143,7 +146,7 @@ export async function runReplaceImports(now = Date.now()): Promise<void> {
       const rows = pending.filter((row) => row.app === app);
       if (rows.length === 0) continue;
       try {
-        await processApp(app, rows);
+        await processApp(app, rows, now);
       } catch (error) {
         if (!(error instanceof ArrRequestError)) throw error;
         // Not set up yet: nothing to do, and no need to log it every run.

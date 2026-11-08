@@ -157,7 +157,7 @@ const NO_REPLACING: ReplacingDownloadIds = { radarr: new Set(), sonarr: new Set(
  * repeat of an id already seen. A Sonarr row's state, severity, progress and ETA come from its worst item (see
  * pickWorst). Its key uses the smallest item id in the group, so the key doesn't depend on the order the app lists
  * items in. It does change if that item leaves the queue before the rest. With `includeDetails` false (requesters),
- * messages, details and canForceImport are left out. `replacing` marks the rows whose download id is in it (see
+ * messages, details, canForceImport and replacing are left out. `replacing` marks the rows whose download id is in it (see
  * ReplacingDownloadIds). Sorted by compareQueueRows.
  */
 export function toQueueRows(
@@ -190,7 +190,7 @@ export function toQueueRows(
       peek: toPeek(movie),
       ...factsOf(item, state, severity, now, includeDetails),
       canForceImport: includeDetails && canManualImport(item),
-      replacing: typeof item.downloadId === "string" && replacing.radarr.has(item.downloadId),
+      replacing: includeDetails && typeof item.downloadId === "string" && replacing.radarr.has(item.downloadId),
     });
   }
 
@@ -212,7 +212,8 @@ export function toQueueRows(
       peek: toPeek(seriesSource.series),
       ...factsOf(winner, state, severity, now, includeDetails),
       canForceImport: includeDetails && group.items.some(canManualImport),
-      replacing: group.items.some((item) => typeof item.downloadId === "string" && replacing.sonarr.has(item.downloadId)),
+      replacing:
+        includeDetails && group.items.some((item) => typeof item.downloadId === "string" && replacing.sonarr.has(item.downloadId)),
     });
   }
 

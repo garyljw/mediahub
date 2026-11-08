@@ -142,6 +142,16 @@ describe("runReplaceImports", () => {
     expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
   });
 
+  it("keeps a fresh grab that isn't in the queue yet", async () => {
+    const now = 1_000_000_000;
+    mocks.pendingReplaceGrabs.mockReturnValue([{ ...pending({ id: 1, app: "sonarr", downloadId: "DL-1" }), createdAt: now - 60_000 }]);
+    mocks.fetchEpisodeQueue.mockResolvedValue([]);
+
+    await runReplaceImports(now);
+
+    expect(mocks.deleteReplaceGrab).not.toHaveBeenCalled();
+  });
+
   it("sends the manual import for only the files that are just not an upgrade, and forgets the grab", async () => {
     mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
     mocks.fetchEpisodeQueue.mockResolvedValue([queueItem(5, "DL-1", "completed", "warning")]);

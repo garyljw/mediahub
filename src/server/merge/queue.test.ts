@@ -338,4 +338,12 @@ describe("toQueueRows replacing flag", () => {
     });
     expect(list.some((row) => row.replacing)).toBe(false);
   });
+
+  it("is never set for requesters", () => {
+    const list = toQueueRows(movieItems, episodeItems, NOW, {
+      includeDetails: false,
+      replacing: { radarr: new Set(["LEAK-DL-ALPHA"]), sonarr: new Set(["LEAK-DL-PACK"]) },
+    });
+    expect(list.some((row) => row.replacing)).toBe(false);
+  });
 });
