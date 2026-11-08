@@ -56,17 +56,27 @@ export type ReleaseRow = {
   rejections: string[];
   /** TV only: "Season pack", "S02E05" or "S02E05-E06". Null for movies and for releases Sonarr hasn't mapped. */
   episodes: string | null;
+  /** TV only: true when Sonarr marks the release as a full-season pack. */
+  fullSeason: boolean;
 };
 
 /**
- * Most releases returned per protocol for one search. The app can return hundreds; the dialog only needs the
- * best ones. The cap is per protocol, so filtering the dialog to torrents (or Usenet) still shows the best
- * torrents even when the app ranks hundreds of Usenet releases above them.
+ * Most rows returned per kind for one search: at most this many season packs and at most this many other
+ * releases. The app can return hundreds; the dialog only needs the best ones. Capping the two kinds separately
+ * means episodes can never crowd season packs out of the list.
  */
-export const MAX_RELEASES_PER_PROTOCOL = 200;
+export const MAX_RELEASES_PER_KIND = 1000;
 
-/** How many usable releases the app found: all of them, and per protocol. Unknown-protocol releases count only in `all`. */
-export type ReleaseTotals = { all: number; usenet: number; torrent: number };
+/**
+ * How many usable releases the app found: all of them, and per protocol. Unknown-protocol releases count only in `all`.
+ * `packs` counts the full-season releases the same way.
+ */
+export type ReleaseTotals = {
+  all: number;
+  usenet: number;
+  torrent: number;
+  packs: { all: number; usenet: number; torrent: number };
+};
 /** Longest title sent to the browser, in code points. Longer titles are cut and end with an ellipsis. */
 const MAX_TITLE = 300;
 /** Most rejection reasons shown per release. */
@@ -151,8 +161,8 @@ export function episodesLabel(release: Pick<ReleaseLike, "fullSeason" | "mappedS
 /**
  * Pure: maps the app's releases to dialog rows, in upstream order. The app returns them best-first by its own
  * ranking, and that order is kept. Skips a release without a guid, without a positive indexer id, or without a
- * title. `totals` counts every usable release, and `rows` holds the first MAX_RELEASES_PER_PROTOCOL of each
- * protocol (unknown is its own group), still in the app's order.
+ * title. `totals` counts every usable release, and `rows` holds the first MAX_RELEASES_PER_KIND season packs and
+ * the first MAX_RELEASES_PER_KIND other releases, still in the app's order.
  * `makeToken` runs only for returned rows that the app allows to be grabbed.
  */
 export function toReleaseRows(
@@ -160,8 +170,8 @@ export function toReleaseRows(
   makeToken: (key: { guid: string; indexerId: number; title: string }) => string,
 ): { rows: ReleaseRow[]; totals: ReleaseTotals } {
   const rows: ReleaseRow[] = [];
-  const totals: ReleaseTotals = { all: 0, usenet: 0, torrent: 0 };
-  const kept: Record<ReleaseRow["protocol"], number> = { usenet: 0, torrent: 0, unknown: 0 };
+  const totals: ReleaseTotals = { all: 0, usenet: 0, torrent: 0, packs: { all: 0, usenet: 0, torrent: 0 } };
+  const kept = { packs: 0, others: 0 };
 
   for (const release of releases) {
     const guid = text(release.guid);
@@ -171,10 +181,16 @@ export function toReleaseRows(
       continue;
     }
     const protocol = protocolOf(release.protocol);
+    const fullSeason = release.fullSeason === true;
     totals.all += 1;
     if (protocol !== "unknown") totals[protocol] += 1;
-    if (kept[protocol] >= MAX_RELEASES_PER_PROTOCOL) continue;
-    kept[protocol] += 1;
+    if (fullSeason) {
+      totals.packs.all += 1;
+      if (protocol !== "unknown") totals.packs[protocol] += 1;
+    }
+    const group = fullSeason ? "packs" : "others";
+    if (kept[group] >= MAX_RELEASES_PER_KIND) continue;
+    kept[group] += 1;
 
     // Array.from splits by code point, so the cut never splits a surrogate pair.
     const titleChars = Array.from(title);
@@ -205,6 +221,7 @@ export function toReleaseRows(
       approved: release.approved === true,
       rejections,
       episodes: episodesLabel(release),
+      fullSeason,
     });
   }
 

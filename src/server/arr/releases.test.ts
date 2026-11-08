@@ -38,7 +38,7 @@ vi.mock("./release-cache", async () => {
   };
 });
 
-import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, episodesLabel, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES_PER_PROTOCOL, type ReleaseLike, type ReleaseRow } from "./releases";
+import { ReleaseGrabError, grabRelease, searchReleases, toReleaseRows, episodesLabel, RELEASE_GRAB_TIMEOUT_MS, RELEASE_SEARCH_TIMEOUT_MS, MAX_RELEASES_PER_KIND, type ReleaseLike, type ReleaseRow } from "./releases";
 
 const ALLOWED_KEYS = [
   "ageHours",
@@ -46,6 +46,7 @@ const ALLOWED_KEYS = [
   "customFormatScore",
   "customFormats",
   "episodes",
+  "fullSeason",
   "indexer",
   "languages",
   "leechers",
@@ -59,7 +60,7 @@ const ALLOWED_KEYS = [
 ].sort();
 
 /** A release with the given overrides, usable unless a field is overridden to break it. */
-function release(overrides: Partial<ReleaseResource> = {}): ReleaseResource {
+function release(overrides: Partial<ReleaseResource> & { fullSeason?: boolean } = {}): ReleaseResource & { fullSeason?: boolean } {
   return { guid: "https://indexer.test/details/x", indexerId: 1, title: "Some.Release", approved: true, downloadAllowed: true, rejections: [], ...overrides };
 }
 
@@ -77,7 +78,7 @@ describe("toReleaseRows", () => {
   const { rows, totals } = mapRows(releases);
 
   it("keeps only usable releases, in upstream order", () => {
-    expect(totals).toEqual({ all: 4, usenet: 3, torrent: 1 });
+    expect(totals).toEqual({ all: 4, usenet: 3, torrent: 1, packs: { all: 0, usenet: 0, torrent: 0 } });
     expect(rows.map((r) => r.title)).toEqual([
       "Starfall.Protocol.2019.2160p.BluRay.x265-GRP",
       "Starfall.Protocol.2019.1080p.WEB-DL.x264-TOR",
@@ -124,7 +125,14 @@ describe("toReleaseRows", () => {
       approved: true,
       rejections: [],
       episodes: null,
+      fullSeason: false,
     });
+  });
+
+  it("marks a full-season release, and leaves a Radarr release without the field as not a pack", () => {
+    const [pack, movie] = mapRows([release({ fullSeason: true }), release({ title: "Movie.2020" })]).rows;
+    expect(pack.fullSeason).toBe(true);
+    expect(movie.fullSeason).toBe(false);
   });
 
   it("maps a rejected torrent with its peers and rejection reasons", () => {
@@ -197,28 +205,47 @@ describe("toReleaseRows", () => {
     });
   });
 
-  it("returns at most MAX_RELEASES_PER_PROTOCOL rows per group but counts every usable release", () => {
-    const many = Array.from({ length: MAX_RELEASES_PER_PROTOCOL + 50 }, (_, i) => release({ title: `Release ${i}`, guid: `g${i}` }));
+  it("returns at most MAX_RELEASES_PER_KIND non-pack rows but counts every usable release", () => {
+    const many = Array.from({ length: MAX_RELEASES_PER_KIND + 50 }, (_, i) => release({ title: `Release ${i}`, guid: `g${i}` }));
     const makeToken = vi.fn(() => "t");
     const result = toReleaseRows(many, makeToken);
-    expect(MAX_RELEASES_PER_PROTOCOL).toBe(200);
-    expect(result.rows).toHaveLength(MAX_RELEASES_PER_PROTOCOL);
+    expect(MAX_RELEASES_PER_KIND).toBe(1000);
+    expect(result.rows).toHaveLength(MAX_RELEASES_PER_KIND);
     // These have no protocol, so they count only in `all`.
-    expect(result.totals).toEqual({ all: MAX_RELEASES_PER_PROTOCOL + 50, usenet: 0, torrent: 0 });
-    expect(makeToken).toHaveBeenCalledTimes(MAX_RELEASES_PER_PROTOCOL);
+    expect(result.totals).toEqual({
+      all: MAX_RELEASES_PER_KIND + 50,
+      usenet: 0,
+      torrent: 0,
+      packs: { all: 0, usenet: 0, torrent: 0 },
+    });
+    expect(makeToken).toHaveBeenCalledTimes(MAX_RELEASES_PER_KIND);
     expect(result.rows[0].title).toBe("Release 0");
   });
 
-  it("caps each protocol separately, so torrents ranked below 200 Usenet releases are still returned", () => {
-    const usenet = Array.from({ length: 300 }, (_, i) => release({ protocol: "usenet", title: `U${i}`, guid: `u${i}` }));
-    const torrents = Array.from({ length: 30 }, (_, i) => release({ protocol: "torrent", title: `T${i}`, guid: `t${i}` }));
-    const result = mapRows([...usenet, ...torrents]);
-    expect(result.totals).toEqual({ all: 330, usenet: 300, torrent: 30 });
-    expect(result.rows.filter((r) => r.protocol === "usenet")).toHaveLength(MAX_RELEASES_PER_PROTOCOL);
-    expect(result.rows.filter((r) => r.protocol === "torrent")).toHaveLength(30);
-    // Radarr's order is kept: the kept Usenet releases come first, then the torrents.
-    expect(result.rows[0].title).toBe("U0");
-    expect(result.rows[MAX_RELEASES_PER_PROTOCOL].title).toBe("T0");
+  it("keeps season packs ranked after the episode cap, so episodes can't crowd them out", () => {
+    const episodes = Array.from({ length: MAX_RELEASES_PER_KIND + 50 }, (_, i) =>
+      release({ protocol: "usenet", fullSeason: false, title: `E${i}`, guid: `e${i}` }),
+    );
+    const packs = [
+      release({ protocol: "usenet", fullSeason: true, title: "P-usenet-1", guid: "p1" }),
+      release({ protocol: "torrent", fullSeason: true, title: "P-torrent-1", guid: "p2" }),
+      release({ protocol: "usenet", fullSeason: true, title: "P-usenet-2", guid: "p3" }),
+      release({ protocol: "torrent", fullSeason: true, title: "P-torrent-2", guid: "p4" }),
+    ];
+    const result = mapRows([...episodes, ...packs]);
+    expect(result.rows.filter((r) => r.fullSeason).map((r) => r.title)).toEqual([
+      "P-usenet-1",
+      "P-torrent-1",
+      "P-usenet-2",
+      "P-torrent-2",
+    ]);
+    expect(result.rows.filter((r) => !r.fullSeason)).toHaveLength(MAX_RELEASES_PER_KIND);
+    expect(result.totals).toEqual({
+      all: MAX_RELEASES_PER_KIND + 54,
+      usenet: MAX_RELEASES_PER_KIND + 52,
+      torrent: 2,
+      packs: { all: 4, usenet: 2, torrent: 2 },
+    });
   });
 });
 

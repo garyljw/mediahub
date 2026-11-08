@@ -245,6 +245,7 @@ export function EpisodeSearchButton({
 function ReleasePickButton({
   name,
   subject,
+  kind,
   inSummary,
   search,
 }: {
@@ -252,6 +253,7 @@ function ReleasePickButton({
   name: string;
   /** The dialog heading's subject, e.g. "Breaking Bad · Season 2". */
   subject: string;
+  kind: "season" | "episode";
   inSummary: boolean;
   search: () => Promise<ReleaseSearchResult>;
 }) {
@@ -278,6 +280,7 @@ function ReleasePickButton({
       {open && (
         <ReleaseDialog
           subject={subject}
+          kind={kind}
           search={search}
           grab={(token) => grabSeriesRelease({ token })}
           onClose={() => setOpen(false)}
@@ -308,6 +311,7 @@ export function SeasonReleaseButton({
     <ReleasePickButton
       name={label}
       subject={`${seriesTitle} · ${label}`}
+      kind="season"
       inSummary
       search={() => findSeriesReleases({ seriesId, seasonNumber })}
     />
@@ -333,6 +337,7 @@ export function EpisodeReleaseButton({
     <ReleasePickButton
       name={`${seasonLabel} episode ${episodeNumber}`}
       subject={`${seriesTitle} · ${episodeCode(seasonNumber, episodeNumber)}`}
+      kind="episode"
       inSummary={false}
       search={() => findSeriesReleases({ episodeId })}
     />

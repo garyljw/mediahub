@@ -24,15 +24,66 @@ export const PROTOCOL_FILTERS: { value: ProtocolFilter; label: string }[] = [
   { value: "torrent", label: "Torrent" },
 ];
 
-/** The dropdown's value as a ProtocolFilter, or "all" for anything unexpected. */
-export function parseProtocolFilter(value: string): ProtocolFilter {
+/** The dropdown's value as a ProtocolFilter, or "all" for anything unexpected (including null). */
+export function parseProtocolFilter(value: string | null): ProtocolFilter {
   return PROTOCOL_FILTERS.find((option) => option.value === value)?.value ?? "all";
 }
 
-/** Pure: the releases that match the protocol filter, in the order given (the app's best-first order). */
-export function filterReleases(releases: ReleaseRow[], protocol: ProtocolFilter): ReleaseRow[] {
-  if (protocol === "all") return releases;
-  return releases.filter((release) => release.protocol === protocol);
+/** Which releases of a season search the dialog shows: full-season packs, single episodes, or both. */
+export type PackFilter = "packs" | "episodes" | "all";
+
+/** The season dialog's pack dropdown options, in order. */
+export const PACK_FILTERS: { value: PackFilter; label: string }[] = [
+  { value: "packs", label: "Season packs" },
+  { value: "episodes", label: "Episodes" },
+  { value: "all", label: "All" },
+];
+
+/** The dropdown's value as a PackFilter. Season packs come first, so anything unexpected (including null) means "packs". */
+export function parsePackFilter(value: string | null): PackFilter {
+  return PACK_FILTERS.find((option) => option.value === value)?.value ?? "packs";
+}
+
+/** Pure: the releases that match both filters, in the order given (the app's best-first order). */
+export function filterReleases(releases: ReleaseRow[], protocol: ProtocolFilter, pack: PackFilter = "all"): ReleaseRow[] {
+  if (protocol === "all" && pack === "all") return releases;
+  return releases.filter(
+    (release) =>
+      (protocol === "all" || release.protocol === protocol) &&
+      (pack === "all" || (pack === "packs") === release.fullSeason),
+  );
+}
+
+/** The total for one protocol and pack filter, from the search totals. Episodes are the usable releases that aren't packs. */
+export function releaseTotal(totals: ReleaseTotals, protocol: ProtocolFilter, pack: PackFilter): number {
+  if (pack === "packs") return totals.packs[protocol];
+  if (pack === "episodes") return totals[protocol] - totals.packs[protocol];
+  return totals[protocol];
+}
+
+/** Where a dialog kind remembers its protocol choice. */
+export function protocolChoiceKey(kind: "movie" | "season" | "episode"): string {
+  return `mediahub.releaseDialog.${kind}.protocol`;
+}
+
+/** Where the season dialog remembers its pack choice. */
+export const PACK_CHOICE_KEY = "mediahub.releaseDialog.season.pack";
+
+/** Remembered dialog choices. Storage can be missing or throw (private mode, blocked site data), so failures are ignored. */
+export function readChoice(key: string): string | null {
+  try {
+    return globalThis.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function writeChoice(key: string, value: string): void {
+  try {
+    globalThis.localStorage.setItem(key, value);
+  } catch {
+    // Not remembered this time. The dialog still works.
+  }
 }
 
 /** Two digits, zero-padded: 5 becomes "05". Hand-written, not Intl, for the same reason as the other helpers here. */
@@ -66,15 +117,24 @@ export function grabbedMessage(title: string): string {
   return `Sent "${title}" to the download client.`;
 }
 
+/** The noun for each pack filter, singular and plural. */
+const RELEASE_NOUN: Record<PackFilter, { one: string; many: string }> = {
+  all: { one: "release", many: "releases" },
+  packs: { one: "season pack", many: "season packs" },
+  episodes: { one: "episode release", many: "episode releases" },
+};
+
 /**
  * "No releases found.", "1 release", "12 releases", or "Showing the top 200 of 350 releases". With a protocol,
- * it names it: "No torrent releases found.", "12 Usenet releases".
+ * it names it: "No torrent releases found.", "12 Usenet releases". The pack filter changes the noun:
+ * "No season packs found.", "1 Usenet season pack", "Showing the top 1,000 of 1,200 torrent season packs".
  */
-export function releaseCountLine(shown: number, total: number, protocol: ProtocolFilter = "all"): string {
+export function releaseCountLine(shown: number, total: number, protocol: ProtocolFilter = "all", pack: PackFilter = "all"): string {
   const kind = protocol === "usenet" ? "Usenet " : protocol === "torrent" ? "torrent " : "";
-  if (total === 0) return `No ${kind}releases found.`;
-  if (shown === total) return `${formatCount(total)} ${kind}${total === 1 ? "release" : "releases"}`;
-  return `Showing the top ${formatCount(shown)} of ${formatCount(total)} ${kind}releases`;
+  const noun = RELEASE_NOUN[pack];
+  if (total === 0) return `No ${kind}${noun.many} found.`;
+  if (shown === total) return `${formatCount(total)} ${kind}${total === 1 ? noun.one : noun.many}`;
+  return `Showing the top ${formatCount(shown)} of ${formatCount(total)} ${kind}${noun.many}`;
 }
 
 /**
