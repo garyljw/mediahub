@@ -52,7 +52,6 @@ import { forceImportQueueItem, loadForceImport, removeQueueItem } from "./action
 type MovieQueueItem = RadarrComponents["schemas"]["QueueResource"];
 type EpisodeQueueItem = SonarrComponents["schemas"]["QueueResource"];
 
-const DENIED = "You don't have permission to remove downloads.";
 const OPTIONS = { removeFromClient: true, blocklist: false, skipRedownload: false };
 
 // A Sonarr season pack: three items, one download, smallest id 101.
@@ -76,16 +75,12 @@ const STUCK_MOVIE: MovieQueueItem[] = [
 ];
 // A Sonarr download: one finished item left for import, and one still downloading, so the row counts as stuck.
 const STUCK_PACK: EpisodeQueueItem[] = [
-  {
-    id: 101,
-    seriesId: 10,
-    episodeId: 1001,
-    downloadId: "LEAK-DL-DELTA",
-    status: "completed",
-    trackedDownloadStatus: "warning",
-  },
+  { id: 101, seriesId: 10, episodeId: 1001, downloadId: "LEAK-DL-DELTA", status: "completed", trackedDownloadStatus: "warning" },
   { id: 102, seriesId: 10, episodeId: 1002, downloadId: "LEAK-DL-DELTA", status: "downloading", trackedDownloadStatus: "ok" },
 ];
+
+const READS = [mocks.fetchMovieQueue, mocks.fetchEpisodeQueue, mocks.fetchMovieManualImport, mocks.fetchEpisodeManualImport];
+const WRITES = [mocks.removeMovieQueueItem, mocks.removeEpisodeQueueItem, mocks.startMovieManualImport, mocks.startEpisodeManualImport];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -104,41 +99,61 @@ beforeEach(() => {
 function input(overrides: Record<string, unknown> = {}) {
   return { app: "sonarr", queueIds: [101, 102, 103], ...OPTIONS, ...overrides };
 }
+function loadInput(overrides: Record<string, unknown> = {}) {
+  return { app: "sonarr", queueIds: [101, 102], ...overrides };
+}
+function forceInput(overrides: Record<string, unknown> = {}) {
+  return { app: "sonarr", queueIds: [101, 102], fileIds: [202], ...overrides };
+}
+function movieLoad() {
+  return loadInput({ app: "radarr", queueIds: [7] });
+}
+function movieForce(fileIds: number[]) {
+  return forceInput({ app: "radarr", queueIds: [7], fileIds });
+}
+const queueStuckMovie = () => mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
+const queueStuckPack = () => mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
 
-function nothingRemoved() {
-  expect(mocks.removeMovieQueueItem).not.toHaveBeenCalled();
-  expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
+/** Nothing was read from or sent to Radarr or Sonarr, and nothing refreshed. */
+function expectNoUpstream() {
+  for (const mock of [...READS, ...WRITES]) expect(mock).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
 }
 
-describe("removeQueueItem authorization", () => {
-  it("checks for the admin role only", async () => {
-    await removeQueueItem(input());
+/** Nothing was removed or imported, and nothing refreshed. Reads are allowed. */
+function expectNoWrites() {
+  for (const mock of WRITES) expect(mock).not.toHaveBeenCalled();
+  expect(mocks.refresh).not.toHaveBeenCalled();
+}
+
+describe("authorization", () => {
+  type AuthRow = { name: string; call: () => Promise<unknown>; denied: string };
+
+  // One row per action, all admin-only. Each call uses valid input, so only the role check can stop it.
+  // 401 and 403 take the same branch in each action, so 403 stands for both.
+  const rows: AuthRow[] = [
+    { name: "removeQueueItem", call: () => removeQueueItem(input()), denied: "You don't have permission to remove downloads." },
+    { name: "loadForceImport", call: () => loadForceImport(movieLoad()), denied: DENIED_IMPORT },
+    { name: "forceImportQueueItem", call: () => forceImportQueueItem(movieForce([101])), denied: DENIED_IMPORT },
+  ];
+
+  it.each(rows)("$name checks for the admin role only", async ({ call }) => {
+    await call();
     expect(mocks.requireRole).toHaveBeenCalledWith("admin");
   });
 
-  it("rejects a requester and never reads or changes the queue", async () => {
+  it.each(rows)("$name refuses a requester, and reads and sends nothing", async ({ call, denied }) => {
     mocks.requireRole.mockRejectedValue(new AuthzError(403));
 
-    expect(await removeQueueItem(input())).toEqual({ ok: false, error: DENIED });
-    expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    nothingRemoved();
+    expect(await call()).toEqual({ ok: false, error: denied });
+    expectNoUpstream();
   });
 
-  it("rejects a signed-out caller (401) and never calls Radarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await removeQueueItem(input({ app: "radarr", queueIds: [7] }))).toEqual({ ok: false, error: DENIED });
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    nothingRemoved();
-  });
-
-  it("rethrows errors that are not authorization failures", async () => {
+  it.each(rows)("$name rethrows a role-check error that is not an authorization failure", async ({ call }) => {
     mocks.requireRole.mockRejectedValue(new Error("database down"));
 
-    await expect(removeQueueItem(input())).rejects.toThrow("database down");
-    nothingRemoved();
+    await expect(call()).rejects.toThrow("database down");
+    expectNoUpstream();
   });
 });
 
@@ -159,24 +174,23 @@ describe("removeQueueItem input validation", () => {
     ["not an object", "sonarr"],
   ])("rejects %s without reading or changing the queue", async (_label, value) => {
     expect(await removeQueueItem(value)).toEqual({ ok: false, error: "Invalid change." });
-    expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    nothingRemoved();
+    expectNoUpstream();
   });
 });
 
 describe("removeQueueItem routing and results", () => {
-  it("removes a Radarr movie by its queued id, then refreshes", async () => {
-    expect(
-      await removeQueueItem(input({ app: "radarr", queueIds: [7], blocklist: true, skipRedownload: true })),
-    ).toEqual({ ok: true });
-    expect(mocks.removeMovieQueueItem).toHaveBeenCalledWith(7, {
-      removeFromClient: true,
-      blocklist: true,
-      skipRedownload: true,
+  it("removes a Radarr movie by its queued id with the flags as sent, then refreshes", async () => {
+    expect(await removeQueueItem(input({ app: "radarr", queueIds: [7], blocklist: true, skipRedownload: true }))).toEqual({
+      ok: true,
     });
+    expect(mocks.removeMovieQueueItem).toHaveBeenCalledWith(7, { removeFromClient: true, blocklist: true, skipRedownload: true });
     expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the flags on unchanged to a Sonarr removal; the Arr client decides what skipRedownload sends", async () => {
+    await removeQueueItem(input({ blocklist: false, skipRedownload: true }));
+    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(101, { removeFromClient: true, blocklist: false, skipRedownload: true });
   });
 
   it("accepts up to 1000 ids, the most a row can hold", async () => {
@@ -218,166 +232,148 @@ describe("removeQueueItem routing and results", () => {
     expect(mocks.fetchEpisodeQueue).toHaveBeenCalledWith({ includeSeries: false, includeEpisode: false });
   });
 
-  it("refuses ids that are only in the other app's queue", async () => {
-    // 7 is a Radarr item. Asking Sonarr to remove it must not reach Radarr's queue.
-    mocks.fetchMovieQueue.mockResolvedValue([{ id: 7, movieId: 70 }]);
-    mocks.fetchEpisodeQueue.mockResolvedValue([]);
-
-    expect(await removeQueueItem(input({ app: "sonarr", queueIds: [7] }))).toEqual({
-      ok: false,
-      error: "That download is no longer in the queue.",
-    });
+  it("says the row is gone and refreshes when none of its ids is in this app's queue, and never reads the other app's queue", async () => {
+    // 7 is a Radarr item. Asking Sonarr to remove it must not read or change Radarr's queue.
+    expect(await removeQueueItem(input({ app: "sonarr", queueIds: [7] }))).toEqual({ ok: false, error: NO_LONGER });
     expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
     expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
     expect(mocks.removeMovieQueueItem).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
+});
 
-  it("passes the flags on unchanged; the Arr client decides what skipRedownload sends", async () => {
-    await removeQueueItem(input({ blocklist: false, skipRedownload: true }));
-    expect(mocks.removeEpisodeQueueItem).toHaveBeenCalledWith(101, {
-      removeFromClient: true,
-      blocklist: false,
-      skipRedownload: true,
-    });
+describe("removeQueueItem and force import: upstream failures", () => {
+  const READ_FAILURES = [
+    {
+      name: "removeQueueItem, Sonarr's queue read is an HTTP 500",
+      fail: mocks.fetchEpisodeQueue,
+      error: new ArrRequestError("Sonarr queue request failed: HTTP 500", "http", 500),
+      call: () => removeQueueItem(input()),
+      message: "Sonarr didn't answer. Nothing was removed.",
+      log: "Queue remove: Sonarr queue request failed: HTTP 500",
+    },
+    {
+      name: "loadForceImport, Sonarr's scan times out",
+      prepare: queueStuckPack,
+      fail: mocks.fetchEpisodeManualImport,
+      error: new ArrRequestError("Sonarr manual import request failed: timed out", "timeout"),
+      call: () => loadForceImport(loadInput()),
+      message: "Sonarr didn't answer. Try again.",
+      log: "Force import: Sonarr manual import request failed: timed out",
+    },
+    {
+      name: "loadForceImport, Radarr's queue read is an HTTP 500",
+      fail: mocks.fetchMovieQueue,
+      error: new ArrRequestError("Radarr queue request failed: HTTP 500", "http", 500),
+      call: () => loadForceImport(movieLoad()),
+      message: "Radarr didn't answer. Try again.",
+      log: "Force import: Radarr queue request failed: HTTP 500",
+    },
+    {
+      name: "forceImportQueueItem, Radarr's queue read has a network error",
+      fail: mocks.fetchMovieQueue,
+      error: new ArrRequestError("Radarr queue request failed: network error", "network"),
+      call: () => forceImportQueueItem(movieForce([101])),
+      message: "Radarr didn't answer. Nothing was imported.",
+      log: "Force import: Radarr queue request failed: network error",
+    },
+    {
+      name: "forceImportQueueItem, Sonarr's scan is an HTTP 500",
+      prepare: queueStuckPack,
+      fail: mocks.fetchEpisodeManualImport,
+      error: new ArrRequestError("Sonarr manual import request failed: HTTP 500", "http", 500),
+      call: () => forceImportQueueItem(forceInput({ fileIds: [202] })),
+      message: "Sonarr didn't answer. Nothing was imported.",
+      log: "Force import: Sonarr manual import request failed: HTTP 500",
+    },
+  ];
+
+  it.each(READ_FAILURES)("$name says the app didn't answer, logs only the safe message, and sends nothing", async ({ prepare, fail, error, call, message, log }) => {
+    prepare?.();
+    fail.mockRejectedValue(error);
+
+    expect(await call()).toEqual({ ok: false, error: message });
+    expect(console.error).toHaveBeenCalledWith(log);
+    expectNoWrites();
+    // A failed queue read must stop the action before it scans for files.
+    if (fail === mocks.fetchMovieQueue || fail === mocks.fetchEpisodeQueue) {
+      expect(mocks.fetchMovieManualImport).not.toHaveBeenCalled();
+      expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
+    }
   });
 
-  it("says the row is gone and refreshes, when none of its ids is in the queue", async () => {
-    expect(await removeQueueItem(input({ queueIds: [999, 1000] }))).toEqual({
-      ok: false,
-      error: "That download is no longer in the queue.",
-    });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    expect(mocks.removeEpisodeQueueItem).not.toHaveBeenCalled();
-  });
+  const WRITE_FAILURES = [
+    {
+      name: "removeQueueItem, Radarr answers 404",
+      fail: mocks.removeMovieQueueItem,
+      error: new ArrRequestError("Radarr queue remove request failed: HTTP 404", "http", 404),
+      call: () => removeQueueItem(input({ app: "radarr", queueIds: [7] })),
+      message: "Radarr didn't accept it. Try again.",
+      log: "Queue remove: Radarr queue remove request failed: HTTP 404",
+    },
+    {
+      name: "removeQueueItem, Radarr answers 500",
+      fail: mocks.removeMovieQueueItem,
+      error: new ArrRequestError("Radarr queue remove request failed: HTTP 500", "http", 500),
+      call: () => removeQueueItem(input({ app: "radarr", queueIds: [7] })),
+      message: "Radarr didn't confirm it. It may still have been removed, so check the queue.",
+      log: "Queue remove: Radarr queue remove request failed: HTTP 500",
+    },
+    {
+      name: "removeQueueItem, Sonarr times out",
+      fail: mocks.removeEpisodeQueueItem,
+      error: new ArrRequestError("Sonarr queue remove request failed: timed out", "timeout"),
+      call: () => removeQueueItem(input()),
+      message: "Sonarr didn't confirm it. It may still have been removed, so check the queue.",
+      log: "Queue remove: Sonarr queue remove request failed: timed out",
+    },
+    {
+      name: "forceImportQueueItem, Radarr answers 400",
+      prepare: queueStuckMovie,
+      fail: mocks.startMovieManualImport,
+      error: new ArrRequestError("Radarr manual import command request failed: HTTP 400", "http", 400),
+      call: () => forceImportQueueItem(movieForce([101])),
+      message: "Radarr didn't accept it. Try again.",
+      log: "Force import: Radarr manual import command request failed: HTTP 400",
+    },
+    {
+      name: "forceImportQueueItem, Sonarr times out on the command",
+      prepare: queueStuckPack,
+      fail: mocks.startEpisodeManualImport,
+      error: new ArrRequestError("Sonarr manual import command request failed: timed out", "timeout"),
+      call: () => forceImportQueueItem(forceInput({ fileIds: [202] })),
+      message: "Sonarr didn't confirm it. It may still have been started, so check the queue.",
+      log: "Force import: Sonarr manual import command request failed: timed out",
+    },
+  ];
 
-  it("says the app didn't answer when the queue read fails, and removes nothing", async () => {
-    mocks.fetchEpisodeQueue.mockRejectedValue(new ArrRequestError("Sonarr queue request failed: HTTP 500", "http", 500));
+  // A 4xx means the app refused the write. Any other failure, including a timeout, might still have happened, so the
+  // message says so and the user checks before retrying. Refresh is not called in either case.
+  it.each(WRITE_FAILURES)("$name says the write failed, logs only the safe message, and does not refresh", async ({ prepare, fail, error, call, message, log }) => {
+    prepare?.();
+    fail.mockRejectedValue(error);
 
-    expect(await removeQueueItem(input())).toEqual({ ok: false, error: "Sonarr didn't answer. Nothing was removed." });
-    expect(console.error).toHaveBeenCalledWith("Queue remove: Sonarr queue request failed: HTTP 500");
-    nothingRemoved();
-  });
-
-  it("says the app didn't accept a 4xx, names it, logs only the safe message, and does not refresh", async () => {
-    mocks.removeMovieQueueItem.mockRejectedValue(
-      new ArrRequestError("Radarr queue remove request failed: HTTP 404", "http", 404),
-    );
-
-    expect(await removeQueueItem(input({ app: "radarr", queueIds: [7] }))).toEqual({
-      ok: false,
-      error: "Radarr didn't accept it. Try again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Queue remove: Radarr queue remove request failed: HTTP 404");
+    expect(await call()).toEqual({ ok: false, error: message });
+    expect(console.error).toHaveBeenCalledWith(log);
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("says Sonarr didn't confirm a timeout, and that the download may have been removed", async () => {
-    mocks.removeEpisodeQueueItem.mockRejectedValue(
-      new ArrRequestError("Sonarr queue remove request failed: timed out", "timeout"),
-    );
+  const RETHROWS = [
+    { name: "removeQueueItem", fail: mocks.removeEpisodeQueueItem, call: () => removeQueueItem(input()) },
+    { name: "loadForceImport", prepare: queueStuckMovie, fail: mocks.fetchMovieManualImport, call: () => loadForceImport(movieLoad()) },
+    { name: "forceImportQueueItem", prepare: queueStuckMovie, fail: mocks.startMovieManualImport, call: () => forceImportQueueItem(movieForce([101])) },
+  ];
 
-    expect(await removeQueueItem(input())).toEqual({
-      ok: false,
-      error: "Sonarr didn't confirm it. It may still have been removed, so check the queue.",
-    });
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
+  it.each(RETHROWS)("$name rethrows an error that is not an Arr request failure", async ({ prepare, fail, call }) => {
+    prepare?.();
+    fail.mockRejectedValue(new Error("bug"));
 
-  it("says Radarr didn't confirm a 5xx, since it may have been done", async () => {
-    mocks.removeMovieQueueItem.mockRejectedValue(
-      new ArrRequestError("Radarr queue remove request failed: HTTP 500", "http", 500),
-    );
-
-    expect(await removeQueueItem(input({ app: "radarr", queueIds: [7] }))).toEqual({
-      ok: false,
-      error: "Radarr didn't confirm it. It may still have been removed, so check the queue.",
-    });
-  });
-
-  it("rethrows errors that are not Arr request failures", async () => {
-    mocks.removeEpisodeQueueItem.mockRejectedValue(new Error("bug"));
-
-    await expect(removeQueueItem(input())).rejects.toThrow("bug");
+    await expect(call()).rejects.toThrow("bug");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
 
-function loadInput(overrides: Record<string, unknown> = {}) {
-  return { app: "sonarr", queueIds: [101, 102], ...overrides };
-}
-
-function forceInput(overrides: Record<string, unknown> = {}) {
-  return { app: "sonarr", queueIds: [101, 102], fileIds: [202], ...overrides };
-}
-
-function movieLoad() {
-  return loadInput({ app: "radarr", queueIds: [7] });
-}
-
-function movieForce(fileIds: number[]) {
-  return forceInput({ app: "radarr", queueIds: [7], fileIds });
-}
-
-function noImportRead() {
-  expect(mocks.fetchMovieManualImport).not.toHaveBeenCalled();
-  expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
-}
-
-function nothingImported() {
-  expect(mocks.startMovieManualImport).not.toHaveBeenCalled();
-  expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
-}
-
-describe("loadForceImport and forceImportQueueItem authorization", () => {
-  it("checks for the admin role in both actions", async () => {
-    await loadForceImport(movieLoad());
-    await forceImportQueueItem(movieForce([101]));
-    expect(mocks.requireRole).toHaveBeenCalledTimes(2);
-    expect(mocks.requireRole).toHaveBeenNthCalledWith(1, "admin");
-    expect(mocks.requireRole).toHaveBeenNthCalledWith(2, "admin");
-  });
-
-  it("denies a requester in loadForceImport without reading any queue or scan", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: DENIED_IMPORT });
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
-    noImportRead();
-  });
-
-  it("denies a requester in forceImportQueueItem without reading or sending anything", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(403));
-
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({ ok: false, error: DENIED_IMPORT });
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    noImportRead();
-    nothingImported();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("denies a signed-out caller (401) without calling Radarr or Sonarr", async () => {
-    mocks.requireRole.mockRejectedValue(new AuthzError(401));
-
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({ ok: false, error: DENIED_IMPORT });
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: DENIED_IMPORT });
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    noImportRead();
-    nothingImported();
-  });
-
-  it("rethrows errors from the role check", async () => {
-    mocks.requireRole.mockRejectedValue(new Error("database down"));
-
-    await expect(loadForceImport(movieLoad())).rejects.toThrow("database down");
-    await expect(forceImportQueueItem(movieForce([101]))).rejects.toThrow("database down");
-    noImportRead();
-    nothingImported();
-  });
-});
-
-describe("loadForceImport and forceImportQueueItem input validation", () => {
+describe("loadForceImport input validation", () => {
   it.each([
     ["extra keys", loadInput({ path: "/etc/passwd" })],
     ["an unknown app", loadInput({ app: "lidarr" })],
@@ -387,13 +383,13 @@ describe("loadForceImport and forceImportQueueItem input validation", () => {
     ["a string id", loadInput({ queueIds: ["101"] })],
     ["file ids in the load", loadInput({ fileIds: [1] })],
     ["not an object", "sonarr"],
-  ])("loadForceImport rejects %s without reading anything", async (_label, value) => {
+  ])("rejects %s without reading anything", async (_label, value) => {
     expect(await loadForceImport(value)).toEqual({ ok: false, error: "Invalid change." });
-    expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    noImportRead();
+    expectNoUpstream();
   });
+});
 
+describe("forceImportQueueItem input validation", () => {
   it.each([
     ["a path sent by the browser", forceInput({ path: "/etc/passwd" })],
     ["a download id sent by the browser", forceInput({ downloadId: "X" })],
@@ -404,19 +400,15 @@ describe("loadForceImport and forceImportQueueItem input validation", () => {
     ["a string file id", forceInput({ fileIds: ["202"] })],
     ["a fractional file id", forceInput({ fileIds: [2.5] })],
     ["file ids that are not a list", forceInput({ fileIds: 202 })],
-  ])("forceImportQueueItem rejects %s without reading or sending anything", async (_label, value) => {
+  ])("rejects %s without reading or sending anything", async (_label, value) => {
     expect(await forceImportQueueItem(value)).toEqual({ ok: false, error: "Invalid change." });
-    expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
-    expect(mocks.fetchMovieQueue).not.toHaveBeenCalled();
-    noImportRead();
-    nothingImported();
-    expect(mocks.refresh).not.toHaveBeenCalled();
+    expectNoUpstream();
   });
 });
 
 describe("loadForceImport", () => {
   it("lists the files the scan found, without paths, folder names or download ids", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
+    queueStuckMovie();
 
     const result = await loadForceImport(movieLoad());
 
@@ -428,7 +420,7 @@ describe("loadForceImport", () => {
   });
 
   it("scans the download id the server read from the queue, with the nested objects left out", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
+    queueStuckMovie();
 
     await loadForceImport(movieLoad());
 
@@ -437,7 +429,7 @@ describe("loadForceImport", () => {
   });
 
   it("accepts a Sonarr download when any of its items is completed with a warning", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
+    queueStuckPack();
 
     const result = await loadForceImport(loadInput());
 
@@ -445,59 +437,11 @@ describe("loadForceImport", () => {
     expect(mocks.fetchEpisodeQueue).toHaveBeenCalledWith({ includeSeries: false, includeEpisode: false });
     expect(mocks.fetchEpisodeManualImport).toHaveBeenCalledWith("LEAK-DL-DELTA");
   });
-
-  it("says the row is gone and refreshes when none of its ids is queued, and does not scan", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue([]);
-
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: NO_LONGER });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    noImportRead();
-  });
-
-  it("refuses an item that is not completed with a warning, and does not scan or refresh", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue([{ ...STUCK_MOVIE[0], status: "downloading", trackedDownloadStatus: "ok" }]);
-
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: CANNOT_IMPORT });
-    noImportRead();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("refuses an item with a blank download id", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue([{ ...STUCK_MOVIE[0], downloadId: "   " }]);
-
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: CANNOT_IMPORT });
-    noImportRead();
-  });
-
-  it("says Radarr didn't answer when the queue read fails, and logs only the safe message", async () => {
-    mocks.fetchMovieQueue.mockRejectedValue(new ArrRequestError("Radarr queue request failed: HTTP 500", "http", 500));
-
-    expect(await loadForceImport(movieLoad())).toEqual({ ok: false, error: "Radarr didn't answer. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Force import: Radarr queue request failed: HTTP 500");
-    noImportRead();
-  });
-
-  it("says Sonarr didn't answer when the scan times out", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
-    mocks.fetchEpisodeManualImport.mockRejectedValue(
-      new ArrRequestError("Sonarr manual import request failed: timed out", "timeout"),
-    );
-
-    expect(await loadForceImport(loadInput())).toEqual({ ok: false, error: "Sonarr didn't answer. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Force import: Sonarr manual import request failed: timed out");
-  });
-
-  it("rethrows errors that are not Arr request failures", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
-    mocks.fetchMovieManualImport.mockRejectedValue(new Error("bug"));
-
-    await expect(loadForceImport(movieLoad())).rejects.toThrow("bug");
-  });
 });
 
 describe("forceImportQueueItem", () => {
   it("imports one Radarr file, built from the server's scan and not from the browser, then refreshes", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
+    queueStuckMovie();
 
     expect(await forceImportQueueItem(movieForce([101]))).toEqual({ ok: true });
 
@@ -519,7 +463,7 @@ describe("forceImportQueueItem", () => {
   });
 
   it("imports one Sonarr file with every episode it covers", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
+    queueStuckPack();
 
     expect(await forceImportQueueItem(forceInput({ fileIds: [202] }))).toEqual({ ok: true });
 
@@ -536,119 +480,72 @@ describe("forceImportQueueItem", () => {
   });
 
   it("imports a file once when its id is sent twice", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
+    queueStuckMovie();
 
     await forceImportQueueItem(movieForce([101, 101]));
 
     expect(mocks.startMovieManualImport).toHaveBeenCalledWith([expect.objectContaining({ movieId: 1 })]);
   });
 
-  it("refuses a file the app won't tick, and sends nothing", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
-
-    expect(await forceImportQueueItem(movieForce([103]))).toEqual({
-      ok: false,
+  // Each refusal comes from a different pick check, and each sends nothing and does not refresh.
+  it.each([
+    {
+      name: "a file the app won't tick",
+      prepare: queueStuckMovie,
+      call: () => forceImportQueueItem(movieForce([103])),
       error: "One of the ticked files can't be imported.",
-    });
-    nothingImported();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says the files changed when a ticked id is not in the new scan", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
-
-    expect(await forceImportQueueItem(movieForce([999]))).toEqual({
-      ok: false,
+    },
+    {
+      name: "an id that is not in the new scan",
+      prepare: queueStuckMovie,
+      call: () => forceImportQueueItem(movieForce([999])),
       error: "The files in that download changed. Close this and open Force import again.",
-    });
-    nothingImported();
-  });
-
-  it("refuses two Sonarr files for the same episode, and sends nothing", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
-    mocks.fetchEpisodeManualImport.mockResolvedValue([...SONARR_SCAN, { ...SONARR_SCAN[0], id: 205 }]);
-
-    expect(await forceImportQueueItem(forceInput({ fileIds: [201, 205] }))).toEqual({
-      ok: false,
+    },
+    {
+      name: "two files for the same episode",
+      prepare: () => {
+        queueStuckPack();
+        mocks.fetchEpisodeManualImport.mockResolvedValue([...SONARR_SCAN, { ...SONARR_SCAN[0], id: 205 }]);
+      },
+      call: () => forceImportQueueItem(forceInput({ fileIds: [201, 205] })),
       error: "Two ticked files are for the same movie or episode. Untick one.",
-    });
-    nothingImported();
+    },
+  ])("refuses $name, and sends nothing", async ({ prepare, call, error }) => {
+    prepare?.();
+
+    expect(await call()).toEqual({ ok: false, error });
+    expectNoWrites();
   });
+});
 
-  it("says the row is gone and refreshes when none of its ids is queued, and sends nothing", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue([]);
+// The queue gate both actions share: the row's download must still be queued, and completed with a warning.
+// A refusal here reads no scan and sends nothing.
+describe("loadForceImport and forceImportQueueItem: the queue gate", () => {
+  const IMPORT_ACTIONS = [
+    { action: "loadForceImport", call: () => loadForceImport(movieLoad()) },
+    { action: "forceImportQueueItem", call: () => forceImportQueueItem(movieForce([101])) },
+  ];
+  const GATES: { label: string; queue: MovieQueueItem[]; error: string; refreshes: number }[] = [
+    { label: "none of its ids is queued", queue: [], error: NO_LONGER, refreshes: 1 },
+    {
+      label: "its download is not completed with a warning",
+      queue: [{ ...STUCK_MOVIE[0], status: "downloading", trackedDownloadStatus: "ok" }],
+      error: CANNOT_IMPORT,
+      refreshes: 0,
+    },
+    { label: "its download id is blank", queue: [{ ...STUCK_MOVIE[0], downloadId: "   " }], error: CANNOT_IMPORT, refreshes: 0 },
+  ];
 
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({ ok: false, error: NO_LONGER });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    noImportRead();
-    nothingImported();
-  });
+  it.each(IMPORT_ACTIONS.flatMap((action) => GATES.map((gate) => ({ ...action, ...gate }))))(
+    "$action refuses when $label, without scanning or sending",
+    async ({ call, queue, error, refreshes }) => {
+      mocks.fetchMovieQueue.mockResolvedValue(queue);
 
-  it("refuses a download that is not completed with a warning, and sends nothing", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue([{ ...STUCK_MOVIE[0], status: "queued" }]);
-
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({ ok: false, error: CANNOT_IMPORT });
-    nothingImported();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says Radarr didn't answer, and that nothing was imported, when the queue read fails", async () => {
-    mocks.fetchMovieQueue.mockRejectedValue(new ArrRequestError("Radarr queue request failed: network error", "network"));
-
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({
-      ok: false,
-      error: "Radarr didn't answer. Nothing was imported.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Force import: Radarr queue request failed: network error");
-    nothingImported();
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says Sonarr didn't answer, and that nothing was imported, when the scan fails", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
-    mocks.fetchEpisodeManualImport.mockRejectedValue(
-      new ArrRequestError("Sonarr manual import request failed: HTTP 500", "http", 500),
-    );
-
-    expect(await forceImportQueueItem(forceInput({ fileIds: [202] }))).toEqual({
-      ok: false,
-      error: "Sonarr didn't answer. Nothing was imported.",
-    });
-    nothingImported();
-  });
-
-  it("says Radarr didn't accept a 4xx from the command, logs the safe message, and does not refresh", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
-    mocks.startMovieManualImport.mockRejectedValue(
-      new ArrRequestError("Radarr manual import command request failed: HTTP 400", "http", 400),
-    );
-
-    expect(await forceImportQueueItem(movieForce([101]))).toEqual({
-      ok: false,
-      error: "Radarr didn't accept it. Try again.",
-    });
-    expect(console.error).toHaveBeenCalledWith("Force import: Radarr manual import command request failed: HTTP 400");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("says Sonarr didn't confirm a timeout on the command, and that the import may have started", async () => {
-    mocks.fetchEpisodeQueue.mockResolvedValue(STUCK_PACK);
-    mocks.startEpisodeManualImport.mockRejectedValue(
-      new ArrRequestError("Sonarr manual import command request failed: timed out", "timeout"),
-    );
-
-    expect(await forceImportQueueItem(forceInput({ fileIds: [202] }))).toEqual({
-      ok: false,
-      error: "Sonarr didn't confirm it. It may still have been started, so check the queue.",
-    });
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
-
-  it("rethrows errors that are not Arr request failures from the command", async () => {
-    mocks.fetchMovieQueue.mockResolvedValue(STUCK_MOVIE);
-    mocks.startMovieManualImport.mockRejectedValue(new Error("bug"));
-
-    await expect(forceImportQueueItem(movieForce([101]))).rejects.toThrow("bug");
-    expect(mocks.refresh).not.toHaveBeenCalled();
-  });
+      expect(await call()).toEqual({ ok: false, error });
+      expect(mocks.refresh).toHaveBeenCalledTimes(refreshes);
+      for (const mock of [mocks.fetchMovieManualImport, mocks.fetchEpisodeManualImport, ...WRITES]) {
+        expect(mock).not.toHaveBeenCalled();
+      }
+    },
+  );
 });
