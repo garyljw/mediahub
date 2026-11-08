@@ -2,6 +2,8 @@ import { requirePageUser } from "@/server/authz";
 import { getPlexAdminConfig } from "@/server/plex/admin-config";
 import { getPlexDataSummary } from "@/server/plex/data-connection";
 import { getConnectionSummary, type ArrApp } from "@/server/settings/connections";
+import { readAutoImportMatchedById } from "@/server/settings/auto-import";
+import { AutoImportForm } from "@/components/settings/auto-import-form";
 import { ConnectionForm } from "@/components/settings/connection-form";
 import { PlexConnectionForm } from "@/components/settings/plex-connection-form";
 
@@ -48,6 +50,12 @@ export default async function ConnectionsPage() {
                 Finish Plex sign-in setup first. Then connect the Plex server here.
               </p>
             )}
+          </div>
+        </section>
+        <section className="rounded-lg border p-5">
+          <h2 className="text-lg font-semibold">Imports</h2>
+          <div className="mt-4">
+            <AutoImportForm initial={readAutoImportMatchedById()} />
           </div>
         </section>
       </div>

@@ -81,6 +81,7 @@ MediaHub is meant for a home network only. Don't expose it to the internet.
    A silent install (`/VERYSILENT`) uses the defaults.
 3. When it finishes, MediaHub opens in your browser. **Finish setup straight away:** sign in with Plex and pick the Plex server you own. That Plex account becomes MediaHub's admin. Until setup is finished, the first person on your network to complete it becomes the admin.
 4. As the admin, open **Settings → Connections** and add Radarr and Sonarr (address and API key). Each connection is tested before it's saved. You can also connect Plex there to show watched status.
+The **Imports** section on that page has one switch, **Auto-import downloads matched by ID**, which is off by default: when it's on, MediaHub imports the clean files of a finished download that Radarr or Sonarr held back only because it matched the movie or series by ID.
 5. Under **Settings → Add defaults**, choose what a one-click add uses: the quality profile, the root folder and, for series, what to monitor.
 6. Under **Settings → Users**, add requesters.
 

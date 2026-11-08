@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchEpisodeManualImport: vi.fn(),
   startMovieManualImport: vi.fn(),
   startEpisodeManualImport: vi.fn(),
+  readAutoImportMatchedById: vi.fn(),
 }));
 
 // The store is mocked, so these tests check the worker's decisions and what it sends upstream.
@@ -41,7 +42,9 @@ vi.mock("@/server/arr/manual-import", () => ({
   startEpisodeManualImport: mocks.startEpisodeManualImport,
 }));
 
-import { runReplaceImports } from "./auto-import";
+vi.mock("@/server/settings/auto-import", () => ({ readAutoImportMatchedById: mocks.readAutoImportMatchedById }));
+
+import { runAutoImports } from "./auto-import";
 
 const UPGRADE = "Not an upgrade for existing episode file(s). Existing quality: WEBDL-1080p. New Quality WEBDL-480p.";
 const GUID = "https://indexer.test/details/1";
@@ -82,12 +85,32 @@ function queueItem(id: number, downloadId: string, status: string, trackedDownlo
   return { id, downloadId, status, trackedDownloadStatus } as never;
 }
 
+const SONARR_MATCHED =
+  "Found matching series via grab history, but release was matched to series by ID. Automatic import is not possible. See the FAQ for details.";
+const RADARR_MATCHED =
+  "Found matching movie via grab history, but release was matched to movie by ID. Manual Import required.";
+
+/** A finished queue item blocked with one warning message, for a Sonarr series or a Radarr movie. */
+function blockedItem(downloadId: string, owner: { seriesId: number } | { movieId: number }, message: string) {
+  return {
+    id: 9,
+    downloadId,
+    status: "completed",
+    trackedDownloadStatus: "warning",
+    statusMessages: [{ title: "Release.Title", messages: [message] }],
+    ...owner,
+  } as never;
+}
+
 function pending(overrides: { id: number; app: "radarr" | "sonarr"; downloadId: string | null }) {
   return { guid: GUID, createdAt: 0, ...overrides };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The matched-by-ID decisions live on globalThis, so each test starts with none.
+  delete (globalThis as unknown as Record<symbol, unknown>)[Symbol.for("mediahub.autoImportAttempted")];
+  mocks.readAutoImportMatchedById.mockReturnValue(false);
   mocks.pendingReplaceGrabs.mockReturnValue([]);
   mocks.fetchMovieHistory.mockResolvedValue({ totalRecords: 0, records: [] });
   mocks.fetchEpisodeHistory.mockResolvedValue({ totalRecords: 0, records: [] });
@@ -101,9 +124,9 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
-describe("runReplaceImports", () => {
-  it("makes no upstream call when nothing is remembered", async () => {
-    await runReplaceImports();
+describe("runAutoImports", () => {
+  it("makes no upstream call when nothing is remembered and the switch is off", async () => {
+    await runAutoImports();
 
     expect(mocks.fetchEpisodeHistory).not.toHaveBeenCalled();
     expect(mocks.fetchEpisodeQueue).not.toHaveBeenCalled();
@@ -124,7 +147,7 @@ describe("runReplaceImports", () => {
     // The download is still downloading, so the test ends after the id is stored.
     mocks.fetchEpisodeQueue.mockResolvedValue([queueItem(5, "DL-1", "downloading", "ok")]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.fetchEpisodeHistory).toHaveBeenCalledWith(100, [1]);
     expect(mocks.setReplaceDownloadId).toHaveBeenCalledTimes(1);
@@ -135,7 +158,7 @@ describe("runReplaceImports", () => {
     mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
     mocks.fetchEpisodeQueue.mockResolvedValue([]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
     expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
@@ -147,7 +170,7 @@ describe("runReplaceImports", () => {
     mocks.pendingReplaceGrabs.mockReturnValue([{ ...pending({ id: 1, app: "sonarr", downloadId: "DL-1" }), createdAt: now - 60_000 }]);
     mocks.fetchEpisodeQueue.mockResolvedValue([]);
 
-    await runReplaceImports(now);
+    await runAutoImports(now);
 
     expect(mocks.deleteReplaceGrab).not.toHaveBeenCalled();
   });
@@ -161,7 +184,7 @@ describe("runReplaceImports", () => {
       scanItem(3, null),
     ]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.fetchEpisodeManualImport).toHaveBeenCalledWith("DL-1");
     expect(mocks.startEpisodeManualImport).toHaveBeenCalledTimes(1);
@@ -177,7 +200,7 @@ describe("runReplaceImports", () => {
     mocks.fetchEpisodeQueue.mockResolvedValue([queueItem(5, "DL-1", "completed", "warning")]);
     mocks.fetchEpisodeManualImport.mockResolvedValue([scanItem(1, "Sample"), scanItem(2, "Sample")]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
@@ -192,11 +215,11 @@ describe("runReplaceImports", () => {
     ]);
     mocks.startEpisodeManualImport.mockRejectedValue(new ArrRequestError("Sonarr manual import command request failed: timeout", "timeout"));
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
     expect(mocks.deleteReplaceGrab.mock.invocationCallOrder[0]).toBeLessThan(mocks.startEpisodeManualImport.mock.invocationCallOrder[0]);
-    expect(console.error).toHaveBeenCalledWith("Replace import: Sonarr manual import command request failed: timeout");
+    expect(console.error).toHaveBeenCalledWith("Auto import: Sonarr manual import command request failed: timeout");
   });
 
   it("sends a Radarr import over the existing movie file the same way", async () => {
@@ -206,7 +229,7 @@ describe("runReplaceImports", () => {
       movieScanItem(8, "Not an upgrade for existing movie file. Existing quality: Bluray-1080p. New Quality: HD-720p."),
     ]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.startMovieManualImport).toHaveBeenCalledWith([expect.objectContaining({ movieId: 20, downloadId: "DL-M" })]);
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(2);
@@ -216,7 +239,7 @@ describe("runReplaceImports", () => {
     mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
     mocks.fetchEpisodeQueue.mockResolvedValue([queueItem(5, "DL-1", "downloading", "ok")]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
     expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
@@ -231,9 +254,9 @@ describe("runReplaceImports", () => {
     mocks.fetchMovieQueue.mockRejectedValue(new ArrRequestError("Radarr queue request failed: HTTP 500", "http", 500));
     mocks.fetchEpisodeQueue.mockResolvedValue([]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
-    expect(console.error).toHaveBeenCalledWith("Replace import: Radarr queue request failed: HTTP 500");
+    expect(console.error).toHaveBeenCalledWith("Auto import: Radarr queue request failed: HTTP 500");
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(2);
     expect(mocks.deleteReplaceGrab).not.toHaveBeenCalledWith(1);
   });
@@ -246,7 +269,7 @@ describe("runReplaceImports", () => {
     mocks.fetchMovieQueue.mockRejectedValue(new ArrRequestError("Radarr isn't set up", "unconfigured"));
     mocks.fetchEpisodeQueue.mockResolvedValue([]);
 
-    await runReplaceImports();
+    await runAutoImports();
 
     expect(console.error).not.toHaveBeenCalled();
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(2);
@@ -256,7 +279,7 @@ describe("runReplaceImports", () => {
     mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
     mocks.fetchEpisodeQueue.mockRejectedValue(new Error("worker bug"));
 
-    await expect(runReplaceImports()).rejects.toThrow("worker bug");
+    await expect(runAutoImports()).rejects.toThrow("worker bug");
   });
 
   it("returns at once, with no upstream call, when a run is already in progress", async () => {
@@ -266,13 +289,109 @@ describe("runReplaceImports", () => {
       () => new Promise((resolve) => (release = () => resolve([queueItem(5, "DL-1", "downloading", "ok")]))),
     );
 
-    const first = runReplaceImports();
-    await runReplaceImports();
+    const first = runAutoImports();
+    await runAutoImports();
 
     expect(mocks.pendingReplaceGrabs).toHaveBeenCalledTimes(1);
     expect(mocks.fetchEpisodeQueue).toHaveBeenCalledTimes(1);
 
     release();
     await first;
+  });
+});
+
+describe("runAutoImports, matched by ID", () => {
+  const CLEAN_SONARR_FILES = [scanItem(1, null), scanItem(2, "Sample"), scanItem(3, null)];
+
+  it("sends the clean files of a download matched by ID to the series, and logs the count", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchEpisodeQueue.mockResolvedValue([blockedItem("DL-1", { seriesId: 10 }, SONARR_MATCHED)]);
+    mocks.fetchEpisodeManualImport.mockResolvedValue(CLEAN_SONARR_FILES);
+
+    await runAutoImports();
+
+    expect(mocks.fetchEpisodeManualImport).toHaveBeenCalledWith("DL-1");
+    expect(mocks.startEpisodeManualImport).toHaveBeenCalledTimes(1);
+    expect(mocks.startEpisodeManualImport).toHaveBeenCalledWith([
+      expect.objectContaining({ path: "/fake/downloads/Show.S01E01.mkv", downloadId: "DL-1", seriesId: 10, episodeIds: [10] }),
+      expect.objectContaining({ path: "/fake/downloads/Show.S01E03.mkv", downloadId: "DL-1", seriesId: 10, episodeIds: [30] }),
+    ]);
+    expect(console.log).toHaveBeenCalledWith("Auto import: sent 2 file(s) matched by ID to Sonarr.");
+  });
+
+  it("ignores a title mismatch warning, which is not a matched-by-ID block", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchEpisodeQueue.mockResolvedValue([
+      blockedItem("DL-1", { seriesId: 10 }, "Series title mismatch; the release title doesn't match the series."),
+    ]);
+
+    await runAutoImports();
+
+    expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
+    expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
+  });
+
+  it("never sends the same download twice, even when it is still blocked on the next run", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchEpisodeQueue.mockResolvedValue([blockedItem("DL-1", { seriesId: 10 }, SONARR_MATCHED)]);
+    mocks.fetchEpisodeManualImport.mockResolvedValue(CLEAN_SONARR_FILES);
+
+    await runAutoImports();
+    await runAutoImports();
+
+    expect(mocks.startEpisodeManualImport).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchEpisodeManualImport).toHaveBeenCalledTimes(1);
+  });
+
+  it("imports nothing, and logs once, when a file in the scan is for another series", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchEpisodeQueue.mockResolvedValue([blockedItem("DL-1", { seriesId: 10 }, SONARR_MATCHED)]);
+    mocks.fetchEpisodeManualImport.mockResolvedValue([
+      ...CLEAN_SONARR_FILES,
+      { ...scanItem(4, null), series: { id: 11, title: "Other Show" } },
+    ]);
+
+    await runAutoImports();
+    await runAutoImports();
+
+    expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith("Auto import: a download matched by ID needs a manual import in Sonarr.");
+  });
+
+  it("logs once and never scans a blocked item that doesn't name its series", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchEpisodeQueue.mockResolvedValue([blockedItem("DL-1", { seriesId: 0 }, SONARR_MATCHED)]);
+
+    await runAutoImports();
+    await runAutoImports();
+
+    expect(mocks.fetchEpisodeManualImport).not.toHaveBeenCalled();
+    expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the clean files of a Radarr download matched by ID to its movie", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.fetchMovieQueue.mockResolvedValue([blockedItem("DL-M", { movieId: 20 }, RADARR_MATCHED)]);
+    mocks.fetchMovieManualImport.mockResolvedValue([{ ...movieScanItem(8, UPGRADE), rejections: [] }]);
+
+    await runAutoImports();
+
+    expect(mocks.startMovieManualImport).toHaveBeenCalledWith([expect.objectContaining({ movieId: 20, downloadId: "DL-M" })]);
+    expect(console.log).toHaveBeenCalledWith("Auto import: sent 1 file(s) matched by ID to Radarr.");
+  });
+
+  it("sends a download that is both a replace grab and matched by ID once, through the replace path", async () => {
+    mocks.readAutoImportMatchedById.mockReturnValue(true);
+    mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
+    mocks.fetchEpisodeQueue.mockResolvedValue([blockedItem("DL-1", { seriesId: 10 }, SONARR_MATCHED)]);
+    mocks.fetchEpisodeManualImport.mockResolvedValue([scanItem(1, UPGRADE)]);
+
+    await runAutoImports();
+
+    expect(mocks.startEpisodeManualImport).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchEpisodeManualImport).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
   });
 });
