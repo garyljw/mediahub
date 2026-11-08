@@ -35,7 +35,10 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex w-full flex-col gap-4">
+    // method="post": if the page's JavaScript never starts, the browser submits the form itself. With the default GET
+    // that puts the password in the address bar, history and server logs; POST keeps it in the request body. Sign-in
+    // itself still needs JavaScript.
+    <form method="post" onSubmit={onSubmit} className="flex w-full flex-col gap-4">
       <label className="flex flex-col gap-1 text-sm font-medium text-foreground">
         Email or name
         <input
