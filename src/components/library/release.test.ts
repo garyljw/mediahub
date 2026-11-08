@@ -8,11 +8,38 @@ import {
   grabbedMessage,
   parsePackFilter,
   parseProtocolFilter,
+  parseReleaseSort,
   releaseCountLine,
   releaseDetails,
   releaseTotal,
+  sortReleases,
   twoDigits,
 } from "./release";
+
+/** A usable release with the given fields. Only the fields a test cares about need overriding. */
+function sample(token: string, fields: Partial<ReleaseRow> = {}): ReleaseRow {
+  return {
+    token,
+    title: token,
+    indexer: null,
+    protocol: "usenet",
+    quality: null,
+    qualityWeight: 0,
+    notInProfile: false,
+    customFormats: [],
+    customFormatScore: 0,
+    size: 0,
+    ageHours: null,
+    seeders: null,
+    leechers: null,
+    languages: [],
+    approved: true,
+    rejections: [],
+    episodes: null,
+    fullSeason: false,
+    ...fields,
+  };
+}
 
 describe("formatAge", () => {
   it("shows a dash for missing, negative or non-finite ages", () => {
@@ -114,6 +141,8 @@ describe("releaseDetails", () => {
     indexer: "NZBgeek",
     protocol: "usenet",
     quality: "Bluray-2160p",
+    qualityWeight: 0,
+    notInProfile: false,
     customFormats: [],
     customFormatScore: 120,
     size: 14_000_000_000,
@@ -165,26 +194,7 @@ describe("releaseDetails", () => {
 });
 
 describe("filterReleases", () => {
-  function row(token: string, protocol: ReleaseRow["protocol"], fullSeason = false): ReleaseRow {
-    return {
-      token,
-      title: token,
-      indexer: null,
-      protocol,
-      quality: null,
-      customFormats: [],
-      customFormatScore: 0,
-      size: 0,
-      ageHours: null,
-      seeders: null,
-      leechers: null,
-      languages: [],
-      approved: true,
-      rejections: [],
-      episodes: null,
-      fullSeason,
-    };
-  }
+  const row = (token: string, protocol: ReleaseRow["protocol"], fullSeason = false) => sample(token, { protocol, fullSeason });
   const releases = [row("a", "torrent"), row("b", "usenet"), row("c", "unknown"), row("d", "torrent")];
 
   it("returns every release, unknown protocol included, for all", () => {
@@ -208,6 +218,68 @@ describe("filterReleases", () => {
     expect(filterReleases(mixed, "all", "episodes").map((r) => r.token)).toEqual(["b", "d"]);
     expect(filterReleases(mixed, "torrent", "packs").map((r) => r.token)).toEqual(["a", "e"]);
     expect(filterReleases(mixed, "usenet", "episodes").map((r) => r.token)).toEqual(["b"]);
+  });
+
+  it("drops releases not in the profile only when asked, and combines with the other filters", () => {
+    const list = [sample("a", { notInProfile: true }), sample("b", { protocol: "torrent" }), sample("c", { protocol: "torrent", notInProfile: true })];
+    expect(filterReleases(list, "all", "all").map((r) => r.token)).toEqual(["a", "b", "c"]);
+    expect(filterReleases(list, "all", "all", true).map((r) => r.token)).toEqual(["b"]);
+    expect(filterReleases(list, "torrent", "all", true).map((r) => r.token)).toEqual(["b"]);
+  });
+});
+
+describe("sortReleases", () => {
+  it("returns the same array for the app's order", () => {
+    const list = [sample("a"), sample("b")];
+    expect(sortReleases(list, "app")).toBe(list);
+  });
+
+  it("never changes the input array, and returns a new one for every other order", () => {
+    const list = [
+      sample("a", { qualityWeight: 1, size: 1, ageHours: 1, seeders: 1, leechers: 1 }),
+      sample("b", { qualityWeight: 2, size: 2, ageHours: 2, seeders: 2, leechers: 2 }),
+    ];
+    for (const sort of ["quality", "size", "age", "seeders"] as const) {
+      const sorted = sortReleases(list, sort);
+      expect(sorted).not.toBe(list);
+      expect(list.map((r) => r.token)).toEqual(["a", "b"]);
+    }
+  });
+
+  it("puts the best quality weight first, keeping the app's order for ties", () => {
+    const list = [sample("a", { qualityWeight: 2 }), sample("b", { qualityWeight: 5 }), sample("c", { qualityWeight: 5 }), sample("d", { qualityWeight: 1 })];
+    expect(sortReleases(list, "quality").map((r) => r.token)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("puts the largest size first, keeping the app's order for ties", () => {
+    const list = [sample("a", { size: 1 }), sample("b", { size: 5 }), sample("c", { size: 5 }), sample("d", { size: 0 })];
+    expect(sortReleases(list, "size").map((r) => r.token)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("puts the newest first, with no age last", () => {
+    const list = [sample("a", { ageHours: 10 }), sample("b", { ageHours: null }), sample("c", { ageHours: 2 }), sample("d", { ageHours: 10 })];
+    expect(sortReleases(list, "age").map((r) => r.token)).toEqual(["c", "a", "d", "b"]);
+  });
+
+  it("puts the most peers first, weighting seeders over leechers, with non-torrents last", () => {
+    const list = [
+      sample("a", { protocol: "torrent", seeders: 5, leechers: 0 }),
+      sample("b", { protocol: "torrent", seeders: 5, leechers: 9 }),
+      sample("c", { protocol: "usenet" }),
+      sample("d", { protocol: "torrent", seeders: 12, leechers: 0 }),
+      sample("e", { protocol: "torrent", seeders: 5, leechers: 0 }),
+    ];
+    expect(sortReleases(list, "seeders").map((r) => r.token)).toEqual(["d", "b", "a", "e", "c"]);
+  });
+});
+
+describe("parseReleaseSort", () => {
+  it("accepts the five options and falls back to best match for anything else, including null", () => {
+    expect(parseReleaseSort("quality")).toBe("quality");
+    expect(parseReleaseSort("seeders")).toBe("seeders");
+    expect(parseReleaseSort("app")).toBe("app");
+    expect(parseReleaseSort("name")).toBe("app");
+    expect(parseReleaseSort(null)).toBe("app");
   });
 });
 

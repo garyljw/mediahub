@@ -45,7 +45,7 @@ The screenshots show a made-up demo library, not a real one.
 ## What it does
 - **Home:** one poster grid of everything in Radarr and Sonarr, with one search box that covers your library and finds new titles to add (from TMDB and TVDB). Rest the pointer on a poster for half a second and its year, genres and synopsis appear beside it, on Home and on the Focus lists.
 - **Adding:** one click adds a movie or series using the defaults an admin has chosen. Admins can also pick the quality profile and other options.
-- **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release. A season's release list starts on season packs, with a switch to show episodes or everything.
+- **Movie and series pages:** see and edit an item, change monitoring for a series, season or episode, start a search and pick a specific release. A season's release list starts on season packs, with a switch to show episodes or everything. The release list can be sorted by best match, quality, size, age or seeders, and it hides qualities your profile doesn't allow unless you untick that.
 - **Queue:** what is downloading, with remove and force import.
 - **Calendar and History** for both Radarr and Sonarr.
 - **Phones and tablets:** on a narrower screen (a phone, or a tablet held upright) a tab bar along the bottom replaces the sidebar: **Home**, **Movie Focus**, **TV Focus**, **Queue** and **More**. **More** holds **Calendar**, **History**, **Settings** (admins), **About** and **Sign out**. Queue and History show each item as a card, a series' page shows each episode as a card, and Calendar always shows the day list on a phone.

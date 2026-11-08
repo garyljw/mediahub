@@ -14,6 +14,7 @@ export type ReleaseLike = {
   indexer?: string | null;
   protocol?: "unknown" | "usenet" | "torrent";
   quality?: { quality?: { name?: string | null } };
+  qualityWeight?: number;
   customFormats?: { name?: string | null }[] | null;
   customFormatScore?: number;
   size?: number;
@@ -40,6 +41,14 @@ export type ReleaseRow = {
   indexer: string | null;
   protocol: "usenet" | "torrent" | "unknown";
   quality: string | null;
+  /** The app's rank for the release's quality in the profile order (higher is better). Used to sort by quality. 0 when missing. */
+  qualityWeight: number;
+  /**
+   * True when the app rejects the release because its quality isn't allowed in the item's profile. Checked over
+   * every rejection the app sent, not only the ones shown. Radarr and Sonarr word this rejection as
+   * "<quality> is not wanted in profile" (checked in their source, QualityAllowedByProfileSpecification).
+   */
+  notInProfile: boolean;
   customFormats: string[];
   customFormatScore: number;
   /** Bytes. 0 when missing or invalid. */
@@ -81,6 +90,8 @@ export type ReleaseTotals = {
 const MAX_TITLE = 300;
 /** Most rejection reasons shown per release. */
 const MAX_REJECTIONS = 10;
+/** The end of the rejection Radarr and Sonarr give a release whose quality the item's profile doesn't allow. */
+const NOT_IN_PROFILE_SUFFIX = " is not wanted in profile";
 
 /** The app waits on every indexer before it answers an interactive search. */
 export const RELEASE_SEARCH_TIMEOUT_MS = 90_000;
@@ -196,10 +207,12 @@ export function toReleaseRows(
     const titleChars = Array.from(title);
     const shortTitle = titleChars.length > MAX_TITLE ? `${titleChars.slice(0, MAX_TITLE - 1).join("")}…` : title;
     const rejections: string[] = [];
+    let notInProfile = false;
     for (const reason of release.rejections ?? []) {
       const clean = text(reason);
-      if (clean !== null) rejections.push(clean);
-      if (rejections.length >= MAX_REJECTIONS) break;
+      if (clean !== null && clean.endsWith(NOT_IN_PROFILE_SUFFIX)) notInProfile = true;
+      // The check above reads every reason, so a cut-off list still reports the quality rule.
+      if (clean !== null && rejections.length < MAX_REJECTIONS) rejections.push(clean);
     }
     const size = finiteOrNull(release.size);
     const ageHours = finiteOrNull(release.ageHours);
@@ -211,6 +224,8 @@ export function toReleaseRows(
       indexer: text(release.indexer),
       protocol,
       quality: text(release.quality?.quality?.name),
+      qualityWeight: finiteOrNull(release.qualityWeight) ?? 0,
+      notInProfile,
       customFormats: names(release.customFormats),
       customFormatScore: finiteOrNull(release.customFormatScore) ?? 0,
       size: size !== null && size > 0 ? size : 0,

@@ -50,8 +50,10 @@ const ALLOWED_KEYS = [
   "indexer",
   "languages",
   "leechers",
+  "notInProfile",
   "protocol",
   "quality",
+  "qualityWeight",
   "rejections",
   "seeders",
   "size",
@@ -115,6 +117,8 @@ describe("toReleaseRows", () => {
       indexer: "NZBgeek",
       protocol: "usenet",
       quality: "Bluray-2160p",
+      qualityWeight: 0,
+      notInProfile: false,
       customFormats: ["x265", "HDR"],
       customFormatScore: 120,
       size: 14000000000,
@@ -170,6 +174,20 @@ describe("toReleaseRows", () => {
     expect(long.endsWith("…")).toBe(true);
     const exact = "x".repeat(300);
     expect(mapRows([release({ title: exact })]).rows[0].title).toBe(exact);
+  });
+
+  it("flags a release as not in profile when that rejection comes after the 10 shown", () => {
+    const reasons = Array.from({ length: 10 }, (_, i) => `Reason ${i}`);
+    const late = mapRows([release({ rejections: [...reasons, "Bluray-1080p Remux is not wanted in profile"] })]).rows[0];
+    expect(late.notInProfile).toBe(true);
+    expect(late.rejections).toEqual(reasons);
+    expect(mapRows([release({ rejections: reasons })]).rows[0].notInProfile).toBe(false);
+  });
+
+  it("keeps the app's quality weight, and uses 0 when it is missing", () => {
+    const [weighted, missing] = mapRows([release({ qualityWeight: 7 }), release({ qualityWeight: undefined })]).rows;
+    expect(weighted.qualityWeight).toBe(7);
+    expect(missing.qualityWeight).toBe(0);
   });
 
   it("caps rejection reasons at 10", () => {
