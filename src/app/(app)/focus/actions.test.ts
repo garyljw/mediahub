@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
@@ -107,21 +107,24 @@ import { TitleSearchError, type TitleHit } from "@/server/title-search";
 import { addFocusItem, addNewToFocus, removeFocusItems, reorderFocusItems, searchFocusTitles } from "./actions";
 
 const REQUESTER = { id: "u1", email: "r@example.test", name: "R", role: "requester" };
+const ADMIN = { id: "a1", email: "a@example.test", name: "A", role: "admin" };
 const DENIED = "You don't have permission to change Focus lists.";
 const INVALID = "That change couldn't be read. Refresh and try again.";
-
-const ADMIN = { id: "a1", email: "a@example.test", name: "A", role: "admin" };
+const FULL = "A Focus list can hold up to 500 titles. Remove one before adding another.";
 const SEARCH_DENIED = "You don't have permission to search for titles to add.";
 const SEARCH_INVALID = "Enter a title to search for.";
+const TOO_MANY = Array.from({ length: 501 }, (_, i) => i + 1);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Some tests make addToFocus throw; clearAllMocks keeps implementations, so reset it here.
+  // clearAllMocks keeps implementations, so reset the mocks that some tests make throw or return once.
   mocks.addToFocus.mockReset();
+  mocks.reorderFocus.mockReset();
   mocks.requireRole.mockResolvedValue({ user: REQUESTER });
   mocks.listFocusIds.mockReturnValue([]);
   mocks.movieExists.mockResolvedValue(true);
   mocks.seriesExists.mockResolvedValue(true);
+  mocks.titleSearch.mockResolvedValue([]);
   mocks.getMovieAddDefaults.mockReturnValue({ profileId: 1, rootFolderId: 2 });
   mocks.getSeriesAddDefaults.mockReturnValue({ profileId: 1, rootFolderId: 2, monitor: "all" });
   mocks.listQualityProfiles.mockResolvedValue([
@@ -136,32 +139,88 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-const signedOut = () => mocks.requireRole.mockRejectedValue(new AuthzError(401));
-const forbidden = () => mocks.requireRole.mockRejectedValue(new AuthzError(403));
+describe("authorization", () => {
+  type AuthRow = { name: string; call: () => Promise<unknown>; roles: string[]; denied: unknown; upstream: Mock[] };
+
+  // One row per action, called with valid input so only the role check can stop it. `upstream` must not be called
+  // when the caller is refused.
+  const rows: AuthRow[] = [
+    {
+      name: "addFocusItem",
+      call: () => addFocusItem({ kind: "movie", id: 4 }),
+      roles: ["admin", "requester"],
+      denied: { ok: false, error: DENIED },
+      upstream: [mocks.movieExists, mocks.addToFocus, mocks.requestFocusSync],
+    },
+    {
+      name: "removeFocusItems",
+      call: () => removeFocusItems({ kind: "movie", ids: [4] }),
+      roles: ["admin", "requester"],
+      denied: { ok: false, error: DENIED },
+      upstream: [mocks.removeFromFocus, mocks.requestFocusSync],
+    },
+    {
+      name: "reorderFocusItems",
+      call: () => reorderFocusItems({ kind: "movie", ids: [1] }),
+      roles: ["admin", "requester"],
+      denied: { ok: false, error: DENIED },
+      upstream: [mocks.reorderFocus, mocks.requestFocusSync],
+    },
+    {
+      name: "searchFocusTitles",
+      call: () => searchFocusTitles({ kind: "movie", term: "dune" }),
+      roles: ["admin", "requester"],
+      denied: { ok: false, error: SEARCH_DENIED },
+      upstream: [mocks.titleSearch],
+    },
+    {
+      name: "addNewToFocus",
+      call: () => addNewToFocus({ kind: "movie", add: { tmdbId: 550 } }),
+      roles: ["admin", "requester"],
+      denied: { ok: false, error: DENIED },
+      upstream: [mocks.addMovie, mocks.addToFocus, mocks.requestFocusSync, mocks.refresh],
+    },
+  ];
+
+  // Signed-out (401) and forbidden (403) take the same branch in every action, so one status is enough.
+  it.each(rows)("$name asks for $roles, and a refused caller gets the denial and no upstream call", async (row) => {
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+
+    expect(await row.call()).toEqual(row.denied);
+    expect(mocks.requireRole).toHaveBeenCalledWith(...row.roles);
+    for (const mock of row.upstream) expect(mock).not.toHaveBeenCalled();
+  });
+
+  it.each(rows)("$name rethrows an error that is not an AuthzError", async (row) => {
+    mocks.requireRole.mockRejectedValue(new Error("database down"));
+
+    await expect(row.call()).rejects.toThrow("database down");
+    for (const mock of row.upstream) expect(mock).not.toHaveBeenCalled();
+  });
+});
+
+it.each([
+  ["addFocusItem", () => mocks.movieExists.mockRejectedValue(new Error("config broken")), () => addFocusItem({ kind: "movie", id: 1 })],
+  [
+    "searchFocusTitles",
+    () => mocks.titleSearch.mockRejectedValue(new Error("config broken")),
+    () => searchFocusTitles({ kind: "movie", term: "dune" }),
+  ],
+])("%s rethrows errors that are not upstream request failures", async (_name, fail, call) => {
+  fail();
+  await expect(call()).rejects.toThrow("config broken");
+});
 
 describe("addFocusItem", () => {
-  it("allows both admin and requester, checks the title in its own app, and adds it as the caller", async () => {
-    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: true });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-    expect(mocks.movieExists).toHaveBeenCalledWith(4);
-    expect(mocks.seriesExists).not.toHaveBeenCalled();
-    expect(mocks.addToFocus).toHaveBeenCalledWith("movie", 4, "u1");
-  });
-
-  it("checks Sonarr for a series", async () => {
-    expect(await addFocusItem({ kind: "series", id: 9 })).toEqual({ ok: true });
-    expect(mocks.seriesExists).toHaveBeenCalledWith(9);
-    expect(mocks.movieExists).not.toHaveBeenCalled();
-  });
-
   it.each([
-    ["signed out", signedOut],
-    ["a forbidden role", forbidden],
-  ])("refuses %s and writes nothing", async (_label, deny) => {
-    deny();
-    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: false, error: DENIED });
-    expect(mocks.addToFocus).not.toHaveBeenCalled();
-    expect(mocks.movieExists).not.toHaveBeenCalled();
+    ["movie", 4, mocks.movieExists, mocks.seriesExists],
+    ["series", 9, mocks.seriesExists, mocks.movieExists],
+  ])("checks a %s in its own app, adds it as the caller, and asks for a Plex sync", async (kind, id, own, other) => {
+    expect(await addFocusItem({ kind, id })).toEqual({ ok: true });
+    expect(own).toHaveBeenCalledWith(id);
+    expect(other).not.toHaveBeenCalled();
+    expect(mocks.addToFocus).toHaveBeenCalledWith(kind, id, "u1");
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith(kind);
   });
 
   it.each([
@@ -177,34 +236,28 @@ describe("addFocusItem", () => {
     expect(await addFocusItem(input)).toEqual({ ok: false, error: INVALID });
     expect(mocks.movieExists).not.toHaveBeenCalled();
     expect(mocks.addToFocus).not.toHaveBeenCalled();
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 
-  it("refuses a title the app doesn't have, and writes nothing", async () => {
-    mocks.movieExists.mockResolvedValue(false);
-    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: false, error: "That title isn't in Radarr." });
+  it.each([
+    ["movie", "Radarr", mocks.movieExists],
+    ["series", "Sonarr", mocks.seriesExists],
+  ])("refuses a %s the app doesn't have, naming %s, and writes nothing", async (kind, app, exists) => {
+    exists.mockResolvedValue(false);
+    expect(await addFocusItem({ kind, id: 4 })).toEqual({ ok: false, error: `That title isn't in ${app}.` });
     expect(mocks.addToFocus).not.toHaveBeenCalled();
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 
-  it("refuses a series Sonarr doesn't have, naming Sonarr", async () => {
-    mocks.seriesExists.mockResolvedValue(false);
-    expect(await addFocusItem({ kind: "series", id: 4 })).toEqual({ ok: false, error: "That title isn't in Sonarr." });
-  });
-
-  it("reports an app outage with the safe message and logs only the error message", async () => {
-    mocks.movieExists.mockRejectedValue(new ArrRequestError("Radarr movie request failed: HTTP 503", "http", 503));
-    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: false, error: "Couldn't reach Radarr. Try again." });
-    expect(console.error).toHaveBeenCalledWith("Focus add: Radarr movie request failed: HTTP 503");
+  it.each([
+    ["movie", "Radarr", mocks.movieExists],
+    ["series", "Sonarr", mocks.seriesExists],
+  ])("reports a %s app outage with the safe message and logs only the error message", async (kind, app, exists) => {
+    exists.mockRejectedValue(new ArrRequestError(`${app} request failed: HTTP 503`, "http", 503));
+    expect(await addFocusItem({ kind, id: 4 })).toEqual({ ok: false, error: `Couldn't reach ${app}. Try again.` });
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    expect(console.error).toHaveBeenCalledWith(`Focus add: ${app} request failed: HTTP 503`);
     expect(mocks.addToFocus).not.toHaveBeenCalled();
-  });
-
-  it("names Sonarr in the outage message for a series", async () => {
-    mocks.seriesExists.mockRejectedValue(new ArrRequestError("Sonarr series request failed", "http", 500));
-    expect(await addFocusItem({ kind: "series", id: 4 })).toEqual({ ok: false, error: "Couldn't reach Sonarr. Try again." });
-  });
-
-  it("rethrows errors that are not Arr request failures", async () => {
-    mocks.movieExists.mockRejectedValue(new Error("config broken"));
-    await expect(addFocusItem({ kind: "movie", id: 1 })).rejects.toThrow("config broken");
   });
 
   it("is a no-op success for a title already in the list, without asking the app", async () => {
@@ -214,56 +267,61 @@ describe("addFocusItem", () => {
     expect(mocks.addToFocus).toHaveBeenCalledWith("movie", 4, "u1");
   });
 
-  it("shows the limit message when the list is full", async () => {
+  it("shows the limit message when the list is full, and does not ask for a sync", async () => {
     mocks.addToFocus.mockImplementation(() => {
       throw new FocusLimitError();
     });
-    expect((await addFocusItem({ kind: "series", id: 9 })).ok).toBe(false);
+    expect(await addFocusItem({ kind: "series", id: 9 })).toEqual({ ok: false, error: FULL });
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 });
 
-describe.each([
-  ["removeFocusItems", removeFocusItems],
-] as const)("%s", (_name, action) => {
-  it("allows both admin and requester and removes the ids of that kind", async () => {
-    expect(await action({ kind: "movie", ids: [4, 5] })).toEqual({ ok: true });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-    expect(mocks.removeFromFocus).toHaveBeenCalledWith("movie", [4, 5]);
-  });
+describe("removeFocusItems", () => {
+  it("removes the ids of that kind, and asks for a sync only when rows were removed", async () => {
+    mocks.removeFromFocus.mockReturnValueOnce(2);
+    expect(await removeFocusItems({ kind: "series", ids: [1, 2] })).toEqual({ ok: true });
+    expect(mocks.removeFromFocus).toHaveBeenCalledWith("series", [1, 2]);
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
 
-  it.each([
-    ["signed out", signedOut],
-    ["a forbidden role", forbidden],
-  ])("refuses %s and removes nothing", async (_label, deny) => {
-    deny();
-    expect(await action({ kind: "movie", ids: [4] })).toEqual({ ok: false, error: DENIED });
-    expect(mocks.removeFromFocus).not.toHaveBeenCalled();
+    mocks.requestFocusSync.mockClear();
+    mocks.removeFromFocus.mockReturnValueOnce(0);
+    expect(await removeFocusItems({ kind: "series", ids: [9] })).toEqual({ ok: true });
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
+});
 
-  it.each([
-    ["an empty id list", { kind: "movie", ids: [] }],
-    ["duplicate ids", { kind: "movie", ids: [1, 1] }],
-    ["a negative id", { kind: "movie", ids: [1, -2] }],
-    ["an extra key", { kind: "movie", ids: [1], user: "x" }],
-    ["an unknown kind", { kind: "book", ids: [1] }],
-    ["too many ids", { kind: "movie", ids: Array.from({ length: 501 }, (_, i) => i + 1) }],
-  ])("refuses %s without removing", async (_label, input) => {
-    expect(await action(input)).toEqual({ ok: false, error: INVALID });
-    expect(mocks.removeFromFocus).not.toHaveBeenCalled();
-  });
+// removeFocusItems and reorderFocusItems share the id rules, so one table covers both.
+it.each([
+  ["removeFocusItems: an empty id list", removeFocusItems, { kind: "movie", ids: [] }],
+  ["removeFocusItems: duplicate ids", removeFocusItems, { kind: "movie", ids: [1, 1] }],
+  ["removeFocusItems: a negative id", removeFocusItems, { kind: "movie", ids: [1, -2] }],
+  ["removeFocusItems: an extra key", removeFocusItems, { kind: "movie", ids: [1], user: "x" }],
+  ["removeFocusItems: an unknown kind", removeFocusItems, { kind: "book", ids: [1] }],
+  ["removeFocusItems: too many ids", removeFocusItems, { kind: "movie", ids: TOO_MANY }],
+  ["reorderFocusItems: duplicate ids", reorderFocusItems, { kind: "movie", ids: [1, 1] }],
+  ["reorderFocusItems: a negative id", reorderFocusItems, { kind: "movie", ids: [1, -2] }],
+  ["reorderFocusItems: an extra key", reorderFocusItems, { kind: "movie", ids: [1], order: "x" }],
+  ["reorderFocusItems: an unknown kind", reorderFocusItems, { kind: "book", ids: [1] }],
+  ["reorderFocusItems: too many ids", reorderFocusItems, { kind: "movie", ids: TOO_MANY }],
+])("refuses %s without writing or asking for a sync", async (_label, action, input) => {
+  expect(await action(input)).toEqual({ ok: false, error: INVALID });
+  expect(mocks.removeFromFocus).not.toHaveBeenCalled();
+  expect(mocks.reorderFocus).not.toHaveBeenCalled();
+  expect(mocks.requestFocusSync).not.toHaveBeenCalled();
 });
 
 describe("reorderFocusItems", () => {
-  it("writes the new full order for the kind", async () => {
+  it("writes the new full order for the kind, and asks for a sync", async () => {
     expect(await reorderFocusItems({ kind: "movie", ids: [3, 1, 2] })).toEqual({ ok: true });
     expect(mocks.reorderFocus).toHaveBeenCalledWith("movie", [3, 1, 2]);
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
   });
 
   it("allows an empty list", async () => {
     expect(await reorderFocusItems({ kind: "series", ids: [] })).toEqual({ ok: true });
   });
 
-  it("refuses a stale order with the list-changed message and flags it as stale", async () => {
+  it("refuses a stale order with the list-changed message, flags it as stale, and does not ask for a sync", async () => {
     mocks.reorderFocus.mockImplementation(() => {
       throw new FocusOrderError();
     });
@@ -272,23 +330,7 @@ describe("reorderFocusItems", () => {
       error: "The list changed. Refresh and try again.",
       stale: true,
     });
-  });
-
-  it.each([
-    ["duplicate ids", { kind: "movie", ids: [1, 1] }],
-    ["a negative id", { kind: "movie", ids: [1, -2] }],
-    ["an extra key", { kind: "movie", ids: [1], order: "x" }],
-    ["an unknown kind", { kind: "book", ids: [1] }],
-    ["too many ids", { kind: "movie", ids: Array.from({ length: 501 }, (_, i) => i + 1) }],
-  ])("refuses %s without writing", async (_label, input) => {
-    expect(await reorderFocusItems(input)).toEqual({ ok: false, error: INVALID });
-    expect(mocks.reorderFocus).not.toHaveBeenCalled();
-  });
-
-  it("refuses a signed-out caller", async () => {
-    signedOut();
-    expect(await reorderFocusItems({ kind: "movie", ids: [1] })).toEqual({ ok: false, error: DENIED });
-    expect(mocks.reorderFocus).not.toHaveBeenCalled();
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 });
 
@@ -306,26 +348,15 @@ function hit(overrides: Partial<TitleHit> = {}): TitleHit {
 }
 
 describe("searchFocusTitles", () => {
-  it("allows both admin and requester, and searches the title source for the kind", async () => {
-    mocks.titleSearch.mockResolvedValue([]);
-    expect(await searchFocusTitles({ kind: "movie", term: "  dune " })).toEqual({ ok: true, hits: [] });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
-    expect(mocks.titleSearch).toHaveBeenCalledWith("movie", "dune");
-  });
-
-  it("maps the series list to the series kind", async () => {
-    mocks.titleSearch.mockResolvedValue([]);
-    await searchFocusTitles({ kind: "series", term: "dark" });
-    expect(mocks.titleSearch).toHaveBeenCalledWith("series", "dark");
-  });
-
   it.each([
-    ["signed out", () => mocks.requireRole.mockRejectedValue(new AuthzError(401))],
-    ["a forbidden role", () => mocks.requireRole.mockRejectedValue(new AuthzError(403))],
-  ])("refuses %s and never searches", async (_label, deny) => {
-    deny();
-    expect(await searchFocusTitles({ kind: "movie", term: "dune" })).toEqual({ ok: false, error: SEARCH_DENIED });
-    expect(mocks.titleSearch).not.toHaveBeenCalled();
+    ["movie", "dune"],
+    ["series", "dark"],
+  ])("searches the %s source for the trimmed term, and leaves out titles already in the library", async (kind, term) => {
+    const inLibrary = hit({ externalId: 1, inLibrary: true });
+    const notYet = hit({ externalId: 2 });
+    mocks.titleSearch.mockResolvedValue([inLibrary, notYet]);
+    expect(await searchFocusTitles({ kind, term: `  ${term} ` })).toEqual({ ok: true, hits: [notYet] });
+    expect(mocks.titleSearch).toHaveBeenCalledWith(kind, term);
   });
 
   it.each([
@@ -341,38 +372,27 @@ describe("searchFocusTitles", () => {
     expect(mocks.titleSearch).not.toHaveBeenCalled();
   });
 
-  it("leaves out titles that are already in the library", async () => {
-    const inLibrary = hit({ externalId: 1, inLibrary: true });
-    const notYet = hit({ externalId: 2, inLibrary: false });
-    mocks.titleSearch.mockResolvedValue([inLibrary, notYet]);
-    expect(await searchFocusTitles({ kind: "movie", term: "dune" })).toEqual({ ok: true, hits: [notYet] });
-  });
-
-  it("gives the app's own message when the search fails, and rethrows anything else", async () => {
-    mocks.titleSearch.mockRejectedValueOnce(new TitleSearchError("Sonarr couldn't complete the search"));
-    expect(await searchFocusTitles({ kind: "series", term: "dark" })).toEqual({
+  it.each([
+    ["movie", "Radarr"],
+    ["series", "Sonarr"],
+  ])("says which app failed to search for a %s, using the app's name", async (kind, app) => {
+    mocks.titleSearch.mockRejectedValue(new TitleSearchError(`${app} couldn't complete the search`));
+    expect(await searchFocusTitles({ kind, term: "dune" })).toEqual({
       ok: false,
-      error: "Sonarr couldn't complete the search. Try again.",
+      error: `${app} couldn't complete the search. Try again.`,
     });
-    mocks.titleSearch.mockRejectedValueOnce(new TitleSearchError("Radarr couldn't complete the search"));
-    expect(await searchFocusTitles({ kind: "movie", term: "dune" })).toEqual({
-      ok: false,
-      error: "Radarr couldn't complete the search. Try again.",
-    });
-    mocks.titleSearch.mockRejectedValueOnce(new Error("config broken"));
-    await expect(searchFocusTitles({ kind: "movie", term: "dune" })).rejects.toThrow("config broken");
   });
 });
 
 describe("addNewToFocus", () => {
   it("adds a movie as a requester with the saved defaults, then appends it to Movie Focus as the caller", async () => {
     expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({ ok: true });
-    expect(mocks.requireRole).toHaveBeenCalledWith("admin", "requester");
     expect(mocks.addMovie).toHaveBeenCalledWith(
       { tmdbId: 550, qualityProfileId: 1, rootFolderPath: "/movies", monitored: true, searchForMovie: true },
       expect.any(Function),
     );
     expect(mocks.addToFocus).toHaveBeenCalledWith("movie", 77, "u1");
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
@@ -383,6 +403,7 @@ describe("addNewToFocus", () => {
       expect.any(Function),
     );
     expect(mocks.addToFocus).toHaveBeenCalledWith("series", 88, "u1");
+    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
   });
 
   it("lets an admin pick the profile and monitoring, and appends as the admin", async () => {
@@ -404,16 +425,6 @@ describe("addNewToFocus", () => {
   });
 
   it.each([
-    ["signed out", () => mocks.requireRole.mockRejectedValue(new AuthzError(401))],
-    ["a forbidden role", () => mocks.requireRole.mockRejectedValue(new AuthzError(403))],
-  ])("refuses %s and adds nothing", async (_label, deny) => {
-    deny();
-    expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({ ok: false, error: DENIED });
-    expect(mocks.addMovie).not.toHaveBeenCalled();
-    expect(mocks.addToFocus).not.toHaveBeenCalled();
-  });
-
-  it.each([
     ["an unknown kind", { kind: "book", add: { tmdbId: 550 } }],
     ["an extra key", { kind: "movie", add: { tmdbId: 550 }, id: 1 }],
     ["a missing add", { kind: "movie" }],
@@ -425,44 +436,47 @@ describe("addNewToFocus", () => {
     expect(mocks.addToFocus).not.toHaveBeenCalled();
   });
 
-  it("passes the add's own message through and does not write the list when the add fails", async () => {
-    mocks.addMovie.mockRejectedValue(new MovieAddError("exists"));
-    expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({
-      ok: false,
-      error: "That movie is already in your library.",
-    });
+  it.each([
+    [
+      "a movie the app refuses to add",
+      { kind: "movie", add: { tmdbId: 550 } },
+      () => mocks.addMovie.mockRejectedValue(new MovieAddError("exists")),
+      { ok: false, error: "That movie is already in your library." },
+    ],
+    [
+      "a series the app refuses to add",
+      { kind: "series", add: { tvdbId: 1 } },
+      () => mocks.addSeries.mockRejectedValue(new SeriesAddError("not-found")),
+      { ok: false, error: "Sonarr couldn't find that series." },
+    ],
+    [
+      "a movie the app adds with no id",
+      { kind: "movie", add: { tmdbId: 550 } },
+      () => mocks.addMovie.mockResolvedValue({ id: null, title: "Fight Club", year: 1999 }),
+      {
+        ok: false,
+        error: "Added to Radarr, but it couldn't be added to Movie Focus. Find it on Home and add it from there.",
+        addedToLibrary: true,
+      },
+    ],
+    [
+      "a series the app adds with no id",
+      { kind: "series", add: { tvdbId: 81189 } },
+      () => mocks.addSeries.mockResolvedValue({ id: null, title: "Dark", year: 2017 }),
+      {
+        ok: false,
+        error: "Added to Sonarr, but it couldn't be added to TV Focus. Find it on Home and add it from there.",
+        addedToLibrary: true,
+      },
+    ],
+  ])("returns the outcome for %s, and does not write the list or ask for a sync", async (_label, input, setup, expected) => {
+    setup();
+    expect(await addNewToFocus(input)).toEqual(expected);
     expect(mocks.addToFocus).not.toHaveBeenCalled();
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 
-  it("passes a series add failure through and does not write the list", async () => {
-    mocks.addSeries.mockRejectedValue(new SeriesAddError("not-found"));
-    expect(await addNewToFocus({ kind: "series", add: { tvdbId: 1 } })).toEqual({
-      ok: false,
-      error: "Sonarr couldn't find that series.",
-    });
-    expect(mocks.addToFocus).not.toHaveBeenCalled();
-  });
-
-  it("says the title is in Radarr but not in the list when the add reply has no id", async () => {
-    mocks.addMovie.mockResolvedValue({ id: null, title: "Fight Club", year: 1999 });
-    expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({
-      ok: false,
-      error: "Added to Radarr, but it couldn't be added to Movie Focus. Find it on Home and add it from there.",
-      addedToLibrary: true,
-    });
-    expect(mocks.addToFocus).not.toHaveBeenCalled();
-  });
-
-  it("names Sonarr and TV Focus when a series add reply has no id", async () => {
-    mocks.addSeries.mockResolvedValue({ id: null, title: "Dark", year: 2017 });
-    expect(await addNewToFocus({ kind: "series", add: { tvdbId: 81189 } })).toEqual({
-      ok: false,
-      error: "Added to Sonarr, but it couldn't be added to TV Focus. Find it on Home and add it from there.",
-      addedToLibrary: true,
-    });
-  });
-
-  it("says the title is in the library but the list is full, and says what to do", async () => {
+  it("says the title is in the app but the list is full, says what to do, and does not ask for a sync", async () => {
     mocks.addToFocus.mockImplementation(() => {
       throw new FocusLimitError();
     });
@@ -472,64 +486,13 @@ describe("addNewToFocus", () => {
       addedToLibrary: true,
     });
     expect(mocks.addMovie).toHaveBeenCalled();
+    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 
   it("refuses a full list before adding anything to the app", async () => {
     mocks.listFocusIds.mockReturnValue(Array.from({ length: 500 }, (_, index) => index + 1));
-    expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({
-      ok: false,
-      error: "A Focus list can hold up to 500 titles. Remove one before adding another.",
-    });
+    expect(await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).toEqual({ ok: false, error: FULL });
     expect(mocks.addMovie).not.toHaveBeenCalled();
     expect(mocks.addToFocus).not.toHaveBeenCalled();
-  });
-});
-
-describe("Plex sync requests", () => {
-  it("asks for a sync after a successful add to the list", async () => {
-    expect(await addFocusItem({ kind: "movie", id: 4 })).toEqual({ ok: true });
-    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
-  });
-
-  it("asks for a sync after a remove that removed rows, but not one that removed nothing", async () => {
-    mocks.removeFromFocus.mockReturnValueOnce(2);
-    expect(await removeFocusItems({ kind: "series", ids: [1, 2] })).toEqual({ ok: true });
-    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
-
-    mocks.requestFocusSync.mockClear();
-    mocks.removeFromFocus.mockReturnValueOnce(0);
-    expect(await removeFocusItems({ kind: "series", ids: [9] })).toEqual({ ok: true });
-    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
-  });
-
-  it("asks for a sync after a reorder", async () => {
-    // An earlier test made reorderFocus throw; clearAllMocks keeps that implementation, so reset it here.
-    mocks.reorderFocus.mockReset();
-    expect(await reorderFocusItems({ kind: "movie", ids: [3, 1] })).toEqual({ ok: true });
-    expect(mocks.requestFocusSync).toHaveBeenCalledWith("movie");
-  });
-
-  it("asks for a sync after a title is added to the list by add-new", async () => {
-    expect(await addNewToFocus({ kind: "series", add: { tvdbId: 81189 } })).toEqual({ ok: true });
-    expect(mocks.requestFocusSync).toHaveBeenCalledWith("series");
-  });
-
-  it("does not ask for a sync when the add-new title reached the app but not the list", async () => {
-    mocks.addToFocus.mockImplementation(() => {
-      throw new FocusLimitError();
-    });
-    expect((await addNewToFocus({ kind: "movie", add: { tmdbId: 550 } })).ok).toBe(false);
-    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
-  });
-
-  it("does not ask for a sync when the change is refused, invalid or stale", async () => {
-    mocks.requireRole.mockRejectedValueOnce(new AuthzError(403));
-    await addFocusItem({ kind: "movie", id: 4 });
-    await reorderFocusItems({ kind: "movie", ids: [1, 1] });
-    mocks.reorderFocus.mockImplementationOnce(() => {
-      throw new FocusOrderError();
-    });
-    await reorderFocusItems({ kind: "movie", ids: [1] });
-    expect(mocks.requestFocusSync).not.toHaveBeenCalled();
   });
 });
