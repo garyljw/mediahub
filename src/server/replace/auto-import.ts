@@ -37,6 +37,8 @@ export const REPLACE_IMPORT_INTERVAL_MS = 2 * 60_000;
 
 /** How many of the newest grabbed events the history read asks for. A grab's record is near the top. */
 const HISTORY_LIMIT = 100;
+/** How long a grab may go without its download id turning up in the newest grabbed records before it is forgotten. */
+const RESOLVE_GIVE_UP_MS = 60 * 60_000;
 /** How old a grab must be before its absence from the queue means the download has left it. */
 const QUEUE_GRACE_MS = 10 * 60_000;
 /** Radarr's and Sonarr's history event type for a grab (eventType 1 in both apps). */
@@ -79,7 +81,7 @@ function downloadIdForGuid(records: readonly GrabRecord[], guid: string): string
 }
 
 /** Looks up the download id of each grab that doesn't have one yet, from one history read for the app. */
-async function resolveDownloadIds(app: ReplaceApp, rows: PendingReplaceGrab[]): Promise<void> {
+async function resolveDownloadIds(app: ReplaceApp, rows: PendingReplaceGrab[], now: number): Promise<void> {
   const unresolved = rows.filter((row) => row.downloadId === null);
   if (unresolved.length === 0) return;
   const page =
@@ -88,9 +90,14 @@ async function resolveDownloadIds(app: ReplaceApp, rows: PendingReplaceGrab[]): 
       : await fetchEpisodeHistory(HISTORY_LIMIT, [GRABBED_EVENT]);
   for (const row of unresolved) {
     const downloadId = downloadIdForGuid(page.records, row.guid);
-    if (downloadId === null) continue;
-    setReplaceDownloadId(row.id, downloadId);
-    row.downloadId = downloadId;
+    if (downloadId !== null) {
+      setReplaceDownloadId(row.id, downloadId);
+      row.downloadId = downloadId;
+    } else if (now - row.createdAt >= RESOLVE_GIVE_UP_MS) {
+      // Still not in the newest grabbed records after an hour, so it never will be. Stop reading history for it.
+      deleteReplaceGrab(row.id);
+      console.log(`Replace import: couldn't find a remembered grab in ${APP_NAMES[app]}'s history, so it was forgotten.`);
+    }
   }
 }
 
@@ -102,9 +109,14 @@ async function resolveDownloadIds(app: ReplaceApp, rows: PendingReplaceGrab[]): 
 async function planImportOverExisting(
   app: ReplaceApp,
   downloadId: string,
+  expectedId: number | null,
 ): Promise<{ count: number; send: () => Promise<void> } | "needs-attention"> {
+  // Every scanned file must belong to the movie or series the queue item names, so a replace never overwrites a
+  // different title's file. matchedByIdFileIds refuses the whole download when any file belongs elsewhere.
+  if (expectedId === null) return "needs-attention";
   if (app === "radarr") {
     const items = await fetchMovieManualImport(downloadId);
+    if (!matchedByIdFileIds(items, expectedId).ok) return "needs-attention";
     const ids = replaceableFileIds(items);
     if (ids.length === 0) return "needs-attention";
     const picked = pickMovieImportFiles(items, ids, downloadId);
@@ -113,6 +125,7 @@ async function planImportOverExisting(
     return { count: files.length, send: () => startMovieManualImport(files) };
   }
   const items = await fetchEpisodeManualImport(downloadId);
+  if (!matchedByIdFileIds(items, expectedId).ok) return "needs-attention";
   const ids = replaceableFileIds(items);
   if (ids.length === 0) return "needs-attention";
   const picked = pickEpisodeImportFiles(items, ids, downloadId);
@@ -133,7 +146,13 @@ async function readQueue(app: ReplaceApp): Promise<QueueItem[]> {
 
 /** Works through one app's remembered grabs, then (when the switch is on) its matched-by-ID downloads. */
 async function processApp(app: ReplaceApp, rows: PendingReplaceGrab[], now: number, matchedOn: boolean): Promise<void> {
-  await resolveDownloadIds(app, rows);
+  try {
+    await resolveDownloadIds(app, rows, now);
+  } catch (error) {
+    // A history failure only delays the replace grabs; the queue work below (and matched by ID) still runs.
+    if (!(error instanceof ArrRequestError) || error.kind === "unconfigured") throw error;
+    console.error(`Auto import: ${error.message}`);
+  }
   const tracked = rows.flatMap((row) => (row.downloadId === null ? [] : [{ row, downloadId: row.downloadId }]));
   if (tracked.length === 0 && !matchedOn) return;
 
@@ -152,7 +171,8 @@ async function processApp(app: ReplaceApp, rows: PendingReplaceGrab[], now: numb
     // Still downloading, or finished without a warning: wait.
     if (!items.some((item) => canManualImport(item))) continue;
 
-    const plan = await planImportOverExisting(app, downloadId);
+    const blocked = items.find((item) => canManualImport(item)) ?? items[0];
+    const plan = await planImportOverExisting(app, downloadId, expectedIdOf(app, blocked));
     // Either way MediaHub is done with this grab, so it is forgotten before anything is sent. A command that times out
     // may still have been queued, and must never be sent a second time on the next run.
     deleteReplaceGrab(row.id);
@@ -228,7 +248,8 @@ async function processMatchedById(app: ReplaceApp, queue: QueueItem[], handled: 
   const candidates = new Map<string, QueueItem>();
   for (const item of queue) {
     if (!canManualImport(item) || !isMatchedById(app, item)) continue;
-    const downloadId = item.downloadId ?? "";
+    const downloadId = item.downloadId;
+    if (typeof downloadId !== "string" || downloadId.trim() === "") continue;
     if (!candidates.has(downloadId)) candidates.set(downloadId, item);
   }
 

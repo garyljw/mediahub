@@ -80,9 +80,9 @@ function movieScanItem(id: number, reason: string): MovieManualImportItem {
   } as unknown as MovieManualImportItem;
 }
 
-/** A Sonarr queue item for a download. Only the fields the worker reads. */
+/** A queue item for a download. Only the fields the worker reads. It names the scan items' series (10) and movie (20). */
 function queueItem(id: number, downloadId: string, status: string, trackedDownloadStatus: string) {
-  return { id, downloadId, status, trackedDownloadStatus } as never;
+  return { id, downloadId, status, trackedDownloadStatus, seriesId: 10, movieId: 20 } as never;
 }
 
 const SONARR_MATCHED =
@@ -220,6 +220,33 @@ describe("runAutoImports", () => {
     expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
     expect(mocks.deleteReplaceGrab.mock.invocationCallOrder[0]).toBeLessThan(mocks.startEpisodeManualImport.mock.invocationCallOrder[0]);
     expect(console.error).toHaveBeenCalledWith("Auto import: Sonarr manual import command request failed: timeout");
+  });
+
+  it("replaces nothing when a scanned file belongs to a different series than the queue item", async () => {
+    mocks.pendingReplaceGrabs.mockReturnValue([pending({ id: 1, app: "sonarr", downloadId: "DL-1" })]);
+    mocks.fetchEpisodeQueue.mockResolvedValue([queueItem(5, "DL-1", "completed", "warning")]);
+    const stranger = { ...scanItem(2, UPGRADE), series: { id: 99, title: "Other Show" } } as EpisodeManualImportItem;
+    mocks.fetchEpisodeManualImport.mockResolvedValue([scanItem(1, UPGRADE), stranger]);
+
+    await runAutoImports();
+
+    expect(mocks.startEpisodeManualImport).not.toHaveBeenCalled();
+    expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
+    expect(console.log).toHaveBeenCalledWith("Replace import: a download needs a manual import in Sonarr.");
+  });
+
+  it("forgets a grab whose download id hasn't turned up in history after an hour", async () => {
+    const now = 1_000_000_000;
+    mocks.pendingReplaceGrabs.mockReturnValue([
+      { ...pending({ id: 1, app: "sonarr", downloadId: null }), createdAt: now - 61 * 60_000 },
+      { ...pending({ id: 2, app: "sonarr", downloadId: null }), createdAt: now - 5 * 60_000 },
+    ]);
+    mocks.fetchEpisodeHistory.mockResolvedValue({ records: [] });
+
+    await runAutoImports(now);
+
+    expect(mocks.deleteReplaceGrab).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteReplaceGrab).toHaveBeenCalledWith(1);
   });
 
   it("sends a Radarr import over the existing movie file the same way", async () => {
