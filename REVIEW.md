@@ -23,6 +23,9 @@ These are covered by lint, so don't report them by hand:
 - every `(app)` page starting with `await requirePageUser(...)` and allowing the roles listed in `PAGE_ROLES`, which `src/app/(app)/pages-auth.test.ts` checks. That test catches a forgotten or wrong check, not a deliberate bypass of the test itself, such as shadowing or aliasing the name. Don't report ways to fool it. The guard targets mistakes; a deliberate bypass would stand out in the diff under review.
 - every server action anywhere in `src/` (a `"use server"` file export) starting with `await requireRole(...)`, or the `try` form whose catch returns or throws, with `PUBLIC_ACTIONS` (sign-out only) as the one exception, and no inline `"use server"` functions, which `src/app/server-actions-auth.test.ts` checks. The same limits as the pages guard above apply.
 
+## Tests
+Check tests against CLAUDE.md's "Testing" section. A new or changed server action (other than `PUBLIC_ACTIONS`) without its auth row (role asserted, denial calls nothing upstream) is **Important**. Other missing tests the section calls for are a **Nit**. A test that repeats another test's check is a **Nit**. Don't ask for tests that section says to leave out.
+
 ## New upstream calls
 If the diff calls an upstream endpoint, or a parameter of one, that MediaHub didn't use before (Radarr, Sonarr, Plex, plex.tv, TMDB/TVDB), check that the brief or the PR's "Upstream calls" section lists each call, the documentation read for it, and whether it was confirmed against a live server. Report as **Important**:
 - a new call missing from that list;
