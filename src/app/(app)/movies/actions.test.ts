@@ -119,7 +119,7 @@ describe("authorization", () => {
   // role check can stop it. `upstream` lists the calls that must not happen when the caller is refused.
   const rows: AuthRow[] = [
     { name: "searchMovies", call: () => searchMovies({ term: "film" }), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.lookupMovies] },
-    { name: "addLibraryMovie", call: () => addLibraryMovie(validAdd), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.listRootFolders, mocks.addMovie] },
+    { name: "addLibraryMovie", call: () => addLibraryMovie(validAdd), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.listQualityProfiles, mocks.listRootFolders, mocks.addMovie] },
     { name: "searchLibraryMovies", call: () => searchLibraryMovies({ movieIds: [1] }), roles: ["admin", "requester"], denied: SEARCH_DENIED, upstream: [mocks.searchMovieReleases] },
     { name: "refreshLibraryMovies", call: () => refreshLibraryMovies({ movieIds: [1] }), roles: ["admin"], denied: REFRESH_DENIED, upstream: [mocks.refreshMovies] },
     { name: "findMovieReleases", call: () => findMovieReleases({ movieId: 1 }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.searchReleases] },
@@ -289,6 +289,7 @@ describe("addLibraryMovie for a requester", () => {
     mock.mockRejectedValue(new ArrRequestError("Radarr request failed: timed out", "timeout"));
     expect(await addLibraryMovie(validAdd)).toEqual({ ok: false, error: "Radarr didn't accept the movie. Try again." });
     expect(mocks.refresh).not.toHaveBeenCalled();
+    if (mock === mocks.listRootFolders) expect(mocks.addMovie).not.toHaveBeenCalled();
   });
 
   it("says the movie may still have been added when the add times out, and logs the safe message", async () => {
