@@ -104,7 +104,7 @@ describe("authorization", () => {
   // not happen when the caller is refused. Every call uses valid input, so only the role check can stop it.
   const rows: AuthRow[] = [
     { name: "searchSeries", call: () => searchSeries({ term: "Harbour" }), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.lookupSeries] },
-    { name: "addLibrarySeries", call: () => addLibrarySeries(VALID_ADD), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.addSeries, mocks.listSeriesRootFolders] },
+    { name: "addLibrarySeries", call: () => addLibrarySeries(CHOSEN_ADD), roles: ["admin", "requester"], denied: ADD_DENIED, upstream: [mocks.addSeries, mocks.listSeriesRootFolders, mocks.listSeriesQualityProfiles] },
     { name: "searchLibrarySeries", call: () => searchLibrarySeries({ seriesIds: [1] }), roles: ["admin", "requester"], denied: SEARCH_DENIED, upstream: [mocks.searchSeriesReleases] },
     { name: "refreshLibrarySeries", call: () => refreshLibrarySeries({ seriesIds: [1] }), roles: ["admin"], denied: REFRESH_DENIED, upstream: [mocks.refreshSeries] },
   ];
