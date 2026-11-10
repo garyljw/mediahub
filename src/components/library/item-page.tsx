@@ -1,7 +1,6 @@
 // The shared layout for the movie and series pages. No "use client": both pages are server components, and the
 // interactive pieces (backdrop, actions) are client components of their own. The section order is fixed here, so
 // the two pages can't drift apart. Type-specific content comes in through the slots.
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Backdrop } from "@/components/poster/backdrop";
@@ -9,6 +8,7 @@ import { PosterTile } from "@/components/poster/poster";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { PosterWash, PosterWashLayer } from "@/components/poster/poster-wash";
+import { BackLink } from "./back-link";
 
 export type ItemPageProps = {
   title: string;
@@ -58,10 +58,8 @@ export function ItemPageLayout({
 }: ItemPageProps) {
   return (
     <PosterWash posterSrc={posterSrc} className="space-y-6">
-      {/* Home is the one library page, so every item page goes back there. */}
-      <Link href="/" className="text-sm text-muted-foreground hover:underline">
-        ← Home
-      </Link>
+      {/* Home is the one library page, so every item page goes back there. It goes back in history to the list it came from, when known. */}
+      <BackLink />
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         {backdropSrc !== null && <Backdrop src={backdropSrc} />}

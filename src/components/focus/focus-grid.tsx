@@ -21,6 +21,7 @@ import { removeFocusItems, reorderFocusItems, type FocusResult } from "@/app/(ap
 import { PosterTile } from "@/components/poster/poster";
 import { HomeTile } from "@/components/home/home-grid";
 import { useTilePeek } from "@/components/home/tile-peek";
+import { usePlaceMemory, type ListPath } from "@/components/home/return-place";
 import { withWatched, type HomeItem, type HomeWatched } from "@/components/home/home-items";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
@@ -93,6 +94,12 @@ export function FocusGrid({
   const shownItems = useMemo(() => withWatched(order.items, watchedByKey), [order.items, watchedByKey]);
   const shownByKey = useMemo(() => new Map(shownItems.map((item) => [item.key, item])), [shownItems]);
   const { gridHandlers, card } = useTilePeek((key) => shownByKey.get(key));
+  // Coming back from a title returns to the place the list was left at.
+  const listPath: ListPath = kind === "movie" ? "/focus/movies" : "/focus/tv";
+  const { onGridClick, restore } = usePlaceMemory(listPath, null);
+  useEffect(() => {
+    restore();
+  }, [restore]);
 
   // `busy` blocks a second save synchronously, before React re-renders.
   const busy = useRef(false);
@@ -184,7 +191,7 @@ export function FocusGrid({
   const missingCount = order.missing.length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" onClickCapture={onGridClick}>
       {missingCount > 0 && (
         <div role="status" className="flex flex-col gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p>
@@ -317,6 +324,7 @@ function FocusTile({
       >
         <li
           ref={setNodeRef}
+          data-focus-key={item.key}
           style={style}
           aria-describedby={attributes["aria-describedby"]}
           className={cn(

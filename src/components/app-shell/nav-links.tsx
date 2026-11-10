@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { isPlainClick, topIfOpen, useForgetStaleBackFrom } from "@/components/home/return-place";
 import { isActive, navItemsFor, type NavItem } from "./nav";
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
 
 export function NavLinks({ isAdmin, onNavigate }: Props) {
   const pathname = usePathname();
+  useForgetStaleBackFrom(pathname);
   const items = navItemsFor(isAdmin);
   const mainItems = items.filter((item) => !item.adminOnly);
   const adminItems = items.filter((item) => item.adminOnly);
@@ -26,7 +28,11 @@ export function NavLinks({ isAdmin, onNavigate }: Props) {
         key={item.href}
         href={item.href}
         aria-current={active ? "page" : undefined}
-        onClick={onNavigate}
+        onClick={(event) => {
+          // A list page that is already open scrolls to its top instead (see topIfOpen).
+          if (isPlainClick(event) && topIfOpen(item.href, pathname)) event.preventDefault();
+          onNavigate?.();
+        }}
         className={cn(
           "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
           active
