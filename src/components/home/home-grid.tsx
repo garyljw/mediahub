@@ -16,6 +16,9 @@ import { FOCUS_NAME, SAVE_FAILED } from "@/components/focus/focus-kinds";
 import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useTilePeek } from "./tile-peek";
+import { LetterBar } from "./letter-bar";
+import { letterIndex } from "./letter";
+import { readPlace, usePlaceMemory } from "./return-place";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
 import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
@@ -98,6 +101,8 @@ export function HomeGrid({
   const [downloadedState, setDownloadedState] = useState<HomeDownloaded | null>(null);
   // The default until the saved choice is read on mount, so the first render matches the server's.
   const [sort, setSort] = useState<{ key: HomeSortKey; dir: HomeSortDir }>(DEFAULT_HOME_SORT);
+  // Set once the saved sort, filter and place are read. The grid then restores its scroll position once the tiles show.
+  const [placeReady, setPlaceReady] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -125,11 +130,20 @@ export function HomeGrid({
     };
   }, [downloaded]);
 
-  // Read after mount, not during render: the saved choice is in the browser, and the server must render the default.
+  // Read after mount, not during render: the saved sort, filter and place are in the browser, and the server must render
+  // the defaults. The place's search and filter are applied here too, so the grid comes back as it was left.
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(() => {
-      if (!cancelled) setSort(readHomeSort());
+      if (cancelled) return;
+      setSort(readHomeSort());
+      const filter = readPlace("/")?.filter;
+      if (filter) {
+        setSearch(filter.search);
+        setKind(filter.kind);
+        setWatchFilter(filter.watched);
+      }
+      setPlaceReady(true);
     });
     return () => {
       cancelled = true;
@@ -160,9 +174,14 @@ export function HomeGrid({
   const activeWatch: HomeWatchFilter = watchFilterShown ? watchFilter : "any";
   const watchedByKey = watchedState?.state === "ready" ? watchedState.byKey : null;
   const downloadedByKey = downloadedState?.state === "ready" ? downloadedState.byKey : null;
+  // The scroll position is restored only once the grid shows what it did: the watch filter needs the Plex data, and
+  // the "Date downloaded" sort needs the download dates.
+  const restoreReady =
+    placeReady && (activeWatch === "any" || watchedState !== null) && (sort.key !== "downloaded" || downloadedState !== null);
+  const { onGridClick, restore } = usePlaceMemory("/", { search, kind, watched: activeWatch });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClickCapture={onGridClick}>
       {watchedState?.state === "failed" && (
         <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
@@ -257,6 +276,8 @@ export function HomeGrid({
           sortKey={sort.key}
           sortDir={sort.dir}
           downloadedByKey={downloadedByKey}
+          restoreReady={restoreReady}
+          onRestore={restore}
         />
       </Suspense>
     </div>
@@ -276,6 +297,8 @@ function HomeResults({
   sortKey,
   sortDir,
   downloadedByKey,
+  restoreReady,
+  onRestore,
 }: {
   library: Promise<HomeLibrary>;
   watchedByKey: Record<string, WatchedState> | null;
@@ -285,6 +308,10 @@ function HomeResults({
   sortKey: HomeSortKey;
   sortDir: HomeSortDir;
   downloadedByKey: Record<string, HomeDownloadDate> | null;
+  /** True once the toolbar's saved state is in, so the tiles are the ones the place was saved with. */
+  restoreReady: boolean;
+  /** Puts the page back where it was saved. Runs once, after the tiles show. */
+  onRestore: () => void;
 }) {
   const library = use(libraryPromise);
   const base = library.items;
@@ -341,6 +368,13 @@ function HomeResults({
     [shown, kind, deferredSearch, watchFilter, sortKey, sortDir],
   );
   const filtering = kind !== "all" || deferredSearch.trim() !== "" || watchFilter !== "any";
+  // The grid follows the deferred search, so wait until it has caught up with the box before restoring the position.
+  const searchSettled = deferredSearch === search;
+  useEffect(() => {
+    if (restoreReady && searchSettled) onRestore();
+  }, [restoreReady, searchSettled, ordered, onRestore]);
+  // The A–Z bar, when sorted by title and something shows.
+  const letters = sortKey === "title" && ordered.length > 0 ? letterIndex(ordered) : null;
   // An empty grid with a failed app in view is explained by the page's error, not by "No matches".
   const failedInView = unavailable.some((failed) => kind === "all" || kind === failed);
 
@@ -436,7 +470,7 @@ function HomeResults({
             >
               {/* Tiles are at least 6.5rem, or from sm up 7vw or 8rem, whichever is wider. Wide windows get bigger posters,
                   not just more columns. The skeleton uses the same class, so the tiles don't jump when it's replaced. */}
-              <ul {...gridHandlers} className={POSTER_GRID_CLASS}>
+              <ul {...gridHandlers} className={cn(POSTER_GRID_CLASS, letters && "pr-7")}>
                 {ordered.map((item) => (
                   // content-visibility lets the browser skip layout and paint for tiles that are off screen.
                   <li
@@ -463,6 +497,7 @@ function HomeResults({
               )}
             </ContextMenuContent>
           </ContextMenu>
+          {letters && <LetterBar dir={sortDir} index={letters} />}
           {card}
         </>
       )}
