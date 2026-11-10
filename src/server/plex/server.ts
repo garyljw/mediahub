@@ -40,6 +40,7 @@ export const SectionItemsSchema = z
             leafCount: z.number().nullish(),
             viewedLeafCount: z.number().nullish(),
             ratingKey: z.string().nullish(),
+            addedAt: z.number().nullish(),
           }),
         )
         .nullish(),
@@ -53,8 +54,14 @@ export const SectionItemsSchema = z
       leafCount: item.leafCount ?? 0,
       viewedLeafCount: item.viewedLeafCount ?? 0,
       ratingKey: item.ratingKey ?? null,
+      addedAt: unixSecondsOrNull(item.addedAt),
     })),
   );
+
+/** Plex's addedAt is unix seconds. Anything that isn't a positive safe integer is treated as missing. */
+function unixSecondsOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
 const SectionsSchema = z.object({
   MediaContainer: z.object({
     Directory: z
@@ -281,6 +288,8 @@ export type PlexSectionItem = {
   viewedLeafCount: number;
   /** Plex's id for the item, used to load a show's episodes. Never sent to the browser. */
   ratingKey: string | null;
+  /** When the item was added to Plex, in unix seconds. Movies keep this date when a file is upgraded. Null when Plex sends none. */
+  addedAt: number | null;
 };
 
 // One episode from a show's allLeaves reply. Zod drops every other key (title, Media, ratingKey, ...).
@@ -344,6 +353,67 @@ export async function getSectionItems(
     timeoutMs: 15_000,
     maxBytes: SECTION_ITEMS_MAX_BYTES,
   });
+}
+
+// One page of a show section's episodes, reduced to what the Home "Date downloaded" sort needs: the show each episode
+// belongs to (grandparentRatingKey) and when it was added. Zod drops every other key.
+const EpisodeAddedPageSchema = z
+  .object({
+    MediaContainer: z.object({
+      totalSize: z.number().nullish(),
+      Metadata: z
+        .array(z.object({ grandparentRatingKey: z.string().nullish(), addedAt: z.number().nullish() }))
+        .nullish(),
+    }),
+  })
+  .transform((reply) => {
+    const metadata = reply.MediaContainer.Metadata ?? [];
+    const episodes: PlexEpisodeAdded[] = [];
+    for (const item of metadata) {
+      const showKey = item.grandparentRatingKey ?? null;
+      const addedAt = unixSecondsOrNull(item.addedAt);
+      if (showKey !== null && addedAt !== null) episodes.push({ showKey, addedAt });
+    }
+    return { totalSize: reply.MediaContainer.totalSize ?? null, pageCount: metadata.length, episodes };
+  });
+
+/** An episode's show and when it was added (unix seconds). */
+export type PlexEpisodeAdded = { showKey: string; addedAt: number };
+
+/** Plex sends episodes in pages of this size. The page cap bounds a runaway reply to 50,000 episodes. */
+const EPISODE_PAGE_SIZE = 1000;
+const EPISODE_MAX_PAGES = 50;
+
+/**
+ * Every episode in one show section, with the show's ratingKey and each episode's addedAt. Plex pages the list, so the
+ * pages are read in turn until the total is reached, an empty page comes back, or the cap is hit. Paging is by query
+ * parameters, and the token is sent in the header only.
+ */
+export async function getSectionEpisodeAdded(
+  conn: ServerConnection,
+  token: string,
+  sectionKey: string,
+): Promise<PlexEpisodeAdded[]> {
+  const episodes: PlexEpisodeAdded[] = [];
+  for (let page = 0; page < EPISODE_MAX_PAGES; page++) {
+    const start = page * EPISODE_PAGE_SIZE;
+    const query = new URLSearchParams({
+      type: "4",
+      "X-Plex-Container-Start": String(start),
+      "X-Plex-Container-Size": String(EPISODE_PAGE_SIZE),
+    });
+    const reply = await plexServerFetch("Plex show episodes added", EpisodeAddedPageSchema, {
+      conn,
+      token,
+      path: `/library/sections/${encodeURIComponent(sectionKey)}/all?${query}`,
+      timeoutMs: 15_000,
+      maxBytes: SECTION_ITEMS_MAX_BYTES,
+    });
+    episodes.push(...reply.episodes);
+    if (reply.pageCount === 0) break;
+    if (reply.totalSize !== null && start + EPISODE_PAGE_SIZE >= reply.totalSize) break;
+  }
+  return episodes;
 }
 
 /**

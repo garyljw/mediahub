@@ -34,7 +34,7 @@ const inFlight = new Map<string, InFlight>();
  * The connection a cached index belongs to: address, server and (hashed) token. A change to any makes the entry
  * stale, so a reconnect with a different Plex account never shows the old account's state.
  */
-function fingerprintOf(connection: PlexDataConnection): string {
+export function fingerprintOf(connection: PlexDataConnection): string {
   return createHash("sha256").update(`${connection.url}|${connection.serverId}|${connection.token}`).digest("hex");
 }
 

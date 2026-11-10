@@ -1,5 +1,6 @@
 // Pure helpers for the Home grid: the merged item shape, filtering and ordering. Client-safe: no runtime imports from src/server.
 import { matchesTitleOrYear, TITLE_COLLATOR } from "@/components/library/list";
+import { readChoice, writeChoice } from "@/components/library/release";
 
 /** A Plex watched state: unwatched, partly watched, or watched. The only Plex detail the browser ever receives. */
 export type WatchedState = "unwatched" | "partial" | "watched";
@@ -29,8 +30,16 @@ export type HomeItem = {
   title: string;
   year: number | null;
   sortTitle: string;
-  /** Not used by the A–Z order. Kept for the planned "Date added" sort. */
-  added: string | null;
+  /** When it first came out: a movie's earliest release (cinema, digital or physical) or a series' first aired date. Null when unknown. */
+  released: string | null;
+  /** Bytes on disk. 0 when nothing is downloaded. */
+  sizeOnDisk: number;
+  /**
+   * When the title was downloaded, with the page's download-date stream. Null until it arrives, and for a title with no
+   * file. `recorded` is true when the date is the import in Radarr's or Sonarr's history; false when it is the file
+   * record's date, used for a title with a file but no import record.
+   */
+  downloaded: HomeDownloadDate | null;
   href: string;
   posterSrc: string | null;
   badge: { label: string; className: string };
@@ -108,6 +117,136 @@ export function withWatched(items: HomeItem[], byKey: Record<string, WatchedStat
     return { ...item, watched };
   });
   return changed ? next : items;
+}
+
+/**
+ * A title's download date. `recorded` is true when it is the import in Radarr's or Sonarr's history, and false when it is
+ * the file record's date (a title with a file but no import record).
+ */
+export type HomeDownloadDate = { at: string; recorded: boolean };
+
+/**
+ * The download dates for the grid, as they stream in: "ready" with a date per item key (movie:id and series:id; only
+ * titles with a file), `incomplete` when some dates couldn't be loaded, or "failed" when they couldn't be built at all.
+ * Never rejects.
+ */
+export type HomeDownloaded =
+  | { state: "ready"; byKey: Record<string, HomeDownloadDate>; incomplete: boolean }
+  | { state: "failed" };
+
+function sameDownloadDate(a: HomeDownloadDate | null, b: HomeDownloadDate | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.at === b.at && a.recorded === b.recorded;
+}
+
+/**
+ * Sets each item's `downloaded` from a key map, for movies and series alike. An item missing from the map gets null. An
+ * item whose date doesn't change keeps its object, so memoised tiles skip re-rendering.
+ */
+export function withDownloaded(items: HomeItem[], byKey: Record<string, HomeDownloadDate> | null): HomeItem[] {
+  let changed = false;
+  const next = items.map((item) => {
+    const downloaded = byKey?.[item.key] ?? null;
+    if (sameDownloadDate(downloaded, item.downloaded)) return item;
+    changed = true;
+    return { ...item, downloaded };
+  });
+  return changed ? next : items;
+}
+
+/** The sorts the Home grid offers. Each key says which direction it starts in when first chosen. */
+export type HomeSortKey = "title" | "downloaded" | "released" | "size";
+export type HomeSortDir = "asc" | "desc";
+
+export const HOME_SORTS: { key: HomeSortKey; label: string; defaultDir: HomeSortDir }[] = [
+  { key: "title", label: "Title", defaultDir: "asc" },
+  { key: "downloaded", label: "Date downloaded", defaultDir: "desc" },
+  { key: "released", label: "Released / aired", defaultDir: "desc" },
+  { key: "size", label: "Size on disk", defaultDir: "desc" },
+];
+
+/** The value a sort compares for one item, or null when the item has nothing to compare. */
+function sortValue(item: HomeItem, key: HomeSortKey): number | null {
+  if (key === "size") return item.sizeOnDisk > 0 ? item.sizeOnDisk : null;
+  return timeOf(item.released);
+}
+
+/** The download-date group: recorded imports first, then file dates, then titles with no date. */
+const RECORDED = 0;
+const FILE_DATE = 1;
+const NO_DATE = 2;
+
+function downloadGroup(item: HomeItem): { group: number; time: number | null } {
+  const time = timeOf(item.downloaded?.at ?? null);
+  if (time === null) return { group: NO_DATE, time: null };
+  return { group: item.downloaded?.recorded ? RECORDED : FILE_DATE, time };
+}
+
+/** Epoch milliseconds for an ISO date, or null when it's missing or doesn't parse. */
+function timeOf(value: string | null): number | null {
+  if (value === null) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * Returns a new array in the chosen order. Title sorts A–Z (or Z–A) with compareHomeItems. Released and size sort
+ * newest or largest first when descending, and smallest or oldest first when ascending, with an item that has no value
+ * (no date, an unparsable date, or size 0) last in both directions. Date downloaded is grouped first (see downloadGroup).
+ * Ties, and the no-value group, fall back to A–Z.
+ */
+export function sortHomeItems(items: HomeItem[], key: HomeSortKey, dir: HomeSortDir): HomeItem[] {
+  const sign = dir === "asc" ? 1 : -1;
+  if (key === "title") return [...items].sort((a, b) => sign * compareHomeItems(a, b));
+  if (key === "downloaded") {
+    // Three groups in a fixed order whatever the direction: recorded imports, then file dates, then no date at all.
+    // Within the first two groups the date sorts in the chosen direction.
+    return [...items].sort((a, b) => {
+      const ga = downloadGroup(a);
+      const gb = downloadGroup(b);
+      if (ga.group !== gb.group) return ga.group - gb.group;
+      if (ga.time === null || gb.time === null) return compareHomeItems(a, b);
+      return sign * (ga.time - gb.time) || compareHomeItems(a, b);
+    });
+  }
+  return [...items].sort((a, b) => {
+    const va = sortValue(a, key);
+    const vb = sortValue(b, key);
+    if (va === null || vb === null) {
+      if (va === null && vb === null) return compareHomeItems(a, b);
+      return va === null ? 1 : -1;
+    }
+    if (va !== vb) return sign * (va - vb);
+    return compareHomeItems(a, b);
+  });
+}
+
+/** Where the Home grid remembers its sort choice. */
+export const HOME_SORT_KEY = "mediahub.homeSort";
+
+/** The sort the grid starts with, and the one used when a saved choice is missing or invalid. */
+export const DEFAULT_HOME_SORT: { key: HomeSortKey; dir: HomeSortDir } = { key: "title", dir: "asc" };
+
+/**
+ * The saved sort, or the default when nothing is saved, the stored text isn't JSON, or it names an unknown sort or
+ * direction. Storage can be missing or throw (private mode), which also gives the default.
+ */
+export function readHomeSort(): { key: HomeSortKey; dir: HomeSortDir } {
+  try {
+    const parsed: unknown = JSON.parse(readChoice(HOME_SORT_KEY) ?? "null");
+    if (typeof parsed !== "object" || parsed === null) return DEFAULT_HOME_SORT;
+    const { key, dir } = parsed as Record<string, unknown>;
+    const validKey = HOME_SORTS.find((sort) => sort.key === key);
+    if (!validKey || (dir !== "asc" && dir !== "desc")) return DEFAULT_HOME_SORT;
+    return { key: validKey.key, dir };
+  } catch {
+    return DEFAULT_HOME_SORT;
+  }
+}
+
+/** Saves the sort choice. Storage can be missing or throw, in which case the choice is simply not remembered. */
+export function saveHomeSort(choice: { key: HomeSortKey; dir: HomeSortDir }): void {
+  writeChoice(HOME_SORT_KEY, JSON.stringify(choice));
 }
 
 // Movies sort before series when everything else ties.

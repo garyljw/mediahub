@@ -13,6 +13,7 @@
     "seasonFolder": true,
     "monitored": true,
     "added": "2024-02-10T09:00:00Z",
+    "firstAired": "2026-10-29T01:00:00Z",
     "images": [
       { "coverType": "poster", "url": "https://example.invalid/poster-1.jpg", "remoteUrl": "https://example.invalid/poster-1.jpg" },
       { "coverType": "fanart", "url": "https://example.invalid/fanart-1.jpg", "remoteUrl": "https://example.invalid/fanart-1.jpg" }

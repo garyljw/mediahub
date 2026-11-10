@@ -1,12 +1,28 @@
-import { describe, expect, it } from "vitest";
-import { compareHomeItems, filterHomeItems, hasWatchData, withWatched, type HomeItem } from "./home-items";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  compareHomeItems,
+  DEFAULT_HOME_SORT,
+  filterHomeItems,
+  HOME_SORT_KEY,
+  readHomeSort,
+  saveHomeSort,
+  sortHomeItems,
+  hasWatchData,
+  withDownloaded,
+  withWatched,
+  type HomeItem,
+  type HomeSortDir,
+  type HomeSortKey,
+} from "./home-items";
 
 function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: HomeItem["kind"] }): HomeItem {
   return {
     key: `${overrides.kind}:${overrides.id}`,
     year: null,
     sortTitle: overrides.title.toLowerCase(),
-    added: null,
+    released: null,
+    sizeOnDisk: 0,
+    downloaded: null,
     href: `/${overrides.kind}/${overrides.id}`,
     posterSrc: null,
     badge: { label: "Missing", className: "" },
@@ -134,9 +150,9 @@ describe("hasWatchData", () => {
 describe("compareHomeItems", () => {
   const sorted = (list: HomeItem[]) => [...list].sort(compareHomeItems);
 
-  it("sorts A–Z by sort title, ignoring the added date", () => {
-    const zulu = item({ kind: "movie", id: 1, title: "Zulu", added: "2026-06-01T00:00:00Z" });
-    const alpha = item({ kind: "series", id: 2, title: "Alpha", added: "2020-01-01T00:00:00Z" });
+  it("sorts A–Z by sort title, ignoring the release date", () => {
+    const zulu = item({ kind: "movie", id: 1, title: "Zulu", released: "2020-06-01T00:00:00Z" });
+    const alpha = item({ kind: "series", id: 2, title: "Alpha", released: "2026-01-01T00:00:00Z" });
     expect(titles(sorted([zulu, alpha]))).toEqual(["Alpha", "Zulu"]);
   });
 
@@ -204,3 +220,119 @@ describe("withWatched", () => {
 function withItemStates(list: HomeItem[]): (HomeItem["watched"])[] {
   return list.map((entry) => entry.watched);
 }
+
+describe("sortHomeItems", () => {
+  const alpha = item({ kind: "movie", id: 1, title: "Alpha", released: "2020-01-01T00:00:00Z", sizeOnDisk: 3000, downloaded: { at: "2024-05-01T00:00:00Z", recorded: true } });
+  const bravo = item({ kind: "series", id: 2, title: "Bravo", released: "2024-06-01T00:00:00Z", sizeOnDisk: 1000, downloaded: { at: "2025-01-01T00:00:00Z", recorded: true } });
+  const charlie = item({ kind: "movie", id: 3, title: "Charlie", released: "2022-03-03T00:00:00Z", sizeOnDisk: 2000, downloaded: { at: "2023-02-02T00:00:00Z", recorded: false } });
+  const delta = item({ kind: "series", id: 4, title: "Delta", released: "2021-07-07T00:00:00Z", sizeOnDisk: 4000, downloaded: { at: "2024-12-12T00:00:00Z", recorded: false } });
+  const mixed = [delta, charlie, bravo, alpha];
+
+  it.each<[HomeSortKey, HomeSortDir, string[]]>([
+    ["title", "asc", ["Alpha", "Bravo", "Charlie", "Delta"]],
+    ["title", "desc", ["Delta", "Charlie", "Bravo", "Alpha"]],
+    ["downloaded", "desc", ["Bravo", "Alpha", "Delta", "Charlie"]],
+    ["downloaded", "asc", ["Alpha", "Bravo", "Charlie", "Delta"]],
+    ["released", "desc", ["Bravo", "Charlie", "Delta", "Alpha"]],
+    ["released", "asc", ["Alpha", "Delta", "Charlie", "Bravo"]],
+    ["size", "desc", ["Delta", "Alpha", "Charlie", "Bravo"]],
+    ["size", "asc", ["Bravo", "Charlie", "Alpha", "Delta"]],
+  ])("sorts by %s %s", (key, dir, expected) => {
+    expect(titles(sortHomeItems(mixed, key, dir))).toEqual(expected);
+  });
+
+  it.each<[HomeSortKey, HomeSortDir]>([
+    ["downloaded", "asc"],
+    ["downloaded", "desc"],
+    ["released", "asc"],
+    ["released", "desc"],
+    ["size", "asc"],
+    ["size", "desc"],
+  ])("puts items with no value last when sorting by %s %s", (key, dir) => {
+    // Zulu has a value for every sort. Alpha has no date and no size (size 0). Mike has an unparsable date and size 0.
+    const valued = item({ kind: "movie", id: 1, title: "Zulu", released: "2020-01-01T00:00:00Z", downloaded: { at: "2020-01-01T00:00:00Z", recorded: true }, sizeOnDisk: 5 });
+    const noDate = item({ kind: "movie", id: 2, title: "Alpha", released: null, downloaded: null, sizeOnDisk: 0 });
+    const badDate = item({ kind: "movie", id: 3, title: "Mike", released: "not a date", downloaded: { at: "not a date", recorded: true }, sizeOnDisk: 0 });
+    expect(titles(sortHomeItems([badDate, noDate, valued], key, dir))).toEqual(["Zulu", "Alpha", "Mike"]);
+  });
+
+  it.each(["asc", "desc"] as const)("groups recorded imports, then file dates, then no date, in %s order", (dir) => {
+    const recordedOld = item({ kind: "movie", id: 1, title: "Alpha", downloaded: { at: "2020-01-01T00:00:00Z", recorded: true } });
+    const recordedNew = item({ kind: "series", id: 2, title: "Bravo", downloaded: { at: "2024-01-01T00:00:00Z", recorded: true } });
+    const fileOnly = item({ kind: "movie", id: 3, title: "Charlie", downloaded: { at: "2025-06-01T00:00:00Z", recorded: false } });
+    const none = item({ kind: "movie", id: 4, title: "Delta", downloaded: null });
+    const sorted = titles(sortHomeItems([none, fileOnly, recordedOld, recordedNew], "downloaded", dir));
+    // Within the recorded group the dates follow the direction. The file-date and no-date groups always come after it.
+    expect(sorted).toEqual(dir === "asc" ? ["Alpha", "Bravo", "Charlie", "Delta"] : ["Bravo", "Alpha", "Charlie", "Delta"]);
+  });
+
+  it("breaks ties A–Z in both directions", () => {
+    const bravoMovie = item({ kind: "movie", id: 2, title: "Bravo", sizeOnDisk: 100 });
+    const alphaSeries = item({ kind: "series", id: 1, title: "Alpha", sizeOnDisk: 100 });
+    expect(titles(sortHomeItems([bravoMovie, alphaSeries], "size", "desc"))).toEqual(["Alpha", "Bravo"]);
+    expect(titles(sortHomeItems([bravoMovie, alphaSeries], "size", "asc"))).toEqual(["Alpha", "Bravo"]);
+  });
+});
+
+describe("withDownloaded", () => {
+  const plain = [
+    item({ kind: "movie", id: 1, title: "Harbour Lights", downloaded: { at: "2024-01-01T00:00:00Z", recorded: true } }),
+    item({ kind: "series", id: 2, title: "Harbour Watch" }),
+  ];
+
+  it("sets a movie's and a series' date from the key map, and null for an item not in it", () => {
+    const merged = withDownloaded(plain, { "series:2": { at: "2025-02-02T00:00:00Z", recorded: false } });
+    expect(merged[1].downloaded).toEqual({ at: "2025-02-02T00:00:00Z", recorded: false });
+    expect(withDownloaded(plain, {})[0].downloaded).toBeNull();
+    expect(withDownloaded(plain, {})[1].downloaded).toBeNull();
+  });
+
+  it("keeps the same object for an item whose date doesn't change, and the same array when nothing changes", () => {
+    const withDate = withDownloaded(plain, { "series:2": { at: "2025-02-02T00:00:00Z", recorded: true } });
+    expect(withDownloaded(withDate, { "series:2": { at: "2025-02-02T00:00:00Z", recorded: true } })).toBe(withDate);
+    expect(withDownloaded(plain, { "movie:1": { at: "2024-01-01T00:00:00Z", recorded: true } })).toBe(plain);
+    expect(withDownloaded(plain, null)[0]).not.toBe(plain[0]);
+  });
+});
+
+describe("readHomeSort and saveHomeSort", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubStorage(store: Record<string, string>) {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+    });
+  }
+
+  it("reads back what was saved", () => {
+    stubStorage({});
+    saveHomeSort({ key: "size", dir: "asc" });
+    expect(readHomeSort()).toEqual({ key: "size", dir: "asc" });
+  });
+
+  it.each([['{"key":"nope","dir":"asc"}'], ['{"key":"size","dir":"sideways"}'], ["not json"], ["null"]])(
+    "falls back to the default for the stored value %s",
+    (raw) => {
+      stubStorage({ [HOME_SORT_KEY]: raw });
+      expect(readHomeSort()).toEqual(DEFAULT_HOME_SORT);
+    },
+  );
+
+  it("uses the default, and does not throw on save, when storage throws", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("storage denied");
+      },
+      setItem: () => {
+        throw new Error("storage denied");
+      },
+    });
+    expect(readHomeSort()).toEqual(DEFAULT_HOME_SORT);
+    expect(() => saveHomeSort({ key: "size", dir: "desc" })).not.toThrow();
+  });
+});

@@ -26,12 +26,36 @@ export type MovieRow = {
   fileQuality: string | null;
   sizeOnDisk: number;
   added: string | null;
+  /**
+   * When the movie first came out: the earliest of its cinema, digital and physical dates. Radarr's own releaseDate is
+   * not used, because for older films it is a later home-video date (a 1955 film showed 1969). Null when none is known.
+   */
+  releaseDate: string | null;
+  /**
+   * When Radarr created the movie's file record (movieFile.dateAdded). Radarr also changes it without a download, so the
+   * Home sort uses the import history instead and only falls back to this. Null unless the movie is downloaded.
+   */
+  fileAddedAt: string | null;
   sortTitle: string;
   /** True when Radarr has a poster for the movie. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
   /** The TMDB id, used to match the movie to Plex. Server-only: never copied into the Home items. */
   tmdbId: number | null;
 };
+
+/** The earliest date that parses, as Radarr sent it, or null when none does. */
+function earliestDate(dates: (string | null | undefined)[]): string | null {
+  let earliest: string | null = null;
+  let earliestTime = Number.POSITIVE_INFINITY;
+  for (const date of dates) {
+    if (typeof date !== "string") continue;
+    const time = Date.parse(date);
+    if (Number.isNaN(time) || time >= earliestTime) continue;
+    earliest = date;
+    earliestTime = time;
+  }
+  return earliest;
+}
 
 function movieStatus(movie: MovieResource): MovieStatus {
   if (movie.hasFile) return "downloaded";
@@ -64,6 +88,8 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       fileQuality: status === "downloaded" ? (movie.movieFile?.quality?.quality?.name ?? null) : null,
       sizeOnDisk: status === "downloaded" ? (movie.sizeOnDisk ?? 0) : 0,
       added: movie.added ?? null,
+      releaseDate: earliestDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease]),
+      fileAddedAt: status === "downloaded" ? (movie.movieFile?.dateAdded ?? null) : null,
       sortTitle: (movie.sortTitle || movie.title).toLowerCase(),
       hasPoster: movie.images?.some((image) => image.coverType === "poster") ?? false,
       tmdbId: typeof movie.tmdbId === "number" && Number.isSafeInteger(movie.tmdbId) && movie.tmdbId > 0 ? movie.tmdbId : null,

@@ -48,12 +48,14 @@ import {
 
 const ALLOWED_KEYS = [
   "added",
+  "fileAddedAt",
   "fileQuality",
   "hasPoster",
   "id",
   "monitored",
   "qualityProfile",
   "qualityProfileId",
+  "releaseDate",
   "sizeOnDisk",
   "sortTitle",
   "status",
@@ -90,6 +92,9 @@ describe("toMovieRows", () => {
       fileQuality: "Bluray-1080p",
       sizeOnDisk: 12345678901,
       added: "2024-03-12T10:21:45Z",
+      // The earliest of the cinema, digital and physical dates, not Radarr's later releaseDate.
+      releaseDate: "2019-05-01T00:00:00Z",
+      fileAddedAt: "2024-03-13T08:00:00Z",
       sortTitle: "starfall protocol",
       hasPoster: true,
       tmdbId: 900001,
@@ -108,6 +113,9 @@ describe("toMovieRows", () => {
       fileQuality: null,
       sizeOnDisk: 0,
       added: "2024-05-01T08:00:00Z",
+      releaseDate: "2021-09-03T00:00:00Z",
+      // No file yet, so no download date, even though Radarr has a release date.
+      fileAddedAt: null,
       sortTitle: "lantern road",
       hasPoster: false,
       tmdbId: 900002,
@@ -128,6 +136,8 @@ describe("toMovieRows", () => {
       fileQuality: "WEBDL-720p",
       sizeOnDisk: 1610612736,
       added: "2023-11-02T12:00:00.250Z",
+      releaseDate: "2008-02-29T00:00:00Z",
+      fileAddedAt: "2023-11-04T19:30:00Z",
     });
   });
 

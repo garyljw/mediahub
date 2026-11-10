@@ -6,11 +6,14 @@ import { listSeries } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { getWatchedIndex } from "@/server/plex/watched";
 import { getPlexDataConnection } from "@/server/plex/data-connection";
-import { homeWatched, toHomeItems } from "@/server/merge/library";
+import { homeDownloadedByKey, homeWatched, toHomeItems } from "@/server/merge/library";
+import { seriesDownloadedAt } from "@/server/arr/series-downloaded";
+import { movieImportDates, seriesImportDates } from "@/server/arr/import-history";
+import { getPlexAddedIndex } from "@/server/plex/added";
 import { focusMembership } from "@/server/focus/focus";
 import { syncFocusIfStale } from "@/server/focus/plex-sync";
 import { Button } from "@/components/ui/button";
-import type { HomeLibrary, HomeWatched } from "@/components/home/home-items";
+import type { HomeDownloaded, HomeLibrary, HomeWatched } from "@/components/home/home-items";
 import { HomeGrid } from "@/components/home/home-grid";
 
 export const metadata = { title: "Home" };
@@ -25,7 +28,10 @@ export default async function HomePage() {
 
   // Nothing here is awaited. Radarr, Sonarr and Plex all start now, and the grid receives the promises. Plex is not
   // wrapped in loadOrNull: a failure comes back as "failed" and only costs the banners, not the grid.
-  const arr = Promise.all([loadOrNull(listMovies, "Home page"), loadOrNull(listSeries, "Home page")]);
+  // Kept apart so the series download dates can start as soon as Sonarr answers, without waiting for Radarr.
+  const movieList = loadOrNull(listMovies, "Home page");
+  const seriesList = loadOrNull(listSeries, "Home page");
+  const arr = Promise.all([movieList, seriesList]);
   const plex = getWatchedIndex();
   const focus = focusMembership();
 
@@ -48,12 +54,52 @@ export default async function HomePage() {
       return { state: "failed" } as const;
     });
 
+  // The download dates: each title's import in Radarr's or Sonarr's history, with the file record's date (or one request per
+  // series, from Sonarr's episode files) for a title with a file and no import. This is the slowest part, so it streams in
+  // last. A failed list contributes nothing, since its own error already shows. A failed history or file lookup marks the
+  // dates incomplete, and never fails the grid.
+  const downloaded: Promise<HomeDownloaded> = Promise.all([movieList, seriesList])
+    .then(async ([movies, series]): Promise<HomeDownloaded> => {
+      const [movieImports, seriesImports, plexAdded] = await Promise.all([
+        movies === null ? new Map<number, string>() : movieImportDates(),
+        series === null ? new Map<number, string>() : seriesImportDates(),
+        getPlexAddedIndex(),
+      ]);
+      const importedSeries = seriesImports === "failed" ? new Map<number, string>() : seriesImports;
+      const plexSeries = plexAdded === null || plexAdded === "failed" ? new Map<number, string>() : plexAdded.series;
+      // Only series with files that have neither an import nor a Plex date need their file date from Sonarr.
+      const needFileDate = (series?.rows ?? []).filter(
+        (row) =>
+          row.episodeFileCount > 0 &&
+          !importedSeries.has(row.id) &&
+          !(row.tvdbId !== null && plexSeries.has(row.tvdbId)),
+      );
+      const fallback = await seriesDownloadedAt(needFileDate);
+      return {
+        state: "ready",
+        byKey: homeDownloadedByKey(
+          movies?.rows ?? [],
+          series?.rows ?? [],
+          movieImports,
+          seriesImports,
+          plexAdded,
+          fallback.dates,
+        ),
+        incomplete: movieImports === "failed" || seriesImports === "failed" || plexAdded === "failed" || fallback.failed,
+      };
+    })
+    .catch(() => {
+      console.error("Home page: the download dates could not be built");
+      return { state: "failed" } as const;
+    });
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">Home</h1>
       <HomeGrid
         library={library}
         watched={watched}
+        downloaded={downloaded}
         // Only whether a connection exists: the connection itself (with its token) stays on the server.
         plexConnected={getPlexDataConnection() !== null}
         action={
