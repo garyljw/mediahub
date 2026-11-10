@@ -1,11 +1,12 @@
 import "server-only";
 import type { MovieRow } from "@/server/arr/movies";
 import type { SeriesRow } from "@/server/arr/series";
-import { compareHomeItems, type HomeItem, type HomeWatched } from "@/components/home/home-items";
+import { compareHomeItems, type HomeDownloadDate, type HomeItem, type HomeWatched } from "@/components/home/home-items";
 import { formatCount } from "@/components/library/format";
 import { STATUS_CLASS as MOVIE_STATUS_CLASS, STATUS_LABEL as MOVIE_STATUS_LABEL } from "@/components/movies/movie-status";
 import { EPISODE_STATUS_CLASS } from "@/components/tv/series-status";
 import type { FocusMembership } from "@/server/focus/focus";
+import type { PlexAddedIndex } from "./plex-added";
 import type { WatchedIndex, WatchedState } from "./watched";
 
 function movieItem(row: MovieRow, watched: WatchedIndex | null, inFocus: boolean): HomeItem {
@@ -16,7 +17,9 @@ function movieItem(row: MovieRow, watched: WatchedIndex | null, inFocus: boolean
     title: row.title,
     year: row.year,
     sortTitle: row.sortTitle,
-    added: row.added,
+    released: row.releaseDate,
+    sizeOnDisk: row.sizeOnDisk,
+    downloaded: null,
     href: `/movies/${row.id}`,
     posterSrc: row.hasPoster ? `/api/movies/${row.id}/poster` : null,
     badge: { label: MOVIE_STATUS_LABEL[row.status], className: MOVIE_STATUS_CLASS[row.status] },
@@ -48,7 +51,10 @@ function seriesItem(row: SeriesRow, watched: WatchedIndex | null, inFocus: boole
     title: row.title,
     year: row.year,
     sortTitle: row.sortTitle,
-    added: row.added,
+    released: row.firstAired,
+    sizeOnDisk: row.sizeOnDisk,
+    // Filled in by the page's download-date stream (see homeDownloadedByKey), so it starts null here.
+    downloaded: null,
     href: `/tv/${row.id}`,
     posterSrc: row.hasPoster ? `/api/tv/${row.id}/poster` : null,
     badge: seriesBadge(row),
@@ -92,6 +98,54 @@ export function homeWatchedByKey(
     const state = row.tvdbId === null ? undefined : watched.series.get(row.tvdbId);
     if (state !== undefined) byKey[`series:${row.id}`] = state;
   }
+  return byKey;
+}
+
+/** The later of two ISO dates, or whichever one is there. */
+function laterOf(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Date.parse(b) > Date.parse(a) ? b : a;
+}
+
+/**
+ * Pure: the download date for each title that has a file, keyed like toHomeItems (`movie:id`, `series:id`). A title's date
+ * is the later of its newest import in Radarr's or Sonarr's history (an upgrade is an import) and the day it arrived in
+ * Plex, recorded. With neither, a movie uses its file record's date and a series uses `seriesFileDates` (recorded false).
+ * A title with no file gets no entry. An import map or a Plex index that "failed", or a null Plex index, counts as empty.
+ */
+export function homeDownloadedByKey(
+  movies: MovieRow[],
+  series: SeriesRow[],
+  movieImports: Map<number, string> | "failed",
+  seriesImports: Map<number, string> | "failed",
+  plex: PlexAddedIndex | null | "failed",
+  seriesFileDates: Map<number, string | null>,
+): Record<string, HomeDownloadDate> {
+  const movieImported = movieImports === "failed" ? new Map<number, string>() : movieImports;
+  const seriesImported = seriesImports === "failed" ? new Map<number, string>() : seriesImports;
+  const plexMovies = plex === null || plex === "failed" ? new Map<number, string>() : plex.movies;
+  const plexSeries = plex === null || plex === "failed" ? new Map<number, string>() : plex.series;
+  const byKey: Record<string, HomeDownloadDate> = {};
+
+  for (const row of movies) {
+    if (row.status !== "downloaded") continue;
+    const latest = laterOf(movieImported.get(row.id), row.tmdbId === null ? undefined : plexMovies.get(row.tmdbId));
+    if (latest !== undefined) byKey[`movie:${row.id}`] = { at: latest, recorded: true };
+    else if (row.fileAddedAt !== null) byKey[`movie:${row.id}`] = { at: row.fileAddedAt, recorded: false };
+  }
+
+  for (const row of series) {
+    if (row.episodeFileCount === 0) continue;
+    const latest = laterOf(seriesImported.get(row.id), row.tvdbId === null ? undefined : plexSeries.get(row.tvdbId));
+    if (latest !== undefined) {
+      byKey[`series:${row.id}`] = { at: latest, recorded: true };
+      continue;
+    }
+    const fileDate = seriesFileDates.get(row.id);
+    if (fileDate) byKey[`series:${row.id}`] = { at: fileDate, recorded: false };
+  }
+
   return byKey;
 }
 

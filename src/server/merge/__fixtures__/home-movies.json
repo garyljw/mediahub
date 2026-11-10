@@ -12,7 +12,9 @@
     "added": "2026-10-01T10:00:00Z",
     "sortTitle": "harbour lights",
     "hasPoster": true,
-    "tmdbId": 900001
+    "tmdbId": 900001,
+    "releaseDate": "2019-06-14T00:00:00Z",
+    "fileAddedAt": "2026-10-02T09:00:00Z"
   },
   {
     "id": 2,
@@ -27,7 +29,9 @@
     "added": "2026-09-15T08:00:00Z",
     "sortTitle": "night circuit",
     "hasPoster": false,
-    "tmdbId": 900002
+    "tmdbId": 900002,
+    "releaseDate": "2024-02-01T00:00:00Z",
+    "fileAddedAt": null
   },
   {
     "id": 3,
@@ -42,7 +46,9 @@
     "added": null,
     "sortTitle": "future tense",
     "hasPoster": true,
-    "tmdbId": 900003
+    "tmdbId": 900003,
+    "releaseDate": "2027-05-07T00:00:00Z",
+    "fileAddedAt": null
   },
   {
     "id": 4,
@@ -57,6 +63,8 @@
     "added": "2026-10-20T12:00:00Z",
     "sortTitle": "glass orchard",
     "hasPoster": true,
-    "tmdbId": null
+    "tmdbId": null,
+    "releaseDate": null,
+    "fileAddedAt": null
   }
 ]

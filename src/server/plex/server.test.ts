@@ -13,6 +13,7 @@ import {
   deleteCollection,
   getCollectionItemKeys,
   getLibrarySections,
+  getSectionEpisodeAdded,
   getSectionItems,
   getServerIdentity,
   getShowEpisodes,
@@ -265,6 +266,7 @@ describe("getSectionItems", () => {
           duration: 5400000,
           Guid: [{ id: "imdb://tt0000001" }, { id: "tmdb://900001" }],
           viewCount: 2,
+          addedAt: 1700000000,
         },
         { ratingKey: "102", title: "Fake Show", Guid: [{ id: "tvdb://100001" }], leafCount: 10, viewedLeafCount: 4 },
         { ratingKey: "103", title: "Untouched" },
@@ -282,10 +284,27 @@ describe("getSectionItems", () => {
         leafCount: 0,
         viewedLeafCount: 0,
         ratingKey: "101",
+        addedAt: 1700000000,
       },
-      { guids: ["tvdb://100001"], viewCount: 0, viewOffset: 0, leafCount: 10, viewedLeafCount: 4, ratingKey: "102" },
-      { guids: [], viewCount: 0, viewOffset: 0, leafCount: 0, viewedLeafCount: 0, ratingKey: "103" },
+      {
+        guids: ["tvdb://100001"],
+        viewCount: 0,
+        viewOffset: 0,
+        leafCount: 10,
+        viewedLeafCount: 4,
+        ratingKey: "102",
+        addedAt: null,
+      },
+      { guids: [], viewCount: 0, viewOffset: 0, leafCount: 0, viewedLeafCount: 0, ratingKey: "103", addedAt: null },
     ]);
+  });
+
+  it("treats an addedAt that is not a positive whole number of seconds as missing", async () => {
+    fetchMock.mockResolvedValue(
+      json({ MediaContainer: { size: 2, Metadata: [{ ratingKey: "1", addedAt: -5 }, { ratingKey: "2", addedAt: 1.5 }] } }),
+    );
+    const items = await getSectionItems(PLAIN, TOKEN, "1");
+    expect(items.map((item) => item.addedAt)).toEqual([null, null]);
   });
 
   it("asks for guids on the encoded section path, with the token in the header only", async () => {
@@ -337,6 +356,65 @@ describe("getSectionItems", () => {
     const padding = "x".repeat(1024 * 1024 + 1);
     fetchMock.mockResolvedValue(new Response(`{"MediaContainer":{"machineIdentifier":"abc","pad":"${padding}"}}`, { status: 200 }));
     await expect(getServerIdentity(PLAIN)).rejects.toMatchObject({ kind: "invalid" });
+  });
+});
+
+describe("getSectionEpisodeAdded", () => {
+  /** A page of episodes in a show section: each one names its show and when it was added. */
+  function episodePage(totalSize: number, start: number, count: number) {
+    return {
+      MediaContainer: {
+        size: count,
+        totalSize,
+        offset: start,
+        Metadata: Array.from({ length: count }, (_, i) => ({
+          ratingKey: String(start + i + 1),
+          title: "Fake Episode",
+          grandparentRatingKey: "2001",
+          addedAt: 1700000000 + start + i,
+        })),
+      },
+    };
+  }
+
+  it("keeps only the show key and added time of each episode, dropping episodes missing either", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        MediaContainer: {
+          size: 3,
+          totalSize: 3,
+          Metadata: [
+            { ratingKey: "1", grandparentRatingKey: "2001", addedAt: 1700000100, title: "Fake Episode" },
+            { ratingKey: "2", grandparentRatingKey: "2001" },
+            { ratingKey: "3", addedAt: 1700000200 },
+          ],
+        },
+      }),
+    );
+    await expect(getSectionEpisodeAdded(PLAIN, TOKEN, "2")).resolves.toEqual([{ showKey: "2001", addedAt: 1700000100 }]);
+  });
+
+  it("reads pages by query parameters until the total is reached", async () => {
+    fetchMock.mockImplementation(async (url: URL) => {
+      const start = Number(url.searchParams.get("X-Plex-Container-Start"));
+      const count = start === 1000 ? 500 : 1000;
+      return json(episodePage(1500, start, count));
+    });
+    const episodes = await getSectionEpisodeAdded(PLAIN, TOKEN, "2");
+    expect(episodes).toHaveLength(1500);
+    const urls = fetchMock.mock.calls.map(([url]) => url as URL);
+    expect(urls).toHaveLength(2);
+    expect(urls[0].searchParams.get("type")).toBe("4");
+    expect(urls[0].searchParams.get("X-Plex-Container-Size")).toBe("1000");
+    expect(urls[1].searchParams.get("X-Plex-Container-Start")).toBe("1000");
+    for (const url of urls) expect(String(url)).not.toContain(TOKEN);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ "X-Plex-Token": TOKEN });
+  });
+
+  it("stops at an empty page even when the total says there is more", async () => {
+    fetchMock.mockResolvedValue(json({ MediaContainer: { size: 0, totalSize: 5000, Metadata: [] } }));
+    await expect(getSectionEpisodeAdded(PLAIN, TOKEN, "2")).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

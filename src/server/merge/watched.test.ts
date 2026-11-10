@@ -30,6 +30,7 @@ const item = (overrides: Partial<SectionedItem> = {}): SectionedItem => ({
   leafCount: 0,
   viewedLeafCount: 0,
   ratingKey: null,
+  addedAt: null,
   sectionKey: "1",
   ...overrides,
 });
@@ -43,6 +44,7 @@ describe("the schema keeps only the watched-status fields", () => {
       leafCount: 0,
       viewedLeafCount: 0,
       ratingKey: "1001",
+      addedAt: null,
     });
     expect(JSON.stringify(movieItems)).not.toContain("Fake Watched Film");
     expect(JSON.stringify(movieItems)).not.toContain("duration");

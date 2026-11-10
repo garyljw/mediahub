@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, Bookmark, Film, Tv } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PosterTile } from "@/components/poster/poster";
@@ -10,6 +10,7 @@ import { POSTER_GRID_CLASS, POSTER_TILE_CLASS } from "@/components/poster/poster
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { activityLabel, showsProgress } from "@/components/library/activity";
 import { formatCount } from "@/components/library/format";
+import { SELECT_CLASS } from "@/components/library/table-parts";
 import { useActivity } from "@/components/library/use-activity";
 import { FOCUS_NAME, SAVE_FAILED } from "@/components/focus/focus-kinds";
 import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
@@ -19,14 +20,24 @@ import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
 import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
 import {
+  DEFAULT_HOME_SORT,
   filterHomeItems,
+  HOME_SORTS,
+  readHomeSort,
+  saveHomeSort,
+  sortHomeItems,
   WATCH_FILTER_CHIPS,
   WATCHED_CLASS,
   WATCHED_LABEL,
+  withDownloaded,
   withWatched,
+  type HomeDownloaded,
+  type HomeDownloadDate,
   type HomeItem,
   type HomeKind,
   type HomeLibrary,
+  type HomeSortDir,
+  type HomeSortKey,
   type HomeWatched,
   type HomeWatchFilter,
   type WatchedState,
@@ -49,15 +60,21 @@ function chipClass(selected: boolean): string {
 }
 
 /**
- * The Home poster grid: movies and TV together, with instant search and a kind filter. Read-only. Each tile
- * opens the item's own page. Live activity is polled for both apps, and shown as a line and progress bar.
+ * The Home poster grid: movies and TV together, with instant search, a kind filter, a watch-status filter and a sort.
+ * Read-only. Each tile opens the item's own page. Live activity is polled for both apps, and shown as a line and
+ * progress bar.
  *
- * The toolbar renders at once. The tiles arrive with the library (Radarr and Sonarr), and the watched status arrives on
- * its own (Plex): the banners and the watch chips fill in when it does.
+ * The toolbar renders at once. The tiles arrive with the library (Radarr and Sonarr). The watched status arrives on
+ * its own (Plex): the banners and the watch chips fill in when it does. The series download dates arrive on their own
+ * too (Sonarr's episode files), and the "Date downloaded" sort is off until they do.
+ *
+ * The sort starts at A–Z so the server and the browser render the same grid, then switches to the choice saved in this
+ * browser once it mounts.
  */
 export function HomeGrid({
   library,
   watched,
+  downloaded,
   plexConnected,
   action,
 }: {
@@ -65,6 +82,8 @@ export function HomeGrid({
   library: Promise<HomeLibrary>;
   /** The Plex watched status, from the page. Resolves once Plex has answered. Never rejects. */
   watched: Promise<HomeWatched>;
+  /** The series download dates, from the page. Resolves once Sonarr's episode files have answered. Never rejects. */
+  downloaded: Promise<HomeDownloaded>;
   /** True when a Plex data connection is set up, so the watch chips are worth showing (disabled) while Plex loads. */
   plexConnected: boolean;
   /** Shown at the end of the filter row, e.g. the Add button. */
@@ -75,6 +94,10 @@ export function HomeGrid({
   const [watchFilter, setWatchFilter] = useState<HomeWatchFilter>("any");
   // Null until Plex answers. Read in an effect rather than with use(), so the toolbar and grid don't wait for it.
   const [watchedState, setWatchedState] = useState<HomeWatched | null>(null);
+  // Null until the download dates arrive. Read in an effect, like the watched status.
+  const [downloadedState, setDownloadedState] = useState<HomeDownloaded | null>(null);
+  // The default until the saved choice is read on mount, so the first render matches the server's.
+  const [sort, setSort] = useState<{ key: HomeSortKey; dir: HomeSortDir }>(DEFAULT_HOME_SORT);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Autofocus the search box on desktop only, so phones don't pop the keyboard.
@@ -92,6 +115,40 @@ export function HomeGrid({
     };
   }, [watched]);
 
+  useEffect(() => {
+    let cancelled = false;
+    downloaded.then((value) => {
+      if (!cancelled) setDownloadedState(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [downloaded]);
+
+  // Read after mount, not during render: the saved choice is in the browser, and the server must render the default.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setSort(readHomeSort());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Picking a sort starts it in that sort's own direction. The new choice is remembered in this browser.
+  function chooseSort(key: HomeSortKey) {
+    const dir = HOME_SORTS.find((option) => option.key === key)?.defaultDir ?? "asc";
+    setSort({ key, dir });
+    saveHomeSort({ key, dir });
+  }
+
+  function flipSortDir() {
+    const dir: HomeSortDir = sort.dir === "asc" ? "desc" : "asc";
+    setSort({ key: sort.key, dir });
+    saveHomeSort({ key: sort.key, dir });
+  }
+
   // While Plex is loading the chips show, disabled, but only when a Plex connection is set up, so a MediaHub without
   // Plex never shows them. They hide when Plex failed or matched nothing.
   // byKey only holds the items Plex matched, so an empty byKey means no item has a watched state.
@@ -102,6 +159,7 @@ export function HomeGrid({
   if (!watchFilterShown && watchFilter !== "any") setWatchFilter("any");
   const activeWatch: HomeWatchFilter = watchFilterShown ? watchFilter : "any";
   const watchedByKey = watchedState?.state === "ready" ? watchedState.byKey : null;
+  const downloadedByKey = downloadedState?.state === "ready" ? downloadedState.byKey : null;
 
   return (
     <div className="space-y-4">
@@ -109,6 +167,12 @@ export function HomeGrid({
         <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
           Couldn&apos;t load watched status from Plex.
+        </p>
+      )}
+      {(downloadedState?.state === "failed" || (downloadedState?.state === "ready" && downloadedState.incomplete)) && (
+        <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+          Couldn&apos;t load some download dates from Radarr, Sonarr or Plex. Those titles may sort lower by date downloaded.
         </p>
       )}
 
@@ -156,6 +220,29 @@ export function HomeGrid({
               </div>
             </>
           )}
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="Sort by"
+              value={sort.key}
+              onChange={(event) => chooseSort(event.target.value as HomeSortKey)}
+              className={SELECT_CLASS}
+            >
+              {HOME_SORTS.map((option) => (
+                <option key={option.key} value={option.key} disabled={option.key === "downloaded" && downloadedState === null}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={flipSortDir}
+              aria-label={sort.dir === "asc" ? "Ascending" : "Descending"}
+              title={sort.dir === "asc" ? "Ascending. Click to sort descending" : "Descending. Click to sort ascending"}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input bg-transparent shadow-xs outline-none hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+            >
+              {sort.dir === "asc" ? <ArrowUp aria-hidden className="size-4" /> : <ArrowDown aria-hidden className="size-4" />}
+            </button>
+          </div>
           {action}
         </div>
       </div>
@@ -167,6 +254,9 @@ export function HomeGrid({
           search={search}
           kind={kind}
           watchFilter={activeWatch}
+          sortKey={sort.key}
+          sortDir={sort.dir}
+          downloadedByKey={downloadedByKey}
         />
       </Suspense>
     </div>
@@ -183,17 +273,26 @@ function HomeResults({
   search,
   kind,
   watchFilter,
+  sortKey,
+  sortDir,
+  downloadedByKey,
 }: {
   library: Promise<HomeLibrary>;
   watchedByKey: Record<string, WatchedState> | null;
   search: string;
   kind: HomeKind;
   watchFilter: HomeWatchFilter;
+  sortKey: HomeSortKey;
+  sortDir: HomeSortDir;
+  downloadedByKey: Record<string, HomeDownloadDate> | null;
 }) {
   const library = use(libraryPromise);
   const base = library.items;
   const unavailable: HomeItem["kind"][] = [...(library.moviesFailed ? ["movie" as const] : []), ...(library.seriesFailed ? ["series" as const] : [])];
-  const items = useMemo(() => withWatched(base, watchedByKey), [base, watchedByKey]);
+  const items = useMemo(
+    () => withDownloaded(withWatched(base, watchedByKey), downloadedByKey),
+    [base, watchedByKey, downloadedByKey],
+  );
 
   const [focusError, setFocusError] = useState<string | null>(null);
   // The tile the open menu is for, by key. Set on the grid's own context-menu or touch-press event (see below).
@@ -236,9 +335,10 @@ function HomeResults({
   // The hover card for a tile. Its handlers go on the grid <ul>, next to the ContextMenu trigger's own handlers.
   const { gridHandlers, card } = useTilePeek((key) => shownByKey.get(key));
   const menuTarget = menuKey === null ? undefined : shownByKey.get(menuKey);
-  const filtered = useMemo(
-    () => filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter }),
-    [shown, kind, deferredSearch, watchFilter],
+  // The matches, in the chosen order. Sorting returns new arrays of the same item objects, so the tiles still skip re-renders.
+  const ordered = useMemo(
+    () => sortHomeItems(filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter }), sortKey, sortDir),
+    [shown, kind, deferredSearch, watchFilter, sortKey, sortDir],
   );
   const filtering = kind !== "all" || deferredSearch.trim() !== "" || watchFilter !== "any";
   // An empty grid with a failed app in view is explained by the page's error, not by "No matches".
@@ -299,15 +399,15 @@ function HomeResults({
         </p>
       )}
 
-      {filtered.length === 0 && failedInView ? null : items.length === 0 ? (
+      {ordered.length === 0 && failedInView ? null : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nothing in your library yet.</p>
-      ) : filtered.length === 0 ? (
+      ) : ordered.length === 0 ? (
         <p className="text-sm text-muted-foreground">No matches.</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
             {filtering
-              ? `${formatCount(filtered.length)} of ${formatCount(items.length)}`
+              ? `${formatCount(ordered.length)} of ${formatCount(items.length)}`
               : `${formatCount(items.length)} ${items.length === 1 ? "title" : "titles"}`}
           </p>
           {/* One menu for the whole grid. Its trigger is the grid, so a tile's menu opens from the tile the press or click
@@ -337,7 +437,7 @@ function HomeResults({
               {/* Tiles are at least 6.5rem, or from sm up 7vw or 8rem, whichever is wider. Wide windows get bigger posters,
                   not just more columns. The skeleton uses the same class, so the tiles don't jump when it's replaced. */}
               <ul {...gridHandlers} className={POSTER_GRID_CLASS}>
-                {filtered.map((item) => (
+                {ordered.map((item) => (
                   // content-visibility lets the browser skip layout and paint for tiles that are off screen.
                   <li
                     key={item.key}

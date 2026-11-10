@@ -31,6 +31,8 @@ export type SeriesRow = {
   seasonCount: number;
   sizeOnDisk: number;
   added: string | null;
+  /** Sonarr's firstAired: when the series started, so it sorts with movies of the same year. Null when Sonarr has none. */
+  firstAired: string | null;
   sortTitle: string;
   /** True when Sonarr has a poster for the series. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
@@ -77,6 +79,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       seasonCount: stats?.seasonCount ?? 0,
       sizeOnDisk: stats?.sizeOnDisk ?? 0,
       added: entry.added ?? null,
+      firstAired: entry.firstAired ?? null,
       sortTitle: (entry.sortTitle || entry.title).toLowerCase(),
       hasPoster: entry.images?.some((image) => image.coverType === "poster") ?? false,
       tvdbId: typeof entry.tvdbId === "number" && Number.isSafeInteger(entry.tvdbId) && entry.tvdbId > 0 ? entry.tvdbId : null,

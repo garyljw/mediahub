@@ -6,7 +6,7 @@ import { STATUS_CLASS as MOVIE_STATUS_CLASS, STATUS_LABEL as MOVIE_STATUS_LABEL 
 import { EPISODE_STATUS_CLASS } from "@/components/tv/series-status";
 import moviesFixture from "./__fixtures__/home-movies.json";
 import seriesFixture from "./__fixtures__/home-series.json";
-import { homeWatched, homeWatchedByKey, toHomeItems } from "./library";
+import { homeDownloadedByKey, homeWatched, homeWatchedByKey, toHomeItems } from "./library";
 import type { WatchedIndex } from "./watched";
 
 // The fixtures are already-reduced rows (the shape listMovies and listSeries return), so they are cast rather than inferred.
@@ -85,6 +85,111 @@ describe("toHomeItems: badges", () => {
 
   it("formats large episode counts with commas", () => {
     expect(byKey("series:8").badge.label).toBe("1,200/1,234 episodes");
+  });
+});
+
+describe("toHomeItems: sort fields", () => {
+  it("copies the release date and size for a movie, and leaves its download date for the page to fill in", () => {
+    expect(byKey("movie:1")).toMatchObject({
+      released: "2019-06-14T00:00:00Z",
+      sizeOnDisk: 8000000000,
+      downloaded: null,
+    });
+    expect(byKey("movie:4").released).toBeNull();
+  });
+
+  it("uses the first aired date as a series' release date, and leaves its download date for the page to fill in", () => {
+    expect(byKey("series:4")).toMatchObject({
+      released: "2026-10-19T20:00:00Z",
+      sizeOnDisk: 4000000000,
+      downloaded: null,
+    });
+    expect(byKey("series:6").released).toBeNull();
+  });
+});
+
+describe("homeDownloadedByKey", () => {
+  const none = new Map<number, string>();
+  const noFileDates = new Map<number, string | null>();
+  const noPlex = { movies: new Map<number, string>(), series: new Map<number, string>() };
+
+  it("uses a movie's import date over its file date, and marks it recorded", () => {
+    const out = homeDownloadedByKey(movies, series, new Map([[1, "2026-10-05T00:00:00Z"]]), none, noPlex, noFileDates);
+    expect(out["movie:1"]).toEqual({ at: "2026-10-05T00:00:00Z", recorded: true });
+  });
+
+  it("falls back to a movie's file date when there is no import or Plex date, and marks it not recorded", () => {
+    expect(homeDownloadedByKey(movies, series, none, none, noPlex, noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-02T09:00:00Z",
+      recorded: false,
+    });
+  });
+
+  it("takes the later of the import and the Plex date, whichever comes first", () => {
+    const plexLater = { movies: new Map([[900001, "2026-10-09T00:00:00Z"]]), series: new Map<number, string>() };
+    const plexEarlier = { movies: new Map([[900001, "2026-10-01T00:00:00Z"]]), series: new Map<number, string>() };
+    const imported = new Map([[1, "2026-10-05T00:00:00Z"]]);
+    expect(homeDownloadedByKey(movies, series, imported, none, plexLater, noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-09T00:00:00Z",
+      recorded: true,
+    });
+    expect(homeDownloadedByKey(movies, series, imported, none, plexEarlier, noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-05T00:00:00Z",
+      recorded: true,
+    });
+  });
+
+  it("uses a Plex date alone as recorded, when there is no import", () => {
+    const plexOnly = { movies: new Map([[900001, "2026-10-09T00:00:00Z"]]), series: new Map<number, string>() };
+    expect(homeDownloadedByKey(movies, series, none, none, plexOnly, noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-09T00:00:00Z",
+      recorded: true,
+    });
+  });
+
+  it("gives no entry to a title with no file, even when it has an import record or a Plex date", () => {
+    const out = homeDownloadedByKey(
+      movies,
+      series,
+      new Map([[2, "2026-10-05T00:00:00Z"]]),
+      new Map([[6, "2026-10-05T00:00:00Z"]]),
+      { movies: new Map([[900002, "2026-10-06T00:00:00Z"]]), series: new Map([[100006, "2026-10-06T00:00:00Z"]]) },
+      noFileDates,
+    );
+    expect(out).not.toHaveProperty("movie:2");
+    expect(out).not.toHaveProperty("series:6");
+  });
+
+  it("uses a series' file date only when it has neither an import nor a Plex date", () => {
+    const seriesImports = new Map([[4, "2026-10-21T00:00:00Z"]]);
+    const plexSeries = { movies: new Map<number, string>(), series: new Map([[100005, "2026-09-20T00:00:00Z"]]) };
+    const fileDates = new Map<number, string | null>([
+      [4, "2026-09-01T00:00:00Z"],
+      [5, "2026-09-02T00:00:00Z"],
+    ]);
+    const out = homeDownloadedByKey(movies, series, none, seriesImports, plexSeries, fileDates);
+    expect(out["series:4"]).toEqual({ at: "2026-10-21T00:00:00Z", recorded: true });
+    expect(out["series:5"]).toEqual({ at: "2026-09-20T00:00:00Z", recorded: true });
+
+    const fileOnly = homeDownloadedByKey(movies, series, none, none, noPlex, fileDates);
+    expect(fileOnly["series:5"]).toEqual({ at: "2026-09-02T00:00:00Z", recorded: false });
+  });
+
+  it("treats a failed import map as empty, so the file dates are used", () => {
+    const out = homeDownloadedByKey(movies, series, "failed", "failed", noPlex, new Map([[5, "2026-09-02T00:00:00Z"]]));
+    expect(out["movie:1"]).toEqual({ at: "2026-10-02T09:00:00Z", recorded: false });
+    expect(out["series:5"]).toEqual({ at: "2026-09-02T00:00:00Z", recorded: false });
+  });
+
+  it("treats a failed or missing Plex index as empty, so the file dates are used", () => {
+    expect(homeDownloadedByKey(movies, series, none, none, "failed", noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-02T09:00:00Z",
+      recorded: false,
+    });
+    expect(homeDownloadedByKey(movies, series, none, none, null, noFileDates)["movie:1"]).toEqual({
+      at: "2026-10-02T09:00:00Z",
+      recorded: false,
+    });
   });
 });
 

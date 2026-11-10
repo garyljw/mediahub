@@ -26,8 +26,8 @@ export type WatchedIndex = {
 /** The Sonarr fields the episode match needs. */
 export type EpisodeRef = { id: number; tvdbId: number | null; seasonNumber: number; episodeNumber: number };
 
-const TMDB_GUID = /^tmdb:\/\/(\d+)$/;
-const TVDB_GUID = /^tvdb:\/\/(\d+)$/;
+export const TMDB_GUID = /^tmdb:\/\/(\d+)$/;
+export const TVDB_GUID = /^tvdb:\/\/(\d+)$/;
 
 const RANK: Record<WatchedState, number> = { unwatched: 0, partial: 1, watched: 2 };
 
@@ -57,7 +57,7 @@ export function showWatchedState(item: PlexSectionItem): WatchedState | null {
 }
 
 /** Every guid matching the pattern, as positive integer ids (an item can list more than one). */
-function idsFromGuids(guids: string[], pattern: RegExp): number[] {
+export function idsFromGuids(guids: string[], pattern: RegExp): number[] {
   const ids: number[] = [];
   for (const guid of guids) {
     const match = pattern.exec(guid);
