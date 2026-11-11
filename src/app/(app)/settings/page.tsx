@@ -27,6 +27,11 @@ const SECTIONS = [
     title: "Updates",
     description: "Installed version and checking for a new release.",
   },
+  {
+    href: "/settings/system",
+    title: "System",
+    description: "Disk space and other details about the server.",
+  },
 ];
 
 export default async function SettingsPage() {

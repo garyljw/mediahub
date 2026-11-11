@@ -1,0 +1,7 @@
+[
+  { "path": "C:\\", "label": "", "freeSpace": 250000000000, "totalSpace": 500000000000 },
+  { "path": "D:\\", "label": "Media", "freeSpace": 1000000000000, "totalSpace": 4000000000000 },
+  { "path": "\\\\nas.example.test\\movies", "freeSpace": 2000000000000, "totalSpace": 8000000000000, "extra": "ignored" },
+  { "path": "", "label": "No path", "freeSpace": 1, "totalSpace": 2 },
+  { "path": "E:\\", "label": "Empty", "freeSpace": 0, "totalSpace": 0 }
+]

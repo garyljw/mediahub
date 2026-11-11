@@ -34,7 +34,7 @@ The screenshots show a made-up demo library, not a real one.
     <td><img src="docs/screenshots/focus.jpg" alt="The Movie Focus list"><br><sub><b>Focus lists:</b> hand-ordered, synced to Plex collections</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/settings.jpg" alt="Settings, Connections: Radarr, Sonarr and Plex"><br><sub><b>Settings:</b> connections, add defaults, users and updates</sub></td>
+    <td><img src="docs/screenshots/settings.jpg" alt="Settings, Connections: Radarr, Sonarr and Plex"><br><sub><b>Settings:</b> connections, add defaults, users, updates and system</sub></td>
     <td>
       <img src="docs/screenshots/phone-home.jpg" alt="Home on a phone" width="48%">
       <img src="docs/screenshots/phone-series.jpg" alt="A series' episode cards on a phone" width="48%"><br><sub><b>Phones:</b> a bottom tab bar and card layouts</sub>
@@ -112,6 +112,10 @@ Admins can see the installed version, the last check and its result in Settings 
 - Installing a newer installer by hand still works, as described above.
 - Installing an older version by hand works only if the newer one didn't change the database. Otherwise MediaHub doesn't start and its log says why. Install the newer version again.
 - Release candidates (versions ending in `-rc.N`): an install of a release candidate also takes newer release candidates. An install of a normal release never takes a release candidate.
+
+### System
+
+Admins can see disk space in Settings → System. It lists each disk Radarr and Sonarr report, with its free and total space and a bar showing how full it is. A disk both apps report appears once. If only one app can be reached, the list comes from that app and says so.
 
 ### Uninstalling
 Go to Settings → Apps → MediaHub → Uninstall. Your data is kept unless you answer Yes when asked to delete it; the default is No. A silent uninstall (`unins000.exe /VERYSILENT`) always keeps the data.
