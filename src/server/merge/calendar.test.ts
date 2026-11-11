@@ -324,8 +324,8 @@ describe("toCalendarEntries", () => {
     expect(special.kind).toBe("episode");
   });
 
-  it("gives a movie no page link and an episode a link to its series", () => {
-    expect(find("movie-101-cinema").href).toBeNull();
+  it("links a movie to its movie page and an episode to its series", () => {
+    expect(find("movie-101-cinema").href).toBe("/movies/101");
     expect(find("episode-703").href).toBe("/tv/7");
     expect(find("episode-801").href).toBe("/tv/8");
   });

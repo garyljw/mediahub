@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { backTarget, isPlainClick, isStaleBackFrom, readBackFrom, readPlace, restoreTop, writePlace, type Place } from "./return-place";
+import type { MouseEvent } from "react";
+import {
+  backTarget,
+  isPlainClick,
+  isStaleBackFrom,
+  readBackFrom,
+  readPlace,
+  rememberOpenedFrom,
+  restoreTop,
+  writePlace,
+  type Place,
+} from "./return-place";
 
 /** A fake sessionStorage with the given behaviour: a plain map, or a store whose every call throws. */
 function stubStorage(store: Map<string, string> | "throws") {
@@ -53,9 +64,40 @@ describe("readPlace and writePlace", () => {
 });
 
 describe("readBackFrom", () => {
-  it("ignores a list that is not one of the three list pages", () => {
-    stubStorage(new Map([["mediahub.backFrom", JSON.stringify({ list: "/queue", itemPath: "/movies/1" })]]));
+  it("ignores a page that is not a back source", () => {
+    stubStorage(new Map([["mediahub.backFrom", JSON.stringify({ list: "/settings", itemPath: "/movies/1" })]]));
     expect(readBackFrom()).toBeNull();
+  });
+});
+
+describe("rememberOpenedFrom", () => {
+  // The tests run without a DOM: a stand-in Element whose closest("a[href]") finds a link with this href, or none.
+  class FakeElement {
+    constructor(private readonly href: string | null) {}
+    closest() {
+      return this.href === null ? null : { getAttribute: () => this.href };
+    }
+  }
+  const plain = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
+
+  function click(href: string | null, keys: Partial<typeof plain> = {}) {
+    vi.stubGlobal("Element", FakeElement);
+    const store = new Map<string, string>();
+    stubStorage(store);
+    rememberOpenedFrom("/calendar")({ ...plain, ...keys, target: new FakeElement(href) } as unknown as MouseEvent<HTMLElement>);
+    return store.get("mediahub.backFrom") ?? null;
+  }
+
+  it("remembers a plain click on a title link", () => {
+    expect(JSON.parse(click("/movies/12") ?? "null")).toEqual({ list: "/calendar", itemPath: "/movies/12" });
+  });
+
+  it.each([
+    ["a link to a page that isn't a title", "/history?limit=200", {}],
+    ["a click that isn't on a link", null, {}],
+    ["a cmd-click that opens a new tab", "/tv/3", { metaKey: true }],
+  ] as const)("ignores %s", (_, href, keys) => {
+    expect(click(href, keys)).toBeNull();
   });
 });
 
@@ -74,6 +116,9 @@ describe("backTarget", () => {
     ["/", "Home"],
     ["/focus/movies", "Movie Focus"],
     ["/focus/tv", "TV Focus"],
+    ["/calendar", "Calendar"],
+    ["/queue", "Queue"],
+    ["/history", "History"],
   ] as const)("goes back to %s, labelled %s, when it opened this title", (list, label) => {
     expect(backTarget({ list, itemPath: "/movies/12" }, "/movies/12")).toEqual({ mode: "back", list, label });
   });

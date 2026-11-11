@@ -38,8 +38,8 @@ export type CalendarEntry = {
   posterSrc: string | null;
   /** The hover card's facts (year, genres, overview) for the movie or series, or null when there is nothing to show. */
   peek: Peek | null;
-  /** Episodes link to their series page. Movies have no page, so null. */
-  href: string | null;
+  /** Movies link to their movie page and episodes to their series page. */
+  href: string;
 };
 
 const RELEASE_SHORT_LABELS: Record<ReleaseType, string> = {
@@ -103,7 +103,7 @@ function movieEntries(movie: MovieResource, from: string, to: string, today: str
         status: movieStatus(movie, date, today),
         posterSrc,
         peek: toPeek(movie),
-        href: null,
+        href: `/movies/${movie.id}`,
       },
       sortKey,
     });

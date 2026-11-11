@@ -102,7 +102,7 @@ describe("toHistoryEntries", () => {
       detail: "2026",
       quality: "WEBDL-1080p",
       posterSrc: "/api/movies/101/poster",
-      href: null,
+      href: "/movies/101",
     });
   });
 
