@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.5.0",
+    date: "2026-11-11",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Release notes:** a new page in the menu (under **More** on a phone) lists what changed in every MediaHub release, newest first.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.4.1",
     date: "2026-11-11",
     sections: [
