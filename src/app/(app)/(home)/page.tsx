@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Plus } from "lucide-react";
 import { requirePageUser } from "@/server/authz";
 import { listMovies } from "@/server/arr/movies";
 import { listSeries } from "@/server/arr/series";
@@ -12,7 +10,6 @@ import { movieImportDates, seriesImportDates } from "@/server/arr/import-history
 import { getPlexAddedIndex } from "@/server/plex/added";
 import { focusMembership } from "@/server/focus/focus";
 import { syncFocusIfStale } from "@/server/focus/plex-sync";
-import { Button } from "@/components/ui/button";
 import type { HomeDownloaded, HomeLibrary, HomeWatched } from "@/components/home/home-items";
 import { HomeGrid } from "@/components/home/home-grid";
 
@@ -102,14 +99,6 @@ export default async function HomePage() {
         downloaded={downloaded}
         // Only whether a connection exists: the connection itself (with its token) stays on the server.
         plexConnected={getPlexDataConnection() !== null}
-        action={
-          <Button asChild>
-            <Link href="/add">
-              <Plus aria-hidden />
-              Add
-            </Link>
-          </Button>
-        }
       />
     </div>
   );

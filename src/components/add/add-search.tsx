@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { GENERIC_ERROR, normalizeTerm, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
 import { AdminPanel } from "@/components/add/admin-add-panel";
+import { MIN_TERM_LENGTH } from "@/components/add/add-link";
 import { cn } from "@/lib/utils";
 import {
   filterByKind,
@@ -29,8 +30,6 @@ import {
 
 /** Wait this long after the last keystroke before searching. */
 const DEBOUNCE_MS = 400;
-/** Shorter terms are not searched. */
-const MIN_TERM_LENGTH = 2;
 
 const KIND_CHIPS: { kind: AddKind; label: string }[] = [
   { kind: "all", label: "All" },
@@ -74,15 +73,20 @@ export function AddSearch({
   isAdmin,
   movieOptions,
   seriesOptions,
+  initialQuery,
+  initialKind,
 }: {
   isAdmin: boolean;
+  /** The text to start with, from the address (e.g. when Home jumps here). Searched at once when long enough. */
+  initialQuery: string;
+  initialKind: AddKind;
   /** Admin only. Null for a requester, or when Radarr's options could not be loaded. */
   movieOptions: AddOptionsForApp<MovieFormDefaults> | null;
   /** Admin only. Null for a requester, or when Sonarr's options could not be loaded. */
   seriesOptions: AddOptionsForApp<SeriesFormDefaults> | null;
 }) {
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<AddKind>("all");
+  const [query, setQuery] = useState(initialQuery);
+  const [kind, setKind] = useState<AddKind>(initialKind);
   const [results, setResults] = useState<Results | null>(null);
   const [searching, setSearching] = useState(false);
   // Several rows can be adding at once, so these are sets and maps keyed by row, not single values.
@@ -123,6 +127,33 @@ export function AddSearch({
       setSearching(false);
     });
   }
+
+  // A start text searches at once, with no wait, once per mount. Next keeps a hidden Add page alive and runs its effects
+  // again on return, so the ref stops a second run from replacing what the user has typed since. (The page gives this
+  // component a new key for a new start text, so a new one gets a fresh ref.)
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const term = normalizeTerm(initialQuery);
+    if (term === null || term.length < MIN_TERM_LENGTH) return;
+    // Started from a microtask rather than in the effect body, as Home's mount effect does. A keystroke or unmount
+    // before it runs changes requestRef or sets cancelled, and the start search is skipped.
+    // A run cancelled before it started doesn't count, so React's dev double-run of effects still searches.
+    const before = requestRef.current;
+    let cancelled = false;
+    let ran = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      ran = true;
+      if (requestRef.current === before) runSearch(term);
+    });
+    return () => {
+      cancelled = true;
+      if (!ran) startedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs for the start text only, not on later typing
+  }, []);
 
   function onQueryChange(value: string) {
     setQuery(value);

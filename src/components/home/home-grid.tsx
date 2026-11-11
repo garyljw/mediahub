@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, Tv } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, Plus, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PosterTile } from "@/components/poster/poster";
 import { POSTER_GRID_CLASS, POSTER_TILE_CLASS } from "@/components/poster/poster-grid";
@@ -18,7 +20,8 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { useTilePeek } from "./tile-peek";
 import { LetterBar } from "./letter-bar";
 import { letterIndex } from "./letter";
-import { readPlace, usePlaceMemory } from "./return-place";
+import { readPlace, usePlaceMemory, writePlace } from "./return-place";
+import { addHref } from "@/components/add/add-link";
 import { cn } from "@/lib/utils";
 import type { QueueActivity } from "@/server/arr/activity";
 import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
@@ -79,7 +82,6 @@ export function HomeGrid({
   watched,
   downloaded,
   plexConnected,
-  action,
 }: {
   /** The library, from the page. Resolves once Radarr and Sonarr have answered. Never rejects. */
   library: Promise<HomeLibrary>;
@@ -89,8 +91,6 @@ export function HomeGrid({
   downloaded: Promise<HomeDownloaded>;
   /** True when a Plex data connection is set up, so the watch chips are worth showing (disabled) while Plex loads. */
   plexConnected: boolean;
-  /** Shown at the end of the filter row, e.g. the Add button. */
-  action?: ReactNode;
 }) {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
@@ -179,6 +179,14 @@ export function HomeGrid({
   const restoreReady =
     placeReady && (activeWatch === "any" || watchedState !== null) && (sort.key !== "downloaded" || downloadedState !== null);
   const { onGridClick, restore } = usePlaceMemory("/", { search, kind, watched: activeWatch });
+  const router = useRouter();
+
+  // Add carries the search and the Movies/TV choice to the Add page, which searches for them at once.
+  const addLink = addHref({ search, kind });
+  // Saves the search first, so "← Home" brings it back.
+  function saveSearch() {
+    writePlace("/", { scrollY: window.scrollY, tileKey: null, tileTop: null, filter: { search, kind, watched: activeWatch } });
+  }
 
   return (
     <div className="space-y-4" onClickCapture={onGridClick}>
@@ -196,15 +204,29 @@ export function HomeGrid({
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Input
-          ref={searchRef}
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search movies and TV"
-          aria-label="Search your library"
-          className="sm:max-w-sm"
-        />
+        <div className="flex items-center gap-2 sm:w-full sm:max-w-sm">
+          <Input
+            ref={searchRef}
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter (the phone keyboard's Search/Go key) does what Add does.
+              if (event.key !== "Enter" || event.nativeEvent.isComposing || search.trim() === "") return;
+              saveSearch();
+              router.push(addLink);
+            }}
+            placeholder="Search movies and TV"
+            aria-label="Search your library"
+          />
+          <Button asChild className="shrink-0">
+            {/* No prefetch: the address changes with every keystroke. */}
+            <Link href={addLink} prefetch={false} onClick={saveSearch}>
+              <Plus aria-hidden />
+              Add
+            </Link>
+          </Button>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
             {KIND_CHIPS.map((chip) => (
@@ -262,7 +284,6 @@ export function HomeGrid({
               {sort.dir === "asc" ? <ArrowUp aria-hidden className="size-4" /> : <ArrowDown aria-hidden className="size-4" />}
             </button>
           </div>
-          {action}
         </div>
       </div>
 
