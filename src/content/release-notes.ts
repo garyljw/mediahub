@@ -7,6 +7,21 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.6.0",
+    date: "2026-11-11",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Add carries your search:** on Home, **Add** now sits next to the search box. Press it (or Enter) and the Add page opens already searching for what you typed, with your Movies or TV choice kept. Handy when a title isn't in your library yet.",
+          },
+          { text: "**← Home** from the Add page brings back your Home search." },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.5.0",
     date: "2026-11-11",
     sections: [
