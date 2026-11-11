@@ -45,12 +45,14 @@ Each test must catch a mistake that no other test catches. More tests cost revie
 - Keep the `src/server/arr/*` and `src/server/plex/*` tests that use saved upstream replies, the merge tests, and the guards (`pages-auth.test.ts`, `server-actions-auth.test.ts`).
 - The task brief's acceptance criteria list the tests the change needs. The implementer writes those, plus the auth and validation tests above for any new or changed action even if the brief leaves them out, plus any case a bug turns up.
 
-## Workflow (Opus or Sonnet plans, Haiku codes)
+## Workflow (Opus or Sonnet plans, Haiku or Sonnet codes)
 1. The planner writes a scoped task brief with acceptance criteria, including the tests needed (see "Testing"). Opus plans High-tier changes and anything that changes what a role may do. Sonnet may plan Low-tier changes. Opus still runs every review.
    - If a task needs Opus planning and this session isn't on Opus, tell Gary to run `/model opus` before planning starts. Don't plan in a subagent: planning needs this conversation.
    - Any agent that runs a step 3 review is started with `model: "opus"`, because a subagent's default model may be cheaper than the session's.
    - A session that isn't on Opus runs the step 3 reviews in such an agent (`effort: "high"`; that is the agent's reasoning effort, and `/code-review` still runs at the level step 3 gives), and checks that the agent's report shows each review actually ran.
-2. A Haiku agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough.
+2. An agent implements it, runs lint, typecheck and test, and **pastes the output tails**. Saying "it passes" isn't enough. The planner picks the model from the brief and always passes it as `model`:
+   - **Sonnet** by default.
+   - **Haiku** only when all of these hold: the brief spells out every edit, it touches one or two files, it adds no page, route handler or server action, it needs no `/security-review` (step 3), and it needs nothing from the Next.js docs in `node_modules/next/dist/docs/`.
 3. Opus runs `/code-review` at `medium`. It uses `low` only when every changed file is one of these:
    - a test or fixture outside `src/server/**` and `src/app/**`;
    - a file under `src/components/**` that, after the change, imports nothing but types from `src/server`, calls no route handler or server action, and has no `dangerouslySetInnerHTML`;
@@ -68,7 +70,7 @@ Each test must catch a mistake that no other test catches. More tests cost revie
 
    When unsure, run it. Other High-tier changes skip it, such as a page or merge logic that reuses existing server functions and sends no new upstream fields to the browser. For those, `/code-review` checks the leak, access and proxy failures in REVIEW.md. Reviews follow [REVIEW.md](REVIEW.md), which covers the round cap, diff-only re-review and severity tags.
    - Skip both reviews when a change touches only Markdown files, unless one of them sets rules for how changes are made or reviewed: `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, anything under `.github/` or `.claude/`. Those still get `/code-review`. CI still has to pass.
-4. Fix the findings (or send them back to Haiku), re-check, then commit on a feature branch and open a PR to `main` using the PR template.
+4. Fix the findings (or send them back to the implementing agent), re-check, then commit on a feature branch and open a PR to `main` using the PR template.
 5. Claude runs the rest of the git flow: wait for green CI, squash-merge, switch back to an updated `main`, delete the branch. This applies to both risk tiers. Never merge with failing CI or unresolved Important findings, never use `--no-verify`, never force-push.
 6. After merging a High change, walk Gary through it in plain language: what changed, how it's protected, and what was tested. Post the same walkthrough as a comment on the merged PR, so there's a record even if the session ends.
 7. If a review finding comes up more than once, fix it at the source with a lint rule, a CLAUDE.md line or a REVIEW.md line, not just in the code.
