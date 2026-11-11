@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.7.0",
+    date: "2026-11-11",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**System in Settings:** a new admin page. Its first section, **Disk space**, lists each disk Radarr and Sonarr report, with its free and total space and a bar that turns red when less than 10% is free.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "2026-11-11",
     sections: [
