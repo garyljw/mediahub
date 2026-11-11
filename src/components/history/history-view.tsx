@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
+import { rememberOpenedFrom } from "@/components/home/return-place";
 import { toggleOnClick, CELL, HEAD, SELECT_CLASS } from "@/components/library/table-parts";
 import type { HistoryDetails, HistoryEntry } from "@/server/merge/history";
 import {
@@ -186,7 +187,7 @@ export function HistoryView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={rememberOpenedFrom("/history")}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <select
           aria-label="Type"

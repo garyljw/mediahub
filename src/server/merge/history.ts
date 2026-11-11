@@ -54,7 +54,7 @@ export type HistoryEntry = {
   posterSrc: string | null;
   /** The hover card's facts (year, genres, overview) for the movie or series, or null when there is nothing to show. */
   peek: Peek | null;
-  /** Episodes with a known series link to its page. Movies have no page, so null. */
+  /** Movies and episodes link to their movie / series page when the id is known, otherwise null. */
   href: string | null;
   /** Only grabbed records can be marked as failed. */
   canMarkFailed: boolean;
@@ -206,7 +206,7 @@ function movieSortable(record: MovieHistoryRecord, timeZone: string): Sortable |
       quality: nonEmpty(record.quality?.quality?.name),
       posterSrc: movieId !== null && hasPoster(movie?.images) ? `/api/movies/${movieId}/poster` : null,
       peek: toPeek(movie),
-      href: null,
+      href: movieId !== null ? `/movies/${movieId}` : null,
       canMarkFailed: event === "grabbed",
       details: detailsOf(record),
     },

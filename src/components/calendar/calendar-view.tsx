@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
+import { rememberOpenedFrom } from "@/components/home/return-place";
 import { SELECT_CLASS } from "@/components/library/table-parts";
 import { cn } from "@/lib/utils";
 import type { CalendarEntry, ReleaseType } from "@/server/merge/calendar";
@@ -41,7 +42,7 @@ function chipTextOf(entry: CalendarEntry): string {
   return entry.kind === "movie" ? `${entry.title} (${entry.shortDetail})` : `${entry.title} ${entry.shortDetail}`;
 }
 
-/** One line in a grid cell. Movies have no page, so only episode chips with an href are links. */
+/** One line in a grid cell, linking to the movie or series page. */
 function GridChip({ entry }: { entry: CalendarEntry }) {
   const Icon: LucideIcon = entry.kind === "movie" ? Film : Tv;
   const className = `flex min-w-0 items-center gap-1 rounded border px-1 py-0.5 text-xs ${CALENDAR_STATUS_CHIP[entry.status]}`;
@@ -54,17 +55,10 @@ function GridChip({ entry }: { entry: CalendarEntry }) {
   );
   const title = `${entry.title} — ${entry.detail} — ${CALENDAR_STATUS_LABEL[entry.status]}`;
 
-  if (entry.href !== null) {
-    return (
-      <Link href={entry.href} title={title} className={`${className} hover:underline`}>
-        {content}
-      </Link>
-    );
-  }
   return (
-    <span title={title} className={className}>
+    <Link href={entry.href} title={title} className={`${className} hover:underline`}>
       {content}
-    </span>
+    </Link>
   );
 }
 
@@ -76,13 +70,9 @@ function DayDialogRow({ entry }: { entry: CalendarEntry }) {
       <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium" title={entry.title}>
-          {entry.href !== null ? (
-            <Link href={entry.href} className="hover:underline">
-              {entry.title}
-            </Link>
-          ) : (
-            entry.title
-          )}
+          <Link href={entry.href} className="hover:underline">
+            {entry.title}
+          </Link>
         </div>
         <p className="truncate text-xs text-muted-foreground">{entry.detail}</p>
       </div>
@@ -138,13 +128,9 @@ function DayList({
                   <Poster src={entry.posterSrc} />
                   <div className="min-w-0 flex-1" data-poster-anchor>
                     <div className="truncate font-medium" title={entry.title}>
-                      {entry.href !== null ? (
-                        <Link href={entry.href} className="hover:underline">
-                          {entry.title}
-                        </Link>
-                      ) : (
-                        entry.title
-                      )}
+                      <Link href={entry.href} className="hover:underline">
+                        {entry.title}
+                      </Link>
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{entry.detail}</p>
                   </div>
@@ -207,7 +193,7 @@ export function CalendarView({
     posterPreview.activeKey !== null && visible.some((entry) => entry.key === posterPreview.activeKey);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={rememberOpenedFrom("/calendar")}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div role="group" aria-label="View" className="hidden gap-1 sm:flex">
           <Button

@@ -10,6 +10,7 @@ import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { showsEtaFor, showsProgressFor, stateLabel } from "@/components/library/activity";
+import { rememberOpenedFrom } from "@/components/home/return-place";
 import { toggleOnClick, CELL, HEAD, RowMenu } from "@/components/library/table-parts";
 import { formatEta, formatSize } from "@/components/library/format";
 import {
@@ -263,7 +264,7 @@ export function QueueView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={rememberOpenedFrom("/queue")}>
       {visible.alerts.map((message) => (
         <p key={message} role="alert" className="text-sm text-destructive">
           {message}

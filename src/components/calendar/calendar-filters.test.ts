@@ -14,7 +14,7 @@ function movie(key: string, releaseType: "cinema" | "digital" | "physical", stat
     status,
     posterSrc: null,
     peek: null,
-    href: null,
+    href: "/movies/1",
   };
 }
 
