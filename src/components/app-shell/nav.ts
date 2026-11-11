@@ -1,4 +1,4 @@
-import { CalendarDays, Clapperboard, Download, History, Home, MonitorPlay, Settings, type LucideIcon } from "lucide-react";
+import { CalendarDays, Clapperboard, Download, History, Home, MonitorPlay, ScrollText, Settings, type LucideIcon } from "lucide-react";
 
 // Plain config shared by the server shell and client nav links. Must not import from src/server.
 export type NavItem = { href: string; label: string; icon: LucideIcon; adminOnly?: boolean };
@@ -10,6 +10,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/queue", label: "Queue", icon: Download },
   { href: "/history", label: "History", icon: History },
+  { href: "/release-notes", label: "Release notes", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 

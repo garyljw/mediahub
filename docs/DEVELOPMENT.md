@@ -36,9 +36,10 @@ Versions follow Pride.Normal.Shame (`<pride>.<normal>.<shame>`):
 A release takes the highest bump among its changes. The updater compares the three numbers in order, so every release must be higher than the last.
 
 1. Bump `version` in `package.json` (and `package-lock.json`, with `npm version <x.y.z> --no-git-tag-version`).
-2. Publish a GitHub release tagged `v<version>` or `v<version>-rc.N`. The tag must match `package.json`, or the release workflow fails.
-3. The release workflow builds the installer on Windows, tests it (install, upgrade, uninstall), and attaches `MediaHub-Setup-<version>.exe`, its `.sha256` and `build-info.json` to the release. It bundles the newest Node patch for the `.node-version` major.
-4. Once a month a workflow checks whether a newer Node patch is out and opens an issue if so. To ship it, publish a new release.
+2. In the same PR, add the release's notes at the top of `src/content/release-notes.ts` (a test fails if the newest entry doesn't match `package.json`). Use **bold** only, no other Markdown or links, and no personal names.
+3. Publish a GitHub release tagged `v<version>` or `v<version>-rc.N`. The tag must match `package.json`, or the release workflow fails. Write the release text from the same notes.
+4. The release workflow builds the installer on Windows, tests it (install, upgrade, uninstall), and attaches `MediaHub-Setup-<version>.exe`, its `.sha256` and `build-info.json` to the release. It bundles the newest Node patch for the `.node-version` major.
+5. Once a month a workflow checks whether a newer Node patch is out and opens an issue if so. To ship it, publish a new release.
 
 ## Update signing
 The Windows install checks GitHub for newer releases and installs them (see "Updates" in the README). Each release carries an update manifest, signed with Ed25519:

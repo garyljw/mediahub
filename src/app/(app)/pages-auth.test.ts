@@ -89,6 +89,7 @@ const PAGE_ROLES: Record<string, string[]> = {
   "calendar/page.tsx": BOTH,
   "queue/page.tsx": BOTH,
   "history/page.tsx": BOTH,
+  "release-notes/page.tsx": BOTH,
   "settings/page.tsx": ["admin"],
   "settings/connections/page.tsx": ["admin"],
   "settings/add-defaults/page.tsx": ["admin"],
