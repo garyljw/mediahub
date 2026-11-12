@@ -7,6 +7,34 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.8.0",
+    date: "2026-11-12",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Episode monitoring** in a series' Settings: apply one of Sonarr's monitor presets, such as Future episodes, to a series you already have. It is applied once when you save. Sonarr doesn't record which preset was used, so MediaHub can't show it afterwards: the box always starts at No change, and the season and episode toggles show the result.",
+          },
+          {
+            text: "**Delete files** for a season or a single episode from a series page (admins), keeping the series in Sonarr. The dialog lists every episode affected, says whether the files go to Sonarr's Recycle Bin or are deleted permanently, and lets you unmonitor them so Sonarr doesn't download them again.",
+          },
+        ],
+      },
+      {
+        heading: "Improved",
+        notes: [
+          {
+            text: "**Settings** on movie and series pages sit in two columns on wider screens, and their dropdowns now show every option instead of a scrolling list near the bottom of the screen.",
+          },
+          {
+            text: "**Seasons** on a series page all start closed, so you open only the ones you want.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-11-11",
     sections: [

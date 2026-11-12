@@ -12,6 +12,7 @@ import {
   setEpisodeMonitored,
   setSeasonMonitored,
 } from "@/server/arr/episodes";
+import { deleteEpisodeFiles, getDeleteSettings, planFileDelete, unmonitorEpisodes } from "@/server/arr/episode-files";
 import { deleteSeries, editSeries, listSeriesQualityProfiles, type SeriesEdit } from "@/server/arr/series";
 import { ArrRequestError } from "@/server/arr/request";
 import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
@@ -441,6 +442,158 @@ export async function updateSeriesItem(input: unknown): Promise<ActionResult> {
   }
 
   // The series page reads Sonarr on every request and nothing is cached, so refresh() shows the new values.
+  refresh();
+  return { ok: true };
+}
+
+// Season (0 is Specials) or one episode, never both. Each branch is strict, so extra keys are refused.
+const FileDeleteTarget = z.union([
+  z.strictObject({ seriesId: z.number().int().positive(), seasonNumber: z.number().int().min(0) }),
+  z.strictObject({ seriesId: z.number().int().positive(), episodeId: z.number().int().positive() }),
+]);
+
+const FileDeleteInput = z.union([
+  z.strictObject({
+    seriesId: z.number().int().positive(),
+    seasonNumber: z.number().int().min(0),
+    fileIds: z.array(z.number().int().positive()).min(1).max(500).refine((ids) => new Set(ids).size === ids.length),
+    unmonitor: z.boolean(),
+  }),
+  z.strictObject({
+    seriesId: z.number().int().positive(),
+    episodeId: z.number().int().positive(),
+    fileIds: z.array(z.number().int().positive()).min(1).max(500).refine((ids) => new Set(ids).size === ids.length),
+    unmonitor: z.boolean(),
+  }),
+]);
+
+const FILE_DELETE_DENIED = "You don't have permission to delete files.";
+
+/** What the delete dialog shows. Labels, flags and ids only: no paths, and never the Recycle Bin path. */
+export type FileDeletePreview =
+  | {
+      ok: true;
+      fileIds: number[];
+      fileCount: number;
+      totalSize: number;
+      episodes: { id: number; seasonNumber: number; episodeNumber: number; title: string; wanted: boolean }[];
+      sonarrUnmonitorsDeleted: boolean;
+      recycleBinSet: boolean;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Shows what deleting one season's or one episode's files would remove (admin only). Writes nothing, so there is
+ * no refresh(). The role check runs first, inside try, and the catch always returns or throws.
+ */
+export async function previewFileDelete(input: unknown): Promise<FileDeletePreview> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: FILE_DELETE_DENIED };
+    throw error;
+  }
+
+  const parsed = FileDeleteTarget.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid delete." };
+  const { seriesId } = parsed.data;
+  const target = "episodeId" in parsed.data ? { episodeId: parsed.data.episodeId } : { seasonNumber: parsed.data.seasonNumber };
+
+  try {
+    const [plan, settings] = await Promise.all([planFileDelete(seriesId, target), getDeleteSettings()]);
+    return {
+      ok: true,
+      fileIds: plan.fileIds,
+      fileCount: plan.fileIds.length,
+      totalSize: plan.totalSize,
+      episodes: plan.episodes.map(({ id, seasonNumber, episodeNumber, title, wanted }) => ({
+        id,
+        seasonNumber,
+        episodeNumber,
+        title,
+        wanted,
+      })),
+      sonarrUnmonitorsDeleted: settings.sonarrUnmonitorsDeleted,
+      recycleBinSet: settings.recycleBinSet,
+    };
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`File delete preview: ${error.message}`);
+    return { ok: false, error: "Couldn't load the files from Sonarr. Try again." };
+  }
+}
+
+/**
+ * Deletes the downloaded files of one season or one episode, keeping the series in Sonarr (admin only). The plan is
+ * rebuilt on the server and only the files in both the plan and the request are deleted, so the browser can't name
+ * a file outside this series and target, or one the admin wasn't shown. When the admin chose to unmonitor and
+ * Sonarr's own setting won't do it, the episodes are unmonitored first, so nothing can be grabbed in between.
+ * Role check first, inside try; the catch always returns or throws.
+ */
+export async function deleteFiles(input: unknown): Promise<ActionResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: FILE_DELETE_DENIED };
+    throw error;
+  }
+
+  const parsed = FileDeleteInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid delete." };
+  const { seriesId, fileIds, unmonitor } = parsed.data;
+  const target = "episodeId" in parsed.data ? { episodeId: parsed.data.episodeId } : { seasonNumber: parsed.data.seasonNumber };
+
+  let toDelete: number[];
+  let episodeIds: number[];
+  let sonarrUnmonitors = true;
+  try {
+    const plan = await planFileDelete(seriesId, target);
+    const planned = new Set(plan.fileIds);
+    toDelete = fileIds.filter((id) => planned.has(id));
+    const chosen = new Set(toDelete);
+    episodeIds = plan.episodes.filter((episode) => chosen.has(episode.fileId)).map((episode) => episode.id);
+    if (toDelete.length > 0 && unmonitor) sonarrUnmonitors = (await getDeleteSettings()).sonarrUnmonitorsDeleted;
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+    console.error(`File delete plan: ${error.message}`);
+    return { ok: false, error: "Couldn't load the files from Sonarr, so nothing was deleted. Try again." };
+  }
+
+  if (toDelete.length === 0) {
+    refresh();
+    return { ok: false, error: "These files are already gone. The page has been refreshed." };
+  }
+
+  if (unmonitor && !sonarrUnmonitors) {
+    try {
+      await unmonitorEpisodes(episodeIds);
+    } catch (error) {
+      if (!(error instanceof ArrRequestError)) throw error;
+      console.error(`Episode unmonitor: ${error.message}`);
+      return { ok: false, error: "Sonarr didn't unmonitor the episodes, so nothing was deleted. Try again." };
+    }
+  }
+
+  try {
+    await deleteEpisodeFiles(toDelete);
+  } catch (error) {
+    if (!(error instanceof ArrRequestError)) throw error;
+    console.error(`Episode file delete: ${error.message}`);
+    // Sonarr may have deleted some or all of them, so re-read the page.
+    refresh();
+    // When the episodes were unmonitored first, say so: they stay unmonitored although the delete failed.
+    const unmonitored = unmonitor && !sonarrUnmonitors ? " The episodes were already unmonitored." : "";
+    if (error.status === 409) {
+      return { ok: false, error: `Sonarr can't reach the series' root folder, so nothing was deleted.${unmonitored}` };
+    }
+    return {
+      ok: false,
+      error: `Sonarr didn't confirm the delete. Some files may be gone; the page has been refreshed.${unmonitored}`,
+    };
+  }
+
   refresh();
   return { ok: true };
 }

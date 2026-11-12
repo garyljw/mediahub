@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useTransition, type MouseEvent } from "react";
-import { ListChecks, Search } from "lucide-react";
+import { ListChecks, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { ReleaseDialog } from "@/components/library/release-dialog";
+import { FileDeleteDialog, type FileDeleteTarget } from "./file-delete-dialog";
 import { episodeCode, grabbedMessage, type ReleaseSearchResult } from "@/components/library/release";
 import type { ActionResult } from "@/app/(app)/tv/[id]/actions";
 import {
@@ -340,6 +341,96 @@ export function EpisodeReleaseButton({
       kind="episode"
       inSummary={false}
       search={() => findSeriesReleases({ episodeId })}
+    />
+  );
+}
+
+/**
+ * Admin button that opens the delete-files dialog for one season or one episode. A success is the page re-rendering
+ * without the files, so there is no note. `inSummary` stops the click from opening or closing the season.
+ */
+function FileDeleteButton({
+  seriesId,
+  target,
+  name,
+  subject,
+  inSummary,
+}: {
+  seriesId: number;
+  target: FileDeleteTarget;
+  /** What the button acts on, used in the accessible name. */
+  name: string;
+  /** What the dialog describes, e.g. "Season 2" or "S02E03". */
+  subject: string;
+  inSummary: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  function openDialog(event: MouseEvent) {
+    if (inSummary) keepSeasonOpen(event);
+    setOpen(true);
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${name}`} onClick={openDialog}>
+        <Trash2 aria-hidden />
+      </Button>
+      {open && (
+        <FileDeleteDialog
+          seriesId={seriesId}
+          target={target}
+          subject={subject}
+          onClose={() => setOpen(false)}
+          onDeleted={() => setOpen(false)}
+        />
+      )}
+    </span>
+  );
+}
+
+/** Admin delete of one season's downloaded files. The page shows it only for a season that has files. */
+export function SeasonFileDeleteButton({
+  seriesId,
+  seasonNumber,
+  label,
+}: {
+  seriesId: number;
+  seasonNumber: number;
+  /** "Season 2" or "Specials". */
+  label: string;
+}) {
+  return (
+    <FileDeleteButton
+      seriesId={seriesId}
+      target={{ seasonNumber }}
+      name={`files for ${label}`}
+      subject={label}
+      inSummary
+    />
+  );
+}
+
+/** Admin delete of one episode's file. The page shows it only for an episode that has a file. */
+export function EpisodeFileDeleteButton({
+  seriesId,
+  seasonNumber,
+  episodeId,
+  episodeNumber,
+}: {
+  seriesId: number;
+  seasonNumber: number;
+  episodeId: number;
+  episodeNumber: number;
+}) {
+  const code = episodeCode(seasonNumber, episodeNumber);
+  return (
+    <FileDeleteButton
+      seriesId={seriesId}
+      target={{ episodeId }}
+      name={`file for ${code}`}
+      subject={code}
+      inSummary={false}
     />
   );
 }

@@ -21,9 +21,11 @@ import {
   SeriesActivitySummary,
 } from "@/components/tv/series-activity";
 import {
+  EpisodeFileDeleteButton,
   EpisodeMonitorToggle,
   EpisodeReleaseButton,
   EpisodeSearchButton,
+  SeasonFileDeleteButton,
   SeasonMonitorToggle,
   SeasonReleaseButton,
   SeasonSearchButton,
@@ -69,14 +71,12 @@ function SeasonDetails({
   seriesId,
   seriesTitle,
   season,
-  open,
   isAdmin,
   episodeWatched,
 }: {
   seriesId: number;
   seriesTitle: string;
   season: SeasonRow;
-  open: boolean;
   /** Admins get the monitor and pick buttons. Everyone gets the search button. */
   isAdmin: boolean;
   /**
@@ -89,7 +89,8 @@ function SeasonDetails({
   const seasonWatched =
     episodeWatched === null ? null : seasonWatchedState(season.episodes.map((episode) => episodeWatched.get(episode.id)));
   return (
-    <details open={open} className="rounded-xl border bg-card">
+    // Every season starts closed; the admin or requester opens the ones they want.
+    <details className="rounded-xl border bg-card">
       <summary className="flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <SeasonPoster src={season.posterPath === null ? null : `/api/tv/lookup-poster/${season.posterPath}`}>
           <div className="min-w-0 flex-1 space-y-2">
@@ -139,6 +140,13 @@ function SeasonDetails({
               label={season.label}
             />
           )}
+          {/* With no files there's nothing to delete; an empty space the button's size keeps the icons in line. Delete is always last. */}
+          {isAdmin &&
+            (season.episodes.some((episode) => episode.hasFile) ? (
+              <SeasonFileDeleteButton seriesId={seriesId} seasonNumber={season.seasonNumber} label={season.label} />
+            ) : (
+              <span aria-hidden className="inline-block size-8 shrink-0 align-middle" />
+            ))}
         </div>
       </summary>
       {season.episodes.length === 0 ? (
@@ -187,6 +195,17 @@ function SeasonDetails({
                     seasonLabel={season.label}
                   />
                 )}
+                {isAdmin &&
+                  (episode.hasFile ? (
+                    <EpisodeFileDeleteButton
+                      seriesId={seriesId}
+                      seasonNumber={season.seasonNumber}
+                      episodeId={episode.id}
+                      episodeNumber={episode.episodeNumber}
+                    />
+                  ) : (
+                    <span aria-hidden className="inline-block size-8 shrink-0 align-middle" />
+                  ))}
               </div>
             </li>
           ))}
@@ -264,6 +283,17 @@ function SeasonDetails({
                         seasonLabel={season.label}
                       />
                     )}
+                    {isAdmin &&
+                      (episode.hasFile ? (
+                        <EpisodeFileDeleteButton
+                          seriesId={seriesId}
+                          seasonNumber={season.seasonNumber}
+                          episodeId={episode.id}
+                          episodeNumber={episode.episodeNumber}
+                        />
+                      ) : (
+                        <span aria-hidden className="inline-block size-8 shrink-0 align-middle" />
+                      ))}
                   </TableCell>
                 </TableRow>
               ))}
@@ -338,8 +368,6 @@ function SeriesView({
   watchFailed: boolean;
 }) {
   const { detail, profiles } = page;
-  // The first season that isn't Specials starts open (usually Season 1). Seasons arrive in ascending order.
-  const openSeason = detail.seasons.find((season) => season.seasonNumber !== 0)?.seasonNumber;
   // Every episode of the series, for the hero's queue line.
   const episodeIds = detail.seasons.flatMap((season) => season.episodes.map((episode) => episode.id));
   const meta = metaLine({ certification: detail.certification, runtime: detail.runtime, genres: detail.genres });
@@ -385,7 +413,6 @@ function SeriesView({
                   seriesId={detail.id}
                   seriesTitle={detail.title}
                   season={season}
-                  open={season.seasonNumber === openSeason}
                   isAdmin={isAdmin}
                   episodeWatched={episodeWatched}
                 />
