@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.8.1",
+    date: "2026-11-12",
+    sections: [
+      {
+        heading: "Improved",
+        notes: [
+          {
+            text: "**Clear search:** the search boxes on Home, Add and the Focus pages have a clear button, so one tap empties the box and you can type a new search straight away. Escape clears it too.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.8.0",
     date: "2026-11-12",
     sections: [
