@@ -385,6 +385,7 @@ describe("toSeriesDetail", () => {
         monitored: true,
         quality: null,
         size: 0,
+        hasFile: false,
         tvdbId: null,
       },
     ]);

@@ -1,0 +1,7 @@
+[
+  { "id": 301, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 1, "title": "Opening", "hasFile": true, "episodeFileId": 5001, "monitored": true, "episodeFile": { "id": 5001, "size": 1000 } },
+  { "id": 302, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 2, "title": "Double Bill A", "hasFile": true, "episodeFileId": 5002, "monitored": false, "episodeFile": { "id": 5002, "size": 2000 } },
+  { "id": 303, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 3, "title": "Double Bill B", "hasFile": true, "episodeFileId": 5002, "monitored": true, "episodeFile": { "id": 5002, "size": 2000 } },
+  { "id": 304, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 4, "title": "Not Yet Downloaded", "hasFile": false, "episodeFileId": 0, "monitored": true },
+  { "id": 401, "seriesId": 10, "seasonNumber": 2, "episodeNumber": 1, "title": "Second Opener", "hasFile": true, "episodeFileId": 5003, "monitored": true, "episodeFile": { "id": 5003, "size": 4000 } }
+]

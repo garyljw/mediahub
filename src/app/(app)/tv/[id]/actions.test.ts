@@ -16,6 +16,17 @@ const mocks = vi.hoisted(() => ({
   applySeriesMonitorPreset: vi.fn(),
   listSeriesQualityProfiles: vi.fn(),
   redirect: vi.fn(),
+  planFileDelete: vi.fn(),
+  getDeleteSettings: vi.fn(),
+  deleteEpisodeFiles: vi.fn(),
+  unmonitorEpisodes: vi.fn(),
+}));
+
+vi.mock("@/server/arr/episode-files", () => ({
+  planFileDelete: mocks.planFileDelete,
+  getDeleteSettings: mocks.getDeleteSettings,
+  deleteEpisodeFiles: mocks.deleteEpisodeFiles,
+  unmonitorEpisodes: mocks.unmonitorEpisodes,
 }));
 
 vi.mock("@/server/arr/series", () => ({
@@ -75,9 +86,11 @@ vi.mock("next/cache", () => ({ refresh: mocks.refresh }));
 import { AuthzError } from "@/server/authz";
 import { SeasonNotFoundError } from "@/server/arr/episodes";
 import {
+  deleteFiles,
   deleteSeriesItem,
   findSeriesReleases,
   grabSeriesRelease,
+  previewFileDelete,
   searchEpisodeNow,
   searchSeasonNow,
   setEpisodeMonitoring,
@@ -93,6 +106,8 @@ const DELETE_DENIED = "You don't have permission to delete series.";
 const DELETE_INVALID = "Invalid delete.";
 const SERIES_EDIT_DENIED = "You don't have permission to edit series.";
 const SERIES_EDIT_INVALID = "Invalid edit.";
+const FILES_DENIED = "You don't have permission to delete files.";
+const validFileDelete = { seriesId: 10, seasonNumber: 1, fileIds: [5001, 5002], unmonitor: true };
 
 const release = { token: "00000000-0000-4000-8000-000000000002" };
 const validDelete = { seriesId: 4, deleteFiles: false, addImportListExclusion: false };
@@ -101,6 +116,17 @@ const SERIES_PROFILES = [
   { id: 1, name: "HD-1080p" },
   { id: 2, name: "Any" },
 ];
+
+// Files 5001 and 5002 are in the plan. 5002 is shared by episodes 302 and 303.
+const PLAN = {
+  fileIds: [5001, 5002],
+  totalSize: 3000,
+  episodes: [
+    { id: 301, seasonNumber: 1, episodeNumber: 1, title: "Opening", fileId: 5001, wanted: true },
+    { id: 302, seasonNumber: 1, episodeNumber: 2, title: "Double Bill A", fileId: 5002, wanted: false },
+    { id: 303, seasonNumber: 1, episodeNumber: 3, title: "Double Bill B", fileId: 5002, wanted: true },
+  ],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -119,6 +145,10 @@ beforeEach(() => {
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
   ]);
+  mocks.planFileDelete.mockResolvedValue(PLAN);
+  mocks.getDeleteSettings.mockResolvedValue({ sonarrUnmonitorsDeleted: false, recycleBinSet: true });
+  mocks.deleteEpisodeFiles.mockResolvedValue(undefined);
+  mocks.unmonitorEpisodes.mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -152,6 +182,8 @@ describe("authorization", () => {
     { name: "grabSeriesRelease", call: () => grabSeriesRelease({ token: release.token }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.grabSeriesRelease] },
     { name: "deleteSeriesItem", call: () => deleteSeriesItem(validDelete), roles: ["admin"], denied: DELETE_DENIED, upstream: [mocks.deleteSeries, mocks.redirect] },
     { name: "updateSeriesItem", call: () => updateSeriesItem(seriesEdit), roles: ["admin"], denied: SERIES_EDIT_DENIED, upstream: [mocks.editSeries, mocks.listSeriesQualityProfiles, mocks.applySeriesMonitorPreset] },
+    { name: "previewFileDelete", call: () => previewFileDelete({ seriesId: 10, seasonNumber: 1 }), roles: ["admin"], denied: FILES_DENIED, upstream: [mocks.planFileDelete, mocks.getDeleteSettings] },
+    { name: "deleteFiles", call: () => deleteFiles(validFileDelete), roles: ["admin"], denied: FILES_DENIED, upstream: [mocks.planFileDelete, mocks.getDeleteSettings, mocks.unmonitorEpisodes, mocks.deleteEpisodeFiles] },
   ];
 
   it.each(rows)("$name asks for $roles", async ({ call, roles }) => {
@@ -752,5 +784,158 @@ describe("errors that are not Sonarr request failures are rethrown", () => {
 
     await expect(call()).rejects.toThrow("config broken");
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("previewFileDelete", () => {
+  it.each([
+    ["a negative season", { seriesId: 10, seasonNumber: -1 }],
+    ["a season and an episode", { seriesId: 10, seasonNumber: 1, episodeId: 301 }],
+    ["a zero episode id", { seriesId: 10, episodeId: 0 }],
+    ["no target", { seriesId: 10 }],
+    ["an extra key", { seriesId: 10, seasonNumber: 1, fileIds: [1] }],
+  ])("rejects %s without calling Sonarr", async (_name, input) => {
+    expect(await previewFileDelete(input)).toEqual({ ok: false, error: DELETE_INVALID });
+    expect(mocks.planFileDelete).not.toHaveBeenCalled();
+    expect(mocks.getDeleteSettings).not.toHaveBeenCalled();
+  });
+
+  it("accepts season 0 (Specials) and sends labels and flags only", async () => {
+    const result = await previewFileDelete({ seriesId: 10, seasonNumber: 0 });
+    expect(mocks.planFileDelete).toHaveBeenCalledWith(10, { seasonNumber: 0 });
+    expect(result).toEqual({
+      ok: true,
+      fileIds: [5001, 5002],
+      fileCount: 2,
+      totalSize: 3000,
+      episodes: [
+        { id: 301, seasonNumber: 1, episodeNumber: 1, title: "Opening", wanted: true },
+        { id: 302, seasonNumber: 1, episodeNumber: 2, title: "Double Bill A", wanted: false },
+        { id: 303, seasonNumber: 1, episodeNumber: 3, title: "Double Bill B", wanted: true },
+      ],
+      sonarrUnmonitorsDeleted: false,
+      recycleBinSet: true,
+    });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("plans an episode target", async () => {
+    await previewFileDelete({ seriesId: 10, episodeId: 302 });
+    expect(mocks.planFileDelete).toHaveBeenCalledWith(10, { episodeId: 302 });
+  });
+
+  it("says it couldn't load the files when Sonarr fails, and logs only the safe message", async () => {
+    mocks.planFileDelete.mockRejectedValue(new ArrRequestError("Sonarr episodes request failed: HTTP 500", "http", 500));
+    expect(await previewFileDelete({ seriesId: 10, seasonNumber: 1 })).toEqual({
+      ok: false,
+      error: "Couldn't load the files from Sonarr. Try again.",
+    });
+    expect(console.error).toHaveBeenCalledWith("File delete preview: Sonarr episodes request failed: HTTP 500");
+  });
+});
+
+describe("deleteFiles", () => {
+  it.each([
+    ["a negative season", { ...validFileDelete, seasonNumber: -1 }],
+    ["a season and an episode", { ...validFileDelete, episodeId: 301 }],
+    ["a zero episode id", { seriesId: 10, episodeId: 0, fileIds: [5001], unmonitor: true }],
+    ["no file ids", { ...validFileDelete, fileIds: [] }],
+    ["duplicate file ids", { ...validFileDelete, fileIds: [5001, 5001] }],
+    ["a zero file id", { ...validFileDelete, fileIds: [0] }],
+    ["a missing unmonitor choice", { seriesId: 10, seasonNumber: 1, fileIds: [5001] }],
+    ["an extra key", { ...validFileDelete, path: "/x" }],
+  ])("rejects %s before any Sonarr call", async (_name, input) => {
+    expect(await deleteFiles(input)).toEqual({ ok: false, error: DELETE_INVALID });
+    for (const mock of [mocks.planFileDelete, mocks.getDeleteSettings, mocks.unmonitorEpisodes, mocks.deleteEpisodeFiles]) {
+      expect(mock).not.toHaveBeenCalled();
+    }
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("accepts season 0 (Specials)", async () => {
+    await deleteFiles({ ...validFileDelete, seasonNumber: 0 });
+    expect(mocks.planFileDelete).toHaveBeenCalledWith(10, { seasonNumber: 0 });
+    expect(mocks.deleteEpisodeFiles).toHaveBeenCalled();
+  });
+
+  it("deletes only the files that are in the plan", async () => {
+    expect(await deleteFiles({ ...validFileDelete, fileIds: [5001, 9999] })).toEqual({ ok: true });
+    expect(mocks.deleteEpisodeFiles).toHaveBeenCalledWith([5001]);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes nothing and refreshes when none of the files are in the plan", async () => {
+    expect(await deleteFiles({ ...validFileDelete, fileIds: [9999] })).toEqual({
+      ok: false,
+      error: "These files are already gone. The page has been refreshed.",
+    });
+    expect(mocks.deleteEpisodeFiles).not.toHaveBeenCalled();
+    expect(mocks.unmonitorEpisodes).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmonitors the affected episodes (including a shared file's sibling) before deleting, when Sonarr won't", async () => {
+    const order: string[] = [];
+    mocks.unmonitorEpisodes.mockImplementation(async () => void order.push("unmonitor"));
+    mocks.deleteEpisodeFiles.mockImplementation(async () => void order.push("delete"));
+    await deleteFiles({ ...validFileDelete, fileIds: [5002] });
+    expect(mocks.unmonitorEpisodes).toHaveBeenCalledWith([302, 303]);
+    expect(order).toEqual(["unmonitor", "delete"]);
+  });
+
+  it("does not unmonitor when Sonarr's own setting is on", async () => {
+    mocks.getDeleteSettings.mockResolvedValue({ sonarrUnmonitorsDeleted: true, recycleBinSet: false });
+    await deleteFiles(validFileDelete);
+    expect(mocks.unmonitorEpisodes).not.toHaveBeenCalled();
+    expect(mocks.deleteEpisodeFiles).toHaveBeenCalledWith([5001, 5002]);
+  });
+
+  it("does not unmonitor when the admin chose not to", async () => {
+    await deleteFiles({ ...validFileDelete, unmonitor: false });
+    expect(mocks.unmonitorEpisodes).not.toHaveBeenCalled();
+    expect(mocks.deleteEpisodeFiles).toHaveBeenCalled();
+  });
+
+  it("deletes nothing when the unmonitor fails, and logs only the safe message", async () => {
+    mocks.unmonitorEpisodes.mockRejectedValue(new ArrRequestError("Episode unmonitor request failed: HTTP 500", "http", 500));
+    expect(await deleteFiles(validFileDelete)).toEqual({
+      ok: false,
+      error: "Sonarr didn't unmonitor the episodes, so nothing was deleted. Try again.",
+    });
+    expect(mocks.deleteEpisodeFiles).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith("Episode unmonitor: Episode unmonitor request failed: HTTP 500");
+  });
+
+  it("deletes nothing when the plan can't be loaded", async () => {
+    mocks.planFileDelete.mockRejectedValue(new ArrRequestError("Sonarr episodes request failed: HTTP 500", "http", 500));
+    expect(await deleteFiles(validFileDelete)).toEqual({
+      ok: false,
+      error: "Couldn't load the files from Sonarr, so nothing was deleted. Try again.",
+    });
+    expect(mocks.deleteEpisodeFiles).not.toHaveBeenCalled();
+  });
+
+  it("says nothing was deleted on a 409 and that the episodes were unmonitored first, refreshes, and logs only the safe message", async () => {
+    mocks.deleteEpisodeFiles.mockRejectedValue(new ArrRequestError("Episode file delete request failed: HTTP 409", "http", 409));
+    expect(await deleteFiles(validFileDelete)).toEqual({
+      ok: false,
+      error: "Sonarr can't reach the series' root folder, so nothing was deleted. The episodes were already unmonitored.",
+    });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(console.error).toHaveBeenCalledWith("Episode file delete: Episode file delete request failed: HTTP 409");
+  });
+
+  it("says some files may be gone on any other delete failure, and refreshes (no unmonitor note when none was asked for)", async () => {
+    mocks.deleteEpisodeFiles.mockRejectedValue(new ArrRequestError("Episode file delete request failed: timed out", "timeout"));
+    expect(await deleteFiles({ ...validFileDelete, unmonitor: false })).toEqual({
+      ok: false,
+      error: "Sonarr didn't confirm the delete. Some files may be gone; the page has been refreshed.",
+    });
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows an error that is not a Sonarr request failure", async () => {
+    mocks.deleteEpisodeFiles.mockRejectedValue(new Error("bug"));
+    await expect(deleteFiles(validFileDelete)).rejects.toThrow("bug");
   });
 });
