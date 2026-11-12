@@ -2,7 +2,7 @@
 // The option lists live here or in series-add.ts, so the server's Zod schema and the form share one source.
 import type { components as SonarrComponents } from "@/server/arr/generated/sonarr";
 import type { SeriesEdit } from "@/server/arr/series";
-import { SERIES_TYPE_OPTIONS, type SeriesTypeOption } from "./series-add";
+import { SERIES_TYPE_OPTIONS, type SeriesMonitor, type SeriesTypeOption } from "./series-add";
 
 type NewItemMonitorTypes = SonarrComponents["schemas"]["NewItemMonitorTypes"];
 
@@ -35,20 +35,26 @@ export type SeriesFormValues = {
   seriesType: SeriesType | null;
   seasonFolder: boolean;
   monitorNewItems: NewItemMonitor | null;
+  /** A monitoring preset to apply once on save. Null is "No change", and the current value is always null. */
+  episodeMonitoring: SeriesMonitor | null;
 };
+
+/** What the series settings action accepts: the Sonarr edit, plus a preset to apply once. */
+export type SeriesFormEdit = SeriesEdit & { episodeMonitoring?: SeriesMonitor };
 
 /**
  * The edit to send: only the fields where `next` differs from `current`, plus the series id. Null when nothing
  * differs. The form can't choose "no value", so a null type or monitor value is never sent back.
  */
-export function buildSeriesEdit(seriesId: number, current: SeriesFormValues, next: SeriesFormValues): SeriesEdit | null {
-  const edit: SeriesEdit = { seriesId };
+export function buildSeriesEdit(seriesId: number, current: SeriesFormValues, next: SeriesFormValues): SeriesFormEdit | null {
+  const edit: SeriesFormEdit = { seriesId };
   let changed = false;
   if (next.qualityProfileId !== current.qualityProfileId) {
     edit.qualityProfileId = next.qualityProfileId;
     changed = true;
   }
-  if (next.monitored !== current.monitored) {
+  // The "none" preset unmonitors the series itself, so a Monitored change is never sent with it.
+  if (next.episodeMonitoring !== "none" && next.monitored !== current.monitored) {
     edit.monitored = next.monitored;
     changed = true;
   }
@@ -62,6 +68,10 @@ export function buildSeriesEdit(seriesId: number, current: SeriesFormValues, nex
   }
   if (next.monitorNewItems !== null && next.monitorNewItems !== current.monitorNewItems) {
     edit.monitorNewItems = next.monitorNewItems;
+    changed = true;
+  }
+  if (next.episodeMonitoring !== null) {
+    edit.episodeMonitoring = next.episodeMonitoring;
     changed = true;
   }
   return changed ? edit : null;

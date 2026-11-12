@@ -19,6 +19,7 @@ vi.mock("@/server/settings/connections", () => ({
 
 import {
   SeasonNotFoundError,
+  applySeriesMonitorPreset,
   searchEpisode,
   searchSeason,
   setEpisodeMonitored,
@@ -300,5 +301,21 @@ describe("searchEpisode", () => {
     expect(error.message).toBe("Sonarr episode search command request failed: HTTP 500");
     expect(error.message).not.toContain(FAKE_KEY);
     expect(error.message).not.toContain("sonarr.test");
+  });
+});
+
+describe("applySeriesMonitorPreset", () => {
+  it("POSTs the season pass endpoint with only the series id and the monitor preset, and accepts a 202 with an empty body", async () => {
+    fetchMock.mockImplementation(async () => json({}, 202));
+
+    await applySeriesMonitorPreset(123, "future");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const req = requestAt(0);
+    expect(req.method).toBe("POST");
+    expect(new URL(req.url).pathname).toBe("/api/v3/seasonpass");
+    expect(new URL(req.url).search).toBe("");
+    expect(req.headers.get("X-Api-Key")).toBe(FAKE_KEY);
+    expect(await sentBody(0)).toStrictEqual({ series: [{ id: 123 }], monitoringOptions: { monitor: "future" } });
   });
 });
