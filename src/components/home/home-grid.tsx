@@ -6,7 +6,7 @@ import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useS
 import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, Plus, Tv } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import { PosterTile } from "@/components/poster/poster";
 import { POSTER_GRID_CLASS, POSTER_TILE_CLASS } from "@/components/poster/poster-grid";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
@@ -205,9 +205,10 @@ export function HomeGrid({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex items-center gap-2 sm:w-full sm:max-w-sm">
-          <Input
+          <SearchInput
             ref={searchRef}
-            type="search"
+            onClear={() => setSearch("")}
+            className="min-w-0 flex-1"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {

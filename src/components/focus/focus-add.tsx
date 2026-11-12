@@ -15,7 +15,7 @@ import {
 } from "@/components/add/add-results";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import type { HomeItem } from "@/components/home/home-items";
 import { GENERIC_ERROR, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
@@ -198,8 +198,8 @@ export function FocusAdd({
 
   return (
     <div className="space-y-4">
-      <Input
-        type="search"
+      <SearchInput
+        onClear={() => onQueryChange("")}
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder={`Add to ${name}`}

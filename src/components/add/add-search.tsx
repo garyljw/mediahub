@@ -6,7 +6,7 @@ import { addLibraryMovie, searchMovies } from "@/app/(app)/movies/actions";
 import { addLibrarySeries, searchSeries } from "@/app/(app)/tv/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import { GENERIC_ERROR, normalizeTerm, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
 import { AdminPanel } from "@/components/add/admin-add-panel";
@@ -217,9 +217,9 @@ export function AddSearch({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Input
+        <SearchInput
           ref={searchRef}
-          type="search"
+          onClear={() => onQueryChange("")}
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search movies and TV to add"
