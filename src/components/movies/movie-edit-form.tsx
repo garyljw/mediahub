@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useStatusLine } from "@/components/library/use-status-line";
-import { SELECT_CLASS } from "@/components/library/table-parts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { QualityProfileOption } from "@/server/arr/profiles";
 import { updateMovie } from "@/app/(app)/movies/[id]/actions";
 import {
@@ -43,6 +43,8 @@ export function MovieEditForm({
   const edit = buildMovieEdit(movieId, current, values);
   // A profile that is no longer in the list (or an unknown id) shows as Unknown, and the admin can only move off it.
   const profileKnown = profiles.some((profile) => profile.id === values.qualityProfileId);
+  // Each box is given its label directly: Radix Select only fills it in after hydration, so it would flash empty.
+  const selectedProfileName = profiles.find((profile) => profile.id === values.qualityProfileId)?.name;
 
   function save() {
     if (edit === null) return;
@@ -64,75 +66,87 @@ export function MovieEditForm({
 
   return (
     <form
-      className="grid max-w-md gap-4"
+      className="grid max-w-4xl gap-6"
       onSubmit={(event) => {
         event.preventDefault();
         save();
       }}
     >
-      <div className="grid gap-1.5">
-        <label htmlFor={profileFieldId} className="text-sm font-medium">
-          Quality profile
-        </label>
-        <select
-          id={profileFieldId}
-          value={profileKnown ? String(values.qualityProfileId) : ""}
-          onChange={(event) => setChanges((previous) => ({ ...previous, qualityProfileId: Number(event.target.value) }))}
-          disabled={saving}
-          className={SELECT_CLASS}
-        >
-          {!profileKnown && (
-            <option value="" disabled>
-              Unknown
-            </option>
-          )}
-          {profiles.map((profile) => (
-            <option key={profile.id} value={String(profile.id)}>
-              {profile.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* One column on phones; from tablet width the two groups sit side by side. */}
+      <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+        <fieldset className="min-w-0">
+          <legend className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Monitoring</legend>
+          <div className="grid gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                id={monitoredFieldId}
+                type="checkbox"
+                checked={values.monitored}
+                onChange={(event) => setChanges((previous) => ({ ...previous, monitored: event.target.checked }))}
+                disabled={saving}
+                className="size-4 accent-primary"
+              />
+              <label htmlFor={monitoredFieldId} className="text-sm font-medium">
+                Monitored
+              </label>
+            </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          id={monitoredFieldId}
-          type="checkbox"
-          checked={values.monitored}
-          onChange={(event) => setChanges((previous) => ({ ...previous, monitored: event.target.checked }))}
-          disabled={saving}
-          className="size-4 accent-primary"
-        />
-        <label htmlFor={monitoredFieldId} className="text-sm font-medium">
-          Monitored
-        </label>
-      </div>
+            <div className="grid gap-1.5">
+              <label htmlFor={availabilityFieldId} className="text-sm font-medium">
+                Minimum availability
+              </label>
+              <Select
+                value={values.minimumAvailability ?? ""}
+                onValueChange={(choice) => {
+                  if (isMinimumAvailability(choice)) setChanges((previous) => ({ ...previous, minimumAvailability: choice }));
+                }}
+                disabled={saving}
+              >
+                <SelectTrigger id={availabilityFieldId}>
+                  <SelectValue placeholder="Unknown">{values.minimumAvailability === null ? undefined : MINIMUM_AVAILABILITY_LABELS[values.minimumAvailability]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {MINIMUM_AVAILABILITY.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {MINIMUM_AVAILABILITY_LABELS[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </fieldset>
 
-      <div className="grid gap-1.5">
-        <label htmlFor={availabilityFieldId} className="text-sm font-medium">
-          Minimum availability
-        </label>
-        <select
-          id={availabilityFieldId}
-          value={values.minimumAvailability ?? ""}
-          onChange={(event) => {
-            const choice = event.target.value;
-            if (isMinimumAvailability(choice)) setChanges((previous) => ({ ...previous, minimumAvailability: choice }));
-          }}
-          disabled={saving}
-          className={SELECT_CLASS}
-        >
-          {values.minimumAvailability === null && (
-            <option value="" disabled>
-              Unknown
-            </option>
-          )}
-          {MINIMUM_AVAILABILITY.map((option) => (
-            <option key={option} value={option}>
-              {MINIMUM_AVAILABILITY_LABELS[option]}
-            </option>
-          ))}
-        </select>
+        <fieldset className="min-w-0">
+          <legend className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Files &amp; quality</legend>
+          <div className="grid gap-4">
+            {/* From tablet width, fills the Monitored row's height so Quality profile sits beside Minimum availability. */}
+            <div aria-hidden className="hidden h-5 md:block" />
+
+            <div className="grid gap-1.5">
+              <label htmlFor={profileFieldId} className="text-sm font-medium">
+                Quality profile
+              </label>
+              {/* A profile that isn't in the list shows as the "Unknown" placeholder until the admin picks one. */}
+              <Select
+                value={profileKnown ? String(values.qualityProfileId) : ""}
+                onValueChange={(choice) => setChanges((previous) => ({ ...previous, qualityProfileId: Number(choice) }))}
+                disabled={saving}
+              >
+                <SelectTrigger id={profileFieldId}>
+                  <SelectValue placeholder="Unknown">{selectedProfileName}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={String(profile.id)}>
+                      {profile.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </fieldset>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

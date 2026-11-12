@@ -14,9 +14,25 @@ const current: SeriesFormValues = {
   seriesType: "standard",
   seasonFolder: true,
   monitorNewItems: "all",
+  episodeMonitoring: null,
 };
 
 describe("buildSeriesEdit", () => {
+  it("sends a chosen monitoring preset, and a preset alone is an edit", () => {
+    expect(buildSeriesEdit(10, current, { ...current, episodeMonitoring: "future" })).toStrictEqual({
+      seriesId: 10,
+      episodeMonitoring: "future",
+    });
+  });
+
+  it("never sends a Monitored change with the None preset, which unmonitors the series itself", () => {
+    const unmonitored = { ...current, monitored: false };
+    expect(buildSeriesEdit(10, unmonitored, { ...unmonitored, monitored: true, episodeMonitoring: "none" })).toStrictEqual({
+      seriesId: 10,
+      episodeMonitoring: "none",
+    });
+  });
+
   it("returns null when nothing differs from the current values", () => {
     expect(buildSeriesEdit(10, current, { ...current })).toBeNull();
   });
@@ -51,6 +67,7 @@ describe("buildSeriesEdit", () => {
       seriesType: "daily",
       seasonFolder: false,
       monitorNewItems: "none",
+      episodeMonitoring: "missing",
     });
 
     expect(edit).toStrictEqual({
@@ -60,9 +77,10 @@ describe("buildSeriesEdit", () => {
       seriesType: "daily",
       seasonFolder: false,
       monitorNewItems: "none",
+      episodeMonitoring: "missing",
     });
     expect(Object.keys(edit ?? {}).sort()).toEqual(
-      ["monitorNewItems", "monitored", "qualityProfileId", "seasonFolder", "seriesId", "seriesType"].sort(),
+      ["episodeMonitoring", "monitorNewItems", "monitored", "qualityProfileId", "seasonFolder", "seriesId", "seriesType"].sort(),
     );
   });
 

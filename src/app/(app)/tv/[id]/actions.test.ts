@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   recordReplaceGrab: vi.fn(),
   deleteSeries: vi.fn(),
   editSeries: vi.fn(),
+  applySeriesMonitorPreset: vi.fn(),
   listSeriesQualityProfiles: vi.fn(),
   redirect: vi.fn(),
 }));
@@ -63,6 +64,7 @@ vi.mock("@/server/arr/episodes", () => {
     SeasonNotFoundError,
     setEpisodeMonitored: mocks.setEpisodeMonitored,
     setSeasonMonitored: mocks.setSeasonMonitored,
+    applySeriesMonitorPreset: mocks.applySeriesMonitorPreset,
     searchSeason: mocks.searchSeason,
     searchEpisode: mocks.searchEpisode,
   };
@@ -112,6 +114,7 @@ beforeEach(() => {
   mocks.recordReplaceGrab.mockImplementation(() => {});
   mocks.deleteSeries.mockResolvedValue(undefined);
   mocks.editSeries.mockResolvedValue(undefined);
+  mocks.applySeriesMonitorPreset.mockResolvedValue(undefined);
   mocks.listSeriesQualityProfiles.mockResolvedValue([
     { id: 1, name: "HD-1080p" },
     { id: 2, name: "Any" },
@@ -148,7 +151,7 @@ describe("authorization", () => {
     { name: "findSeriesReleases", call: () => findSeriesReleases({ seriesId: 10, seasonNumber: 2 }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.searchSeriesReleases] },
     { name: "grabSeriesRelease", call: () => grabSeriesRelease({ token: release.token }), roles: ["admin"], denied: PICK_DENIED, upstream: [mocks.grabSeriesRelease] },
     { name: "deleteSeriesItem", call: () => deleteSeriesItem(validDelete), roles: ["admin"], denied: DELETE_DENIED, upstream: [mocks.deleteSeries, mocks.redirect] },
-    { name: "updateSeriesItem", call: () => updateSeriesItem(seriesEdit), roles: ["admin"], denied: SERIES_EDIT_DENIED, upstream: [mocks.editSeries, mocks.listSeriesQualityProfiles] },
+    { name: "updateSeriesItem", call: () => updateSeriesItem(seriesEdit), roles: ["admin"], denied: SERIES_EDIT_DENIED, upstream: [mocks.editSeries, mocks.listSeriesQualityProfiles, mocks.applySeriesMonitorPreset] },
   ];
 
   it.each(rows)("$name asks for $roles", async ({ call, roles }) => {
@@ -574,12 +577,17 @@ describe("updateSeriesItem input validation", () => {
     ["a non-boolean season folder flag", { seriesId: 10, seasonFolder: "yes" }],
     ["a new-season value the form does not offer", { seriesId: 10, monitorNewItems: "future" }],
     ["a null new-season value", { seriesId: 10, monitorNewItems: null }],
+    ["a monitor preset Sonarr has but the form does not offer", { seriesId: 10, episodeMonitoring: "skip" }],
+    ["an unknown monitor preset", { seriesId: 10, episodeMonitoring: "pilot" }],
+    ["a monitor preset with the wrong spelling", { seriesId: 10, episodeMonitoring: "lastSeason" }],
+    ["the none preset together with monitored true", { seriesId: 10, episodeMonitoring: "none", monitored: true }],
   ];
 
   it.each(invalid)("rejects %s without calling Sonarr", async (_name, input) => {
     expect(await updateSeriesItem(input)).toEqual({ ok: false, error: SERIES_EDIT_INVALID });
     expect(mocks.editSeries).not.toHaveBeenCalled();
     expect(mocks.listSeriesQualityProfiles).not.toHaveBeenCalled();
+    expect(mocks.applySeriesMonitorPreset).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
@@ -676,6 +684,55 @@ describe("updateSeriesItem edits", () => {
 
     expect(result).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
     expect(mocks.editSeries).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateSeriesItem episode monitoring preset", () => {
+  it("applies a preset alone without editing the series, then refreshes", async () => {
+    expect(await updateSeriesItem({ seriesId: 10, episodeMonitoring: "future" })).toEqual({ ok: true });
+
+    expect(mocks.applySeriesMonitorPreset).toHaveBeenCalledWith(10, "future");
+    expect(mocks.editSeries).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("edits first, then applies the preset", async () => {
+    expect(await updateSeriesItem({ seriesId: 10, monitored: false, episodeMonitoring: "none" })).toEqual({ ok: true });
+
+    expect(mocks.editSeries).toHaveBeenCalledWith({ seriesId: 10, monitored: false });
+    expect(mocks.applySeriesMonitorPreset).toHaveBeenCalledWith(10, "none");
+    expect(mocks.editSeries.mock.invocationCallOrder[0]).toBeLessThan(mocks.applySeriesMonitorPreset.mock.invocationCallOrder[0]);
+  });
+
+  it("does not apply the preset when the edit fails", async () => {
+    mocks.editSeries.mockRejectedValue(new ArrRequestError("Sonarr series edit request failed: HTTP 500", "http", 500));
+
+    const result = await updateSeriesItem({ seriesId: 10, monitored: false, episodeMonitoring: "all" });
+
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't accept the change. Try again." });
+    expect(mocks.applySeriesMonitorPreset).not.toHaveBeenCalled();
+  });
+
+  it("says the settings were saved when only the preset fails after an edit, refreshes, and logs only the safe message", async () => {
+    mocks.applySeriesMonitorPreset.mockRejectedValue(new ArrRequestError("Sonarr season pass request failed: HTTP 500", "http", 500));
+
+    const result = await updateSeriesItem({ seriesId: 10, seasonFolder: false, episodeMonitoring: "all" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Settings saved, but Sonarr didn't apply the episode monitoring change. Try again.",
+    });
+    expect(console.error).toHaveBeenCalledWith("Series monitor preset: Sonarr season pass request failed: HTTP 500");
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the plain error when a preset sent alone fails, without refreshing", async () => {
+    mocks.applySeriesMonitorPreset.mockRejectedValue(new ArrRequestError("Sonarr season pass request failed: HTTP 500", "http", 500));
+
+    const result = await updateSeriesItem({ seriesId: 10, episodeMonitoring: "all" });
+
+    expect(result).toEqual({ ok: false, error: "Sonarr didn't apply the episode monitoring change. Try again." });
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
 

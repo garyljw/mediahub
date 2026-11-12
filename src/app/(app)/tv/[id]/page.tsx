@@ -421,6 +421,7 @@ function SeriesView({
                 seriesType: detail.seriesType,
                 seasonFolder: detail.seasonFolder,
                 monitorNewItems: detail.monitorNewItems,
+                episodeMonitoring: null,
               }}
               profiles={profiles}
             />

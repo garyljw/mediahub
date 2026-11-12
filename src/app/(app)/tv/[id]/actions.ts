@@ -8,6 +8,7 @@ import {
   SeasonNotFoundError,
   searchEpisode,
   searchSeason,
+  applySeriesMonitorPreset,
   setEpisodeMonitored,
   setSeasonMonitored,
 } from "@/server/arr/episodes";
@@ -17,7 +18,7 @@ import { ReleaseGrabError, grabWasRefused } from "@/server/arr/releases";
 import { grabSeriesRelease as sendSeriesRelease, searchSeriesReleases } from "@/server/arr/series-releases";
 import { recordReplaceGrab } from "@/server/replace/replace-grabs";
 import type { GrabResult, ReleaseSearchResult } from "@/components/library/release";
-import { SERIES_TYPE_OPTIONS } from "@/components/tv/series-add";
+import { SERIES_MONITOR_OPTIONS, SERIES_TYPE_OPTIONS } from "@/components/tv/series-add";
 import { NEW_ITEM_MONITOR_OPTIONS } from "@/components/tv/series-edit";
 
 export type { GrabResult, ReleaseSearchResult };
@@ -361,6 +362,7 @@ const SeriesItemEditInput = z
     seriesType: z.enum(SERIES_TYPE_OPTIONS).optional(),
     seasonFolder: z.boolean().optional(),
     monitorNewItems: z.enum(NEW_ITEM_MONITOR_OPTIONS).optional(),
+    episodeMonitoring: z.enum(SERIES_MONITOR_OPTIONS).optional(),
   })
   .refine(
     (input) =>
@@ -368,8 +370,11 @@ const SeriesItemEditInput = z
       input.monitored !== undefined ||
       input.seriesType !== undefined ||
       input.seasonFolder !== undefined ||
-      input.monitorNewItems !== undefined,
-  );
+      input.monitorNewItems !== undefined ||
+      input.episodeMonitoring !== undefined,
+  )
+  // "None" unmonitors the series, so asking for it together with monitored: true contradicts itself.
+  .refine((input) => !(input.episodeMonitoring === "none" && input.monitored === true));
 
 /**
  * Edits this series in Sonarr (admin only), for the series page. The role check is the first thing that runs. It sits
@@ -387,13 +392,19 @@ export async function updateSeriesItem(input: unknown): Promise<ActionResult> {
   const parsed = SeriesItemEditInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid edit." };
 
-  const { seriesId, qualityProfileId, monitored, seriesType, seasonFolder, monitorNewItems } = parsed.data;
+  const { seriesId, qualityProfileId, monitored, seriesType, seasonFolder, monitorNewItems, episodeMonitoring } = parsed.data;
   const edit: SeriesEdit = { seriesId };
   if (qualityProfileId !== undefined) edit.qualityProfileId = qualityProfileId;
   if (monitored !== undefined) edit.monitored = monitored;
   if (seriesType !== undefined) edit.seriesType = seriesType;
   if (seasonFolder !== undefined) edit.seasonFolder = seasonFolder;
   if (monitorNewItems !== undefined) edit.monitorNewItems = monitorNewItems;
+  const hasEdit =
+    qualityProfileId !== undefined ||
+    monitored !== undefined ||
+    seriesType !== undefined ||
+    seasonFolder !== undefined ||
+    monitorNewItems !== undefined;
 
   try {
     if (qualityProfileId !== undefined) {
@@ -404,12 +415,29 @@ export async function updateSeriesItem(input: unknown): Promise<ActionResult> {
         return { ok: false, error: "That quality profile no longer exists." };
       }
     }
-    await editSeries(edit);
+    if (hasEdit) await editSeries(edit);
   } catch (error) {
     if (!(error instanceof ArrRequestError)) throw error;
     // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
     console.error(`Series edit: ${error.message}`);
+    // The preset is not sent after a failed edit.
     return { ok: false, error: "Sonarr didn't accept the change. Try again." };
+  }
+
+  if (episodeMonitoring !== undefined) {
+    try {
+      await applySeriesMonitorPreset(seriesId, episodeMonitoring);
+    } catch (error) {
+      if (!(error instanceof ArrRequestError)) throw error;
+      // ArrRequestError messages never contain the host, key or response body, so they are safe to log.
+      console.error(`Series monitor preset: ${error.message}`);
+      if (hasEdit) {
+        // The edit was saved, so re-read the page to show it.
+        refresh();
+        return { ok: false, error: "Settings saved, but Sonarr didn't apply the episode monitoring change. Try again." };
+      }
+      return { ok: false, error: "Sonarr didn't apply the episode monitoring change. Try again." };
+    }
   }
 
   // The series page reads Sonarr on every request and nothing is cached, so refresh() shows the new values.

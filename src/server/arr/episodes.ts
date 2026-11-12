@@ -2,6 +2,7 @@ import "server-only";
 import { sonarrClient } from "./client";
 import { ArrRequestError, arrRequest } from "./request";
 import { queueSeriesWrite } from "./series-writes";
+import type { SeriesMonitor } from "@/components/tv/series-add";
 import type { components as SonarrComponents } from "./generated/sonarr";
 
 type SeriesResource = SonarrComponents["schemas"]["SeriesResource"];
@@ -73,6 +74,21 @@ async function writeSeasonMonitored(
   await arrRequest("Sonarr series update", (signal) =>
     client.PUT("/api/v3/series/{id}", { params: { path: { id: String(seriesId) } }, body, signal }),
   );
+}
+
+/**
+ * Applies a monitoring preset to every episode of one series once (Sonarr's season pass endpoint, as its own
+ * Episode Monitoring screen does). Sonarr doesn't store the preset. Only the series id and the preset are sent:
+ * never a monitored flag or a season list, and always the monitoring options, because without them Sonarr resets
+ * every episode to its season's flag (see setSeasonMonitored). Sonarr then rewrites the season flags to match the
+ * episodes, and "none" also unmonitors the series. Queued with the other writes to this series.
+ */
+export async function applySeriesMonitorPreset(seriesId: number, monitor: SeriesMonitor): Promise<void> {
+  await queueSeriesWrite(seriesId, async () => {
+    const client = sonarrClient();
+    const body = { series: [{ id: seriesId }], monitoringOptions: { monitor } };
+    await arrRequest("Sonarr season pass", (signal) => client.POST("/api/v3/seasonpass", { body, signal }));
+  });
 }
 
 /**
