@@ -51,6 +51,7 @@ const ALLOWED_KEYS = [
   "latestReleaseDate",
   "fileAddedAt",
   "fileQuality",
+  "genres",
   "hasPoster",
   "id",
   "monitored",
@@ -98,6 +99,7 @@ describe("toMovieRows", () => {
       // The latest of the three dates, so it differs from releaseDate.
       latestReleaseDate: "2019-08-20T00:00:00Z",
       fileAddedAt: "2024-03-13T08:00:00Z",
+      genres: ["Science Fiction"],
       sortTitle: "starfall protocol",
       hasPoster: true,
       tmdbId: 900001,
@@ -120,6 +122,8 @@ describe("toMovieRows", () => {
       latestReleaseDate: "2021-09-03T00:00:00Z",
       // No file yet, so no download date, even though Radarr has a release date.
       fileAddedAt: null,
+      // Radarr sent no genres for this one.
+      genres: [],
       sortTitle: "lantern road",
       hasPoster: false,
       tmdbId: 900002,
@@ -176,13 +180,17 @@ describe("toMovieRows", () => {
     }
   });
 
+  it("keeps every genre, trimmed, without empties or repeats (a hover card shows only three)", () => {
+    const [row] = toMovieRows([{ ...movies[0], genres: ["Drama", " Thriller ", "", "Drama", "Action", "Crime"] }], profiles);
+    expect(row.genres).toEqual(["Drama", "Thriller", "Action", "Crime"]);
+  });
+
   it("does not carry paths, images, URLs, overviews or other upstream fields", () => {
     const serialized = JSON.stringify(rows);
     expect(serialized).not.toContain("/invented");
     expect(serialized).not.toContain("example.invalid");
     expect(serialized).not.toContain("Invented overview");
     expect(serialized).not.toContain("tt0000001");
-    expect(serialized).not.toContain("Science Fiction");
   });
 });
 

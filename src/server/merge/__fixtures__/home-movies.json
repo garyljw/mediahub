@@ -15,7 +15,11 @@
     "tmdbId": 900001,
     "releaseDate": "2019-06-14T00:00:00Z",
     "latestReleaseDate": "2019-11-02T00:00:00Z",
-    "fileAddedAt": "2026-10-02T09:00:00Z"
+    "fileAddedAt": "2026-10-02T09:00:00Z",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ]
   },
   {
     "id": 2,
@@ -32,7 +36,10 @@
     "hasPoster": false,
     "tmdbId": 900002,
     "releaseDate": "2024-02-01T00:00:00Z",
-    "fileAddedAt": null
+    "fileAddedAt": null,
+    "genres": [
+      "Comedy"
+    ]
   },
   {
     "id": 3,
@@ -49,7 +56,8 @@
     "hasPoster": true,
     "tmdbId": 900003,
     "releaseDate": "2027-05-07T00:00:00Z",
-    "fileAddedAt": null
+    "fileAddedAt": null,
+    "genres": []
   },
   {
     "id": 4,
@@ -66,6 +74,9 @@
     "hasPoster": true,
     "tmdbId": null,
     "releaseDate": null,
-    "fileAddedAt": null
+    "fileAddedAt": null,
+    "genres": [
+      "Drama"
+    ]
   }
 ]

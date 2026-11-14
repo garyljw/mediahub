@@ -20,6 +20,7 @@ function item(kind: HomeItem["kind"], id: number, title: string, year: number | 
     onDisk: true,
     watched: null,
     inFocus: false,
+    genres: [],
   };
 }
 

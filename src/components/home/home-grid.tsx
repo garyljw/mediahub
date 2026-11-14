@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo, Suspense, use, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, Plus, Tv } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Bookmark, Film, ListFilter, Plus, Tv, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/search-input";
@@ -13,6 +13,8 @@ import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cel
 import { activityLabel, showsProgress } from "@/components/library/activity";
 import { formatCount } from "@/components/library/format";
 import { SELECT_CLASS } from "@/components/library/table-parts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useActivity } from "@/components/library/use-activity";
 import { FOCUS_NAME, SAVE_FAILED } from "@/components/focus/focus-kinds";
 import { addFocusItem, removeFocusItems, type FocusResult } from "@/app/(app)/focus/actions";
@@ -28,6 +30,7 @@ import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
 import {
   DEFAULT_HOME_SORT,
   filterHomeItems,
+  genreOptions,
   HOME_SORTS,
   readHomeSort,
   saveHomeSort,
@@ -55,6 +58,9 @@ const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
   { kind: "series", label: "TV" },
 ];
 
+/** The Select value for "no genre filter". Radix Select items can't have an empty value. */
+const ALL_GENRES = "__all__";
+
 const CHIP_CLASS = "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /** A filter chip's classes, selected or not. Shared by the kind and watch-status chips so they stay alike. */
@@ -66,7 +72,7 @@ function chipClass(selected: boolean): string {
 }
 
 /**
- * The Home poster grid: movies and TV together, with instant search, a kind filter, a watch-status filter and a sort.
+ * The Home poster grid: movies and TV together, with instant search, a Filters panel (kind, watch status and genre) and a sort.
  * Read-only. Each tile opens the item's own page. Live activity is polled for both apps, and shown as a line and
  * progress bar.
  *
@@ -95,6 +101,12 @@ export function HomeGrid({
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<HomeKind>("all");
   const [watchFilter, setWatchFilter] = useState<HomeWatchFilter>("any");
+  const [genre, setGenre] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // The panel slides up from the bottom on a phone and in from the right on a wider screen. Chosen when it opens.
+  const [panelSide, setPanelSide] = useState<"bottom" | "right">("bottom");
+  // Null until the library arrives. Read in an effect (the panel's genre list needs it, the toolbar doesn't wait for it).
+  const [libraryItems, setLibraryItems] = useState<HomeItem[] | null>(null);
   // Null until Plex answers. Read in an effect rather than with use(), so the toolbar and grid don't wait for it.
   const [watchedState, setWatchedState] = useState<HomeWatched | null>(null);
   // Null until the download dates arrive. Read in an effect, like the watched status.
@@ -122,6 +134,16 @@ export function HomeGrid({
 
   useEffect(() => {
     let cancelled = false;
+    library.then((value) => {
+      if (!cancelled) setLibraryItems(value.items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [library]);
+
+  useEffect(() => {
+    let cancelled = false;
     downloaded.then((value) => {
       if (!cancelled) setDownloadedState(value);
     });
@@ -142,6 +164,7 @@ export function HomeGrid({
         setSearch(filter.search);
         setKind(filter.kind);
         setWatchFilter(filter.watched);
+        setGenre(filter.genre);
       }
       setPlaceReady(true);
     });
@@ -178,14 +201,31 @@ export function HomeGrid({
   // the "Date downloaded" sort needs the download dates.
   const restoreReady =
     placeReady && (activeWatch === "any" || watchedState !== null) && (sort.key !== "downloaded" || downloadedState !== null);
-  const { onGridClick, restore } = usePlaceMemory("/", { search, kind, watched: activeWatch });
+  const { onGridClick, restore } = usePlaceMemory("/", { search, kind, watched: activeWatch, genre });
   const router = useRouter();
+
+  // The genres of the chosen kind, with the chosen one kept in the list (count 0) when this kind has none of it.
+  const genres = useMemo(() => genreOptions(libraryItems ?? [], kind, genre), [libraryItems, kind, genre]);
+  const activeFilters: { key: string; label: string; clear: () => void }[] = [];
+  if (kind !== "all") activeFilters.push({ key: "kind", label: KIND_CHIPS.find((chip) => chip.kind === kind)?.label ?? kind, clear: () => setKind("all") });
+  if (activeWatch !== "any")
+    activeFilters.push({ key: "watched", label: WATCH_FILTER_CHIPS.find((chip) => chip.value === activeWatch)?.label ?? activeWatch, clear: () => setWatchFilter("any") });
+  if (genre !== null) activeFilters.push({ key: "genre", label: genre, clear: () => setGenre(null) });
+  function clearFilters() {
+    setKind("all");
+    setWatchFilter("any");
+    setGenre(null);
+  }
+  function openFilters() {
+    setPanelSide(window.matchMedia("(min-width: 768px)").matches ? "right" : "bottom");
+    setFiltersOpen(true);
+  }
 
   // Add carries the search and the Movies/TV choice to the Add page, which searches for them at once.
   const addLink = addHref({ search, kind });
   // Saves the search first, so "← Home" brings it back.
   function saveSearch() {
-    writePlace("/", { scrollY: window.scrollY, tileKey: null, tileTop: null, filter: { search, kind, watched: activeWatch } });
+    writePlace("/", { scrollY: window.scrollY, tileKey: null, tileTop: null, filter: { search, kind, watched: activeWatch, genre } });
   }
 
   return (
@@ -228,64 +268,124 @@ export function HomeGrid({
             </Link>
           </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
-            {KIND_CHIPS.map((chip) => (
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={openFilters} aria-haspopup="dialog">
+            <ListFilter aria-hidden />
+            Filters
+            {activeFilters.length > 0 && (
+              <span className="rounded-full bg-brand px-1.5 text-xs leading-5 text-primary-foreground">{formatCount(activeFilters.length)}</span>
+            )}
+          </Button>
+          <div className="flex min-w-0 items-center gap-1.5">
+          <select
+            aria-label="Sort by"
+            value={sort.key}
+            onChange={(event) => chooseSort(event.target.value as HomeSortKey)}
+            className={SELECT_CLASS}
+          >
+            {HOME_SORTS.map((option) => (
+              <option key={option.key} value={option.key} disabled={option.key === "downloaded" && downloadedState === null}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={flipSortDir}
+            aria-label={sort.dir === "asc" ? "Ascending" : "Descending"}
+            title={sort.dir === "asc" ? "Ascending. Click to sort descending" : "Descending. Click to sort ascending"}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input bg-transparent shadow-xs outline-none hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+          >
+            {sort.dir === "asc" ? <ArrowUp aria-hidden className="size-4" /> : <ArrowDown aria-hidden className="size-4" />}
+          </button>
+        </div>
+        </div>
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2" aria-label="Active filters" role="group">
+            {activeFilters.map((tag) => (
               <button
-                key={chip.kind}
+                key={tag.key}
                 type="button"
-                aria-pressed={kind === chip.kind}
-                onClick={() => setKind(chip.kind)}
-                className={chipClass(kind === chip.kind)}
+                onClick={tag.clear}
+                aria-label={`Remove filter ${tag.label}`}
+                className="inline-flex items-center gap-1 rounded-full border border-transparent bg-brand px-2.5 py-1 text-sm text-primary-foreground glow-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                {chip.label}
+                {tag.label}
+                <X aria-hidden className="size-3.5" />
               </button>
             ))}
           </div>
-          {watchFilterShown && (
-            <>
-              <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
-              <div role="group" aria-label="Watched in Plex" className="flex flex-wrap gap-2">
-                {WATCH_FILTER_CHIPS.map((chip) => (
-                  <button
-                    key={chip.value}
-                    type="button"
-                    disabled={watchFilterLoading}
-                    aria-disabled={watchFilterLoading || undefined}
-                    aria-pressed={watchFilter === chip.value}
-                    onClick={() => setWatchFilter(chip.value)}
-                    className={cn(chipClass(watchFilter === chip.value), "aria-disabled:opacity-50")}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+        )}
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetContent side={panelSide} className="max-h-[85dvh] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Filters</SheetTitle>
+              <SheetDescription className="sr-only">Narrow the grid by type, watched status and genre.</SheetDescription>
+            </SheetHeader>
+            <div className="space-y-5 px-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Type</p>
+                <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+                  {KIND_CHIPS.map((chip) => (
+                    <button
+                      key={chip.kind}
+                      type="button"
+                      aria-pressed={kind === chip.kind}
+                      onClick={() => setKind(chip.kind)}
+                      className={chipClass(kind === chip.kind)}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </>
-          )}
-          <div className="flex items-center gap-1.5">
-            <select
-              aria-label="Sort by"
-              value={sort.key}
-              onChange={(event) => chooseSort(event.target.value as HomeSortKey)}
-              className={SELECT_CLASS}
-            >
-              {HOME_SORTS.map((option) => (
-                <option key={option.key} value={option.key} disabled={option.key === "downloaded" && downloadedState === null}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={flipSortDir}
-              aria-label={sort.dir === "asc" ? "Ascending" : "Descending"}
-              title={sort.dir === "asc" ? "Ascending. Click to sort descending" : "Descending. Click to sort ascending"}
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input bg-transparent shadow-xs outline-none hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-            >
-              {sort.dir === "asc" ? <ArrowUp aria-hidden className="size-4" /> : <ArrowDown aria-hidden className="size-4" />}
-            </button>
-          </div>
-        </div>
+              {watchFilterShown && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Watched in Plex</p>
+                  <div role="group" aria-label="Watched in Plex" className="flex flex-wrap gap-2">
+                    {WATCH_FILTER_CHIPS.map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        disabled={watchFilterLoading}
+                        aria-disabled={watchFilterLoading || undefined}
+                        aria-pressed={watchFilter === chip.value}
+                        onClick={() => setWatchFilter(chip.value)}
+                        className={cn(chipClass(watchFilter === chip.value), "aria-disabled:opacity-50")}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <p id="genre-label" className="text-sm font-medium">Genre</p>
+                <Select value={genre ?? ALL_GENRES} onValueChange={(value) => setGenre(value === ALL_GENRES ? null : value)}>
+                  <SelectTrigger aria-labelledby="genre-label">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_GENRES}>All genres</SelectItem>
+                    {genres.map((option) => (
+                      <SelectItem key={option.genre} value={option.genre}>
+                        {option.genre} ({formatCount(option.count)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <SheetFooter className="flex-row justify-between">
+              <Button type="button" variant="outline" onClick={clearFilters} disabled={activeFilters.length === 0}>
+                Clear all
+              </Button>
+              <Button type="button" onClick={() => setFiltersOpen(false)}>
+                Done
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </div>
 
       <Suspense fallback={<HomeGridSkeleton />}>
@@ -295,6 +395,7 @@ export function HomeGrid({
           search={search}
           kind={kind}
           watchFilter={activeWatch}
+          genre={genre}
           sortKey={sort.key}
           sortDir={sort.dir}
           downloadedByKey={downloadedByKey}
@@ -316,6 +417,7 @@ function HomeResults({
   search,
   kind,
   watchFilter,
+  genre,
   sortKey,
   sortDir,
   downloadedByKey,
@@ -327,6 +429,7 @@ function HomeResults({
   search: string;
   kind: HomeKind;
   watchFilter: HomeWatchFilter;
+  genre: string | null;
   sortKey: HomeSortKey;
   sortDir: HomeSortDir;
   downloadedByKey: Record<string, HomeDownloadDate> | null;
@@ -386,10 +489,10 @@ function HomeResults({
   const menuTarget = menuKey === null ? undefined : shownByKey.get(menuKey);
   // The matches, in the chosen order. Sorting returns new arrays of the same item objects, so the tiles still skip re-renders.
   const ordered = useMemo(
-    () => sortHomeItems(filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter }), sortKey, sortDir),
-    [shown, kind, deferredSearch, watchFilter, sortKey, sortDir],
+    () => sortHomeItems(filterHomeItems(shown, { kind, search: deferredSearch, watched: watchFilter, genre }), sortKey, sortDir),
+    [shown, kind, deferredSearch, watchFilter, genre, sortKey, sortDir],
   );
-  const filtering = kind !== "all" || deferredSearch.trim() !== "" || watchFilter !== "any";
+  const filtering = kind !== "all" || deferredSearch.trim() !== "" || watchFilter !== "any" || genre !== null;
   // The grid follows the deferred search, so wait until it has caught up with the box before restoring the position.
   const searchSettled = deferredSearch === search;
   useEffect(() => {

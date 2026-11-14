@@ -3,7 +3,7 @@ import { sonarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
 import { queueSeriesWrite } from "./series-writes";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
-import { toPeek, type Peek } from "@/server/merge/peek";
+import { cleanGenres, toPeek, type Peek } from "@/server/merge/peek";
 import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { NewItemMonitor, SeriesType } from "@/components/tv/series-edit";
@@ -38,6 +38,8 @@ export type SeriesRow = {
    * Null when neither qualifies.
    */
   latestAired: string | null;
+  /** The genre names, cleaned and de-duplicated (see cleanGenres). Empty when the upstream has none. */
+  genres: string[];
   sortTitle: string;
   /** True when Sonarr has a poster for the series. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
@@ -103,6 +105,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       added: entry.added ?? null,
       firstAired: entry.firstAired ?? null,
       latestAired: latestAired(entry, now),
+      genres: cleanGenres(entry.genres),
       sortTitle: (entry.sortTitle || entry.title).toLowerCase(),
       hasPoster: entry.images?.some((image) => image.coverType === "poster") ?? false,
       tvdbId: typeof entry.tvdbId === "number" && Number.isSafeInteger(entry.tvdbId) && entry.tvdbId > 0 ? entry.tvdbId : null,

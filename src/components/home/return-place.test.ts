@@ -36,7 +36,7 @@ const KEY = "mediahub.place:/";
 
 describe("readPlace and writePlace", () => {
   it("reads back a place that was written", () => {
-    const place: Place = { scrollY: 900, tileKey: "movie:12", tileTop: 140, filter: { search: "dune", kind: "movie", watched: "any" } };
+    const place: Place = { scrollY: 900, tileKey: "movie:12", tileTop: 140, filter: { search: "dune", kind: "movie", watched: "any", genre: "Science Fiction" } };
     stubStorage(new Map());
     writePlace("/", place);
     expect(readPlace("/")).toEqual(place);
@@ -50,10 +50,20 @@ describe("readPlace and writePlace", () => {
     ["a numeric tile key", JSON.stringify({ scrollY: 1, tileKey: 7, tileTop: null, filter: null })],
     ["a filter with an unknown kind", JSON.stringify({ scrollY: 1, tileKey: null, tileTop: null, filter: { search: "", kind: "book", watched: "any" } })],
     ["a filter with an unknown watch state", JSON.stringify({ scrollY: 1, tileKey: null, tileTop: null, filter: { search: "", kind: "all", watched: "maybe" } })],
+    ["a filter with a non-string genre", JSON.stringify({ scrollY: 1, tileKey: null, tileTop: null, filter: { search: "", kind: "all", watched: "any", genre: 7 } })],
     ["no filter key at all", JSON.stringify({ scrollY: 1, tileKey: null, tileTop: null })],
   ])("ignores a stored value that is %s", (_, raw) => {
     stubStorage(new Map([[KEY, raw]]));
     expect(readPlace("/")).toBeNull();
+  });
+
+  it.each([
+    ["saved before the genre filter", {}],
+    ["with an empty genre", { genre: "" }],
+  ])("reads a place %s as having no genre", (_, extra) => {
+    const old = { scrollY: 5, tileKey: null, tileTop: null, filter: { search: "x", kind: "all", watched: "any", ...extra } };
+    stubStorage(new Map([[KEY, JSON.stringify(old)]]));
+    expect(readPlace("/")?.filter).toEqual({ search: "x", kind: "all", watched: "any", genre: null });
   });
 
   it("gives no place, and writes do not throw, when storage throws", () => {

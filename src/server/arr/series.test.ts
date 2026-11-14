@@ -50,6 +50,7 @@ const ALLOWED_KEYS = [
   "added",
   "episodeCount",
   "episodeFileCount",
+  "genres",
   "hasPoster",
   "id",
   "monitored",
@@ -99,6 +100,7 @@ describe("toSeriesRows", () => {
       added: "2024-02-10T09:00:00Z",
       firstAired: "2026-10-29T01:00:00Z",
       latestAired: "2026-11-05T01:00:00Z",
+      genres: ["Drama"],
       sortTitle: "harbour lights",
       hasPoster: true,
       tvdbId: 100001,
@@ -136,6 +138,7 @@ describe("toSeriesRows", () => {
     expect(rows.find((r) => r.id === 3)).toMatchObject({
       status: "upcoming",
       network: "Lakeside",
+      genres: [],
       year: 2026,
       episodeFileCount: 0,
       episodeCount: 0,
@@ -197,7 +200,6 @@ describe("toSeriesRows", () => {
     expect(serialized).not.toContain("example.invalid");
     expect(serialized).not.toContain("Invented overview");
     expect(serialized).not.toContain("tt0000011");
-    expect(serialized).not.toContain("Drama");
     expect(serialized).not.toContain("INVENTED");
   });
 });

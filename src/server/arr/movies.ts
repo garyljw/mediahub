@@ -3,7 +3,7 @@ import { radarrClient } from "./client";
 import { cachedArrImage } from "@/server/image-cache";
 import { ArrRequestError, DELETE_TIMEOUT_MS, arrRequest, getList } from "./request";
 import { MAX_BACKDROP_BYTES, fetchPosterBytes } from "./poster";
-import { toPeek, type Peek } from "@/server/merge/peek";
+import { cleanGenres, toPeek, type Peek } from "@/server/merge/peek";
 import { sortedProfileOptions, usableProfiles, type QualityProfileOption } from "./profiles";
 import type { MinimumAvailability } from "@/components/movies/movie-edit";
 import type { components as RadarrComponents } from "./generated/radarr";
@@ -38,6 +38,8 @@ export type MovieRow = {
    * Home sort uses the import history instead and only falls back to this. Null unless the movie is downloaded.
    */
   fileAddedAt: string | null;
+  /** The genre names, cleaned and de-duplicated (see cleanGenres). Empty when the upstream has none. */
+  genres: string[];
   sortTitle: string;
   /** True when Radarr has a poster for the movie. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
@@ -95,6 +97,7 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       releaseDate: pickDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease], "earliest"),
       latestReleaseDate: pickDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease], "latest"),
       fileAddedAt: status === "downloaded" ? (movie.movieFile?.dateAdded ?? null) : null,
+      genres: cleanGenres(movie.genres),
       sortTitle: (movie.sortTitle || movie.title).toLowerCase(),
       hasPoster: movie.images?.some((image) => image.coverType === "poster") ?? false,
       tmdbId: typeof movie.tmdbId === "number" && Number.isSafeInteger(movie.tmdbId) && movie.tmdbId > 0 ? movie.tmdbId : null,

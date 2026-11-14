@@ -21,7 +21,7 @@ export function isBackSource(value: string): value is BackSource {
 }
 
 /** The Home search and filter choices, remembered with the place so coming back shows the same list. */
-export type HomeFilterPlace = { search: string; kind: HomeKind; watched: HomeWatchFilter };
+export type HomeFilterPlace = { search: string; kind: HomeKind; watched: HomeWatchFilter; genre: string | null };
 
 /**
  * A saved place. `tileKey` and `tileTop` name the tile the user clicked and where it sat in the viewport (both null when
@@ -38,11 +38,14 @@ function isFiniteNumber(value: unknown): value is number {
 
 function parseFilter(value: unknown): HomeFilterPlace | null {
   if (typeof value !== "object" || value === null) return null;
-  const { search, kind, watched } = value as Record<string, unknown>;
+  const { search, kind, watched, genre = null } = value as Record<string, unknown>;
   if (typeof search !== "string") return null;
   if (!KINDS.includes(kind as HomeKind)) return null;
   if (!WATCH_VALUES.includes(watched as HomeWatchFilter)) return null;
-  return { search, kind: kind as HomeKind, watched: watched as HomeWatchFilter };
+  // A place saved before the genre filter has no genre, which reads as none.
+  if (genre !== null && typeof genre !== "string") return null;
+  // An empty name can't come from Radarr or Sonarr, so it reads as no genre rather than a filter that matches nothing.
+  return { search, kind: kind as HomeKind, watched: watched as HomeWatchFilter, genre: genre === "" ? null : genre };
 }
 
 /** A place read from storage, or null when the value isn't one this code wrote. */
