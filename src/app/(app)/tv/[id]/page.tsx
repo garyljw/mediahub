@@ -387,9 +387,11 @@ function SeriesView({
         extraLines={rating === null ? [] : [rating]}
         backdropSrc={detail.hasBackdrop ? `/api/tv/${detail.id}/backdrop` : null}
         posterSrc={detail.hasPoster ? `/api/tv/${detail.id}/poster` : null}
-        status={{ label: STATUS_LABEL[detail.status], className: STATUS_CLASS[detail.status] }}
-        monitored={detail.monitored}
-        qualityProfile={detail.qualityProfile}
+        arr={{
+          status: { label: STATUS_LABEL[detail.status], className: STATUS_CLASS[detail.status] },
+          monitored: detail.monitored,
+          qualityProfile: detail.qualityProfile,
+        }}
         overview={detail.overview}
         actions={
           <SeriesHeaderActions seriesId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />

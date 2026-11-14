@@ -1,0 +1,147 @@
+{
+  "adult": false,
+  "backdrop_path": "/twiVn9oFXOVR0uoYgawyEBlnFu8.jpg",
+  "belongs_to_collection": null,
+  "budget": 250000000,
+  "genres": [
+    {
+      "id": 12,
+      "name": "Adventure"
+    },
+    {
+      "id": 28,
+      "name": "Action"
+    },
+    {
+      "id": 14,
+      "name": "Fantasy"
+    }
+  ],
+  "homepage": "https://www.universalpictures.com/movies/the-odyssey",
+  "id": 1368337,
+  "imdb_id": "tt33764258",
+  "origin_country": [
+    "GB",
+    "US"
+  ],
+  "original_language": "en",
+  "original_title": "The Odyssey",
+  "overview": "Odysseus, the legendary King of Ithaca, embarks on a long and perilous journey home following the Trojan War. Throughout his voyage, he is forced to confront the whims of gods, mythological monsters, and trials that stretch both his cunning and his humanity to the breaking point.",
+  "popularity": 465.3448,
+  "poster_path": "/5rhTDKUhPYvpdQIijFIs5VoWsON.jpg",
+  "production_companies": [
+    {
+      "id": 33,
+      "logo_path": "/8lvHyhjr8oUKOOy2dKXoALWKdp0.png",
+      "name": "Universal Pictures",
+      "origin_country": "US"
+    },
+    {
+      "id": 9996,
+      "logo_path": "/3tvBqYsBhxWeHlu62SIJ1el93O7.png",
+      "name": "Syncopy",
+      "origin_country": "GB"
+    }
+  ],
+  "production_countries": [
+    {
+      "iso_3166_1": "GB",
+      "name": "United Kingdom"
+    },
+    {
+      "iso_3166_1": "US",
+      "name": "United States of America"
+    }
+  ],
+  "release_date": "2026-07-15",
+  "revenue": 1804356298,
+  "runtime": 173,
+  "softcore": false,
+  "spoken_languages": [
+    {
+      "english_name": "English",
+      "iso_639_1": "en",
+      "name": "English"
+    }
+  ],
+  "status": "Released",
+  "tagline": "Defy the gods.",
+  "title": "The Odyssey",
+  "video": false,
+  "vote_average": 8,
+  "vote_count": 4824,
+  "credits": {
+    "cast": [
+      {
+        "adult": false,
+        "gender": 2,
+        "id": 1892,
+        "known_for_department": "Acting",
+        "name": "Matt Damon",
+        "original_name": "Matt Damon",
+        "popularity": 8.6028,
+        "profile_path": "/aCvBXTAR9B1qRjIRzMBYhhbm1fR.jpg",
+        "cast_id": 1,
+        "character": "Odysseus",
+        "credit_id": "671d0f9e1ea33928297d5ff6",
+        "order": 0
+      },
+      {
+        "adult": false,
+        "gender": 2,
+        "id": 1136406,
+        "known_for_department": "Acting",
+        "name": "Tom Holland",
+        "original_name": "Tom Holland",
+        "popularity": 16.1156,
+        "profile_path": "/tH8bNDcjiS399DlcnC5oubxNh23.jpg",
+        "cast_id": 2,
+        "character": "Telemachus",
+        "credit_id": "671d0fa6a4ac8a432c5c7209",
+        "order": 1
+      },
+      {
+        "adult": false,
+        "gender": 1,
+        "id": 1813,
+        "known_for_department": "Acting",
+        "name": "Anne Hathaway",
+        "original_name": "Anne Hathaway",
+        "popularity": 14.7826,
+        "profile_path": "/dUnrbrn2FeqfdpGRArPZeWPsS2g.jpg",
+        "cast_id": 8,
+        "character": "Penelope",
+        "credit_id": "672e6e76fc658fd33c2a292b",
+        "order": 2
+      }
+    ],
+    "crew": [
+      {
+        "adult": false,
+        "gender": 2,
+        "id": 525,
+        "known_for_department": "Directing",
+        "name": "Christopher Nolan",
+        "original_name": "Christopher Nolan",
+        "popularity": 9.2994,
+        "profile_path": "/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg",
+        "credit_id": "671d0fe427bd57d91f62cdda",
+        "department": "Directing",
+        "job": "Director"
+      },
+      {
+        "adult": false,
+        "gender": 2,
+        "id": 525,
+        "known_for_department": "Directing",
+        "name": "Christopher Nolan",
+        "original_name": "Christopher Nolan",
+        "popularity": 9.2994,
+        "profile_path": "/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg",
+        "credit_id": "671e82155d0de89042d97484",
+        "department": "Writing",
+        "job": "Writer"
+      }
+    ]
+  }
+}

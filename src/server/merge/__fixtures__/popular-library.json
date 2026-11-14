@@ -1,0 +1,10 @@
+{
+  "movies": [
+    { "id": 11, "tmdbId": 1368337 },
+    { "id": 12, "tmdbId": null }
+  ],
+  "series": [
+    { "id": 21, "tmdbId": 84773 },
+    { "id": 22, "tmdbId": null }
+  ]
+}

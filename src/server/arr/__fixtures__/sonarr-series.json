@@ -21,6 +21,7 @@
       { "coverType": "fanart", "url": "https://example.invalid/fanart-1.jpg", "remoteUrl": "https://example.invalid/fanart-1.jpg" }
     ],
     "tvdbId": 100001,
+    "tmdbId": 300001,
     "imdbId": "tt0000011",
     "genres": ["Drama"],
     "tags": [],

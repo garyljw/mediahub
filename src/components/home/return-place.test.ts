@@ -8,6 +8,7 @@ import {
   readPlace,
   rememberOpenedFrom,
   restoreTop,
+  topIfOpen,
   writePlace,
   type Place,
 } from "./return-place";
@@ -33,6 +34,21 @@ afterEach(() => {
 });
 
 const KEY = "mediahub.place:/";
+
+describe("topIfOpen from another page", () => {
+  it("forgets Popular's place so the nav opens it at the top, but keeps Home's", () => {
+    const place: Place = { scrollY: 900, tileKey: "trending-tv:tv-7", tileTop: 140, filter: null };
+    stubStorage(new Map());
+    writePlace("/popular", place);
+    writePlace("/", { ...place, tileKey: "movie:12" });
+
+    expect(topIfOpen("/popular", "/movies/12")).toBe(false);
+    expect(topIfOpen("/", "/movies/12")).toBe(false);
+
+    expect(readPlace("/popular")).toBeNull();
+    expect(readPlace("/")).toEqual({ ...place, tileKey: "movie:12" });
+  });
+});
 
 describe("readPlace and writePlace", () => {
   it("reads back a place that was written", () => {
@@ -126,6 +142,7 @@ describe("backTarget", () => {
     ["/", "Home"],
     ["/focus/movies", "Movie Focus"],
     ["/focus/tv", "TV Focus"],
+    ["/popular", "Popular"],
     ["/calendar", "Calendar"],
     ["/queue", "Queue"],
     ["/history", "History"],

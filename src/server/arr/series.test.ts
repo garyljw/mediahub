@@ -64,6 +64,7 @@ const ALLOWED_KEYS = [
   "sortTitle",
   "status",
   "title",
+  "tmdbId",
   "tvdbId",
   "year",
 ].sort();
@@ -104,6 +105,7 @@ describe("toSeriesRows", () => {
       sortTitle: "harbour lights",
       hasPoster: true,
       tvdbId: 100001,
+      tmdbId: 300001,
     });
   });
 

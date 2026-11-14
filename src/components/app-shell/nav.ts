@@ -1,10 +1,11 @@
-import { CalendarDays, Clapperboard, Download, History, Home, MonitorPlay, ScrollText, Settings, type LucideIcon } from "lucide-react";
+import { CalendarDays, Clapperboard, Download, Flame, History, Home, MonitorPlay, ScrollText, Settings, type LucideIcon } from "lucide-react";
 
 // Plain config shared by the server shell and client nav links. Must not import from src/server.
 export type NavItem = { href: string; label: string; icon: LucideIcon; adminOnly?: boolean };
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/popular", label: "Popular", icon: Flame },
   { href: "/focus/movies", label: "Movie Focus", icon: Clapperboard },
   { href: "/focus/tv", label: "TV Focus", icon: MonitorPlay },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },

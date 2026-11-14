@@ -224,3 +224,29 @@ export function SettingsSkeleton() {
     </div>
   );
 }
+
+/** The "Popular on a service" section while its services load: the heading and a row of poster tiles. */
+export function PopularServiceSkeleton() {
+  return (
+    <>
+      <h2 className="text-lg font-semibold tracking-tight">Popular on a service</h2>
+      <PosterGridSkeleton count={12} />
+    </>
+  );
+}
+
+/** Popular: the heading and a placeholder for each of its four sections. */
+export function PopularSkeleton() {
+  return (
+    <div aria-busy="true" className="space-y-8">
+      <LoadingStatus />
+      <h1 className="text-2xl font-semibold tracking-tight">Popular</h1>
+      {["Trending movies", "Trending TV", "Popular on a service", "Upcoming movies", "Upcoming TV", "On this week"].map((title) => (
+        <section key={title} className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          <PosterGridSkeleton count={12} />
+        </section>
+      ))}
+    </div>
+  );
+}
