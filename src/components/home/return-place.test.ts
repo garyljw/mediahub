@@ -57,8 +57,11 @@ describe("readPlace and writePlace", () => {
     expect(readPlace("/")).toBeNull();
   });
 
-  it("reads a place saved before the genre filter as having no genre", () => {
-    const old = { scrollY: 5, tileKey: null, tileTop: null, filter: { search: "x", kind: "all", watched: "any" } };
+  it.each([
+    ["saved before the genre filter", {}],
+    ["with an empty genre", { genre: "" }],
+  ])("reads a place %s as having no genre", (_, extra) => {
+    const old = { scrollY: 5, tileKey: null, tileTop: null, filter: { search: "x", kind: "all", watched: "any", ...extra } };
     stubStorage(new Map([[KEY, JSON.stringify(old)]]));
     expect(readPlace("/")?.filter).toEqual({ search: "x", kind: "all", watched: "any", genre: null });
   });

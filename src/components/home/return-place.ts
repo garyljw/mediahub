@@ -44,7 +44,8 @@ function parseFilter(value: unknown): HomeFilterPlace | null {
   if (!WATCH_VALUES.includes(watched as HomeWatchFilter)) return null;
   // A place saved before the genre filter has no genre, which reads as none.
   if (genre !== null && typeof genre !== "string") return null;
-  return { search, kind: kind as HomeKind, watched: watched as HomeWatchFilter, genre };
+  // An empty name can't come from Radarr or Sonarr, so it reads as no genre rather than a filter that matches nothing.
+  return { search, kind: kind as HomeKind, watched: watched as HomeWatchFilter, genre: genre === "" ? null : genre };
 }
 
 /** A place read from storage, or null when the value isn't one this code wrote. */
