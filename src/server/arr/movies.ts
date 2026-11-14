@@ -31,6 +31,8 @@ export type MovieRow = {
    * not used, because for older films it is a later home-video date (a 1955 film showed 1969). Null when none is known.
    */
   releaseDate: string | null;
+  /** The latest of the movie's cinema, digital and physical dates (a future date counts). Null when none is known. */
+  latestReleaseDate: string | null;
   /**
    * When Radarr created the movie's file record (movieFile.dateAdded). Radarr also changes it without a download, so the
    * Home sort uses the import history instead and only falls back to this. Null unless the movie is downloaded.
@@ -43,18 +45,20 @@ export type MovieRow = {
   tmdbId: number | null;
 };
 
-/** The earliest date that parses, as Radarr sent it, or null when none does. */
-function earliestDate(dates: (string | null | undefined)[]): string | null {
-  let earliest: string | null = null;
-  let earliestTime = Number.POSITIVE_INFINITY;
+/** The earliest or latest date that parses, as Radarr sent it, or null when none does. */
+function pickDate(dates: (string | null | undefined)[], which: "earliest" | "latest"): string | null {
+  const sign = which === "earliest" ? 1 : -1;
+  let picked: string | null = null;
+  let pickedTime = Number.NaN;
   for (const date of dates) {
     if (typeof date !== "string") continue;
     const time = Date.parse(date);
-    if (Number.isNaN(time) || time >= earliestTime) continue;
-    earliest = date;
-    earliestTime = time;
+    if (Number.isNaN(time)) continue;
+    if (picked !== null && sign * (time - pickedTime) >= 0) continue;
+    picked = date;
+    pickedTime = time;
   }
-  return earliest;
+  return picked;
 }
 
 function movieStatus(movie: MovieResource): MovieStatus {
@@ -88,7 +92,8 @@ export function toMovieRows(movies: MovieResource[], profiles: QualityProfileRes
       fileQuality: status === "downloaded" ? (movie.movieFile?.quality?.quality?.name ?? null) : null,
       sizeOnDisk: status === "downloaded" ? (movie.sizeOnDisk ?? 0) : 0,
       added: movie.added ?? null,
-      releaseDate: earliestDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease]),
+      releaseDate: pickDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease], "earliest"),
+      latestReleaseDate: pickDate([movie.inCinemas, movie.digitalRelease, movie.physicalRelease], "latest"),
       fileAddedAt: status === "downloaded" ? (movie.movieFile?.dateAdded ?? null) : null,
       sortTitle: (movie.sortTitle || movie.title).toLowerCase(),
       hasPoster: movie.images?.some((image) => image.coverType === "poster") ?? false,

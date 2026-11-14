@@ -11,6 +11,7 @@ function item(kind: HomeItem["kind"], id: number, title: string, year: number | 
     year,
     sortTitle: title.toLowerCase(),
     released: null,
+    latest: null,
     sizeOnDisk: 0,
     downloaded: null,
     href: `/${kind === "movie" ? "movies" : "tv"}/${id}`,

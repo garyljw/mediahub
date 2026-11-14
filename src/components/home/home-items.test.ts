@@ -21,6 +21,7 @@ function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: 
     year: null,
     sortTitle: overrides.title.toLowerCase(),
     released: null,
+    latest: null,
     sizeOnDisk: 0,
     downloaded: null,
     href: `/${overrides.kind}/${overrides.id}`,
@@ -222,10 +223,10 @@ function withItemStates(list: HomeItem[]): (HomeItem["watched"])[] {
 }
 
 describe("sortHomeItems", () => {
-  const alpha = item({ kind: "movie", id: 1, title: "Alpha", released: "2020-01-01T00:00:00Z", sizeOnDisk: 3000, downloaded: { at: "2024-05-01T00:00:00Z", recorded: true } });
-  const bravo = item({ kind: "series", id: 2, title: "Bravo", released: "2024-06-01T00:00:00Z", sizeOnDisk: 1000, downloaded: { at: "2025-01-01T00:00:00Z", recorded: true } });
-  const charlie = item({ kind: "movie", id: 3, title: "Charlie", released: "2022-03-03T00:00:00Z", sizeOnDisk: 2000, downloaded: { at: "2023-02-02T00:00:00Z", recorded: false } });
-  const delta = item({ kind: "series", id: 4, title: "Delta", released: "2021-07-07T00:00:00Z", sizeOnDisk: 4000, downloaded: { at: "2024-12-12T00:00:00Z", recorded: false } });
+  const alpha = item({ kind: "movie", id: 1, title: "Alpha", released: "2020-01-01T00:00:00Z", latest: "2026-03-01T00:00:00Z", sizeOnDisk: 3000, downloaded: { at: "2024-05-01T00:00:00Z", recorded: true } });
+  const bravo = item({ kind: "series", id: 2, title: "Bravo", released: "2024-06-01T00:00:00Z", latest: "2021-01-01T00:00:00Z", sizeOnDisk: 1000, downloaded: { at: "2025-01-01T00:00:00Z", recorded: true } });
+  const charlie = item({ kind: "movie", id: 3, title: "Charlie", released: "2022-03-03T00:00:00Z", latest: "2025-01-01T00:00:00Z", sizeOnDisk: 2000, downloaded: { at: "2023-02-02T00:00:00Z", recorded: false } });
+  const delta = item({ kind: "series", id: 4, title: "Delta", released: "2021-07-07T00:00:00Z", latest: "2023-01-01T00:00:00Z", sizeOnDisk: 4000, downloaded: { at: "2024-12-12T00:00:00Z", recorded: false } });
   const mixed = [delta, charlie, bravo, alpha];
 
   it.each<[HomeSortKey, HomeSortDir, string[]]>([
@@ -235,6 +236,9 @@ describe("sortHomeItems", () => {
     ["downloaded", "asc", ["Alpha", "Bravo", "Charlie", "Delta"]],
     ["released", "desc", ["Bravo", "Charlie", "Delta", "Alpha"]],
     ["released", "asc", ["Alpha", "Delta", "Charlie", "Bravo"]],
+    // Ordered by latest, which disagrees with the released order above.
+    ["latest", "desc", ["Alpha", "Charlie", "Delta", "Bravo"]],
+    ["latest", "asc", ["Bravo", "Delta", "Charlie", "Alpha"]],
     ["size", "desc", ["Delta", "Alpha", "Charlie", "Bravo"]],
     ["size", "asc", ["Bravo", "Charlie", "Alpha", "Delta"]],
   ])("sorts by %s %s", (key, dir, expected) => {
@@ -246,13 +250,15 @@ describe("sortHomeItems", () => {
     ["downloaded", "desc"],
     ["released", "asc"],
     ["released", "desc"],
+    ["latest", "asc"],
+    ["latest", "desc"],
     ["size", "asc"],
     ["size", "desc"],
   ])("puts items with no value last when sorting by %s %s", (key, dir) => {
     // Zulu has a value for every sort. Alpha has no date and no size (size 0). Mike has an unparsable date and size 0.
-    const valued = item({ kind: "movie", id: 1, title: "Zulu", released: "2020-01-01T00:00:00Z", downloaded: { at: "2020-01-01T00:00:00Z", recorded: true }, sizeOnDisk: 5 });
-    const noDate = item({ kind: "movie", id: 2, title: "Alpha", released: null, downloaded: null, sizeOnDisk: 0 });
-    const badDate = item({ kind: "movie", id: 3, title: "Mike", released: "not a date", downloaded: { at: "not a date", recorded: true }, sizeOnDisk: 0 });
+    const valued = item({ kind: "movie", id: 1, title: "Zulu", released: "2020-01-01T00:00:00Z", latest: "2020-01-01T00:00:00Z", downloaded: { at: "2020-01-01T00:00:00Z", recorded: true }, sizeOnDisk: 5 });
+    const noDate = item({ kind: "movie", id: 2, title: "Alpha", released: null, latest: null, downloaded: null, sizeOnDisk: 0 });
+    const badDate = item({ kind: "movie", id: 3, title: "Mike", released: "not a date", latest: "not a date", downloaded: { at: "not a date", recorded: true }, sizeOnDisk: 0 });
     expect(titles(sortHomeItems([badDate, noDate, valued], key, dir))).toEqual(["Zulu", "Alpha", "Mike"]);
   });
 
@@ -308,6 +314,14 @@ describe("readHomeSort and saveHomeSort", () => {
       },
     });
   }
+
+  it.each<[HomeSortKey, HomeSortDir]>([
+    ["released", "desc"],
+    ["latest", "asc"],
+  ])("reads back a saved %s sort (%s)", (key, dir) => {
+    stubStorage({ [HOME_SORT_KEY]: JSON.stringify({ key, dir }) });
+    expect(readHomeSort()).toEqual({ key, dir });
+  });
 
   it("reads back what was saved", () => {
     stubStorage({});

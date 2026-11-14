@@ -55,6 +55,7 @@ const ALLOWED_KEYS = [
   "monitored",
   "network",
   "firstAired",
+  "latestAired",
   "qualityProfile",
   "qualityProfileId",
   "seasonCount",
@@ -97,10 +98,23 @@ describe("toSeriesRows", () => {
       sizeOnDisk: 48318382080,
       added: "2024-02-10T09:00:00Z",
       firstAired: "2026-10-29T01:00:00Z",
+      latestAired: "2026-11-05T01:00:00Z",
       sortTitle: "harbour lights",
       hasPoster: true,
       tvdbId: 100001,
     });
+  });
+
+  it.each([
+    ["previousAiring later than lastAired", "2026-11-05T01:00:00Z", "2026-10-01T00:00:00Z", "2026-11-05T01:00:00Z"],
+    ["lastAired later (last season unmonitored)", "2026-03-01T01:00:00Z", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"],
+    ["no previousAiring, lastAired in the past", null, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"],
+    ["lastAired in the future", "2026-11-05T01:00:00Z", "2026-12-25T00:00:00Z", "2026-11-05T01:00:00Z"],
+    ["both in the future", "2026-12-01T00:00:00Z", "2026-12-25T00:00:00Z", null],
+    ["both missing or unparsable", "not a date", undefined, null],
+  ])("latestAired: %s", (_name, previousAiring, lastAired, expected) => {
+    const entry = { id: 950, title: "Aired Test", previousAiring, lastAired } as SeriesResource;
+    expect(toSeriesRows([entry], profiles, Date.parse("2026-11-14T12:00:00Z"))[0].latestAired).toBe(expected);
   });
 
   it("maps an ended series, with a null network and a sortTitle from the upstream field", () => {

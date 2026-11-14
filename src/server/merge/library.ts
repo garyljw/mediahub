@@ -18,6 +18,7 @@ function movieItem(row: MovieRow, watched: WatchedIndex | null, inFocus: boolean
     year: row.year,
     sortTitle: row.sortTitle,
     released: row.releaseDate,
+    latest: row.latestReleaseDate,
     sizeOnDisk: row.sizeOnDisk,
     downloaded: null,
     href: `/movies/${row.id}`,
@@ -52,6 +53,7 @@ function seriesItem(row: SeriesRow, watched: WatchedIndex | null, inFocus: boole
     year: row.year,
     sortTitle: row.sortTitle,
     released: row.firstAired,
+    latest: row.latestAired,
     sizeOnDisk: row.sizeOnDisk,
     // Filled in by the page's download-date stream (see homeDownloadedByKey), so it starts null here.
     downloaded: null,
