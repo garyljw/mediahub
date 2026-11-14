@@ -3,6 +3,7 @@ import {
   compareHomeItems,
   DEFAULT_HOME_SORT,
   filterHomeItems,
+  genreOptions,
   HOME_SORT_KEY,
   readHomeSort,
   saveHomeSort,
@@ -30,6 +31,7 @@ function item(overrides: Partial<HomeItem> & { id: number; title: string; kind: 
     onDisk: true,
     watched: null,
     inFocus: false,
+    genres: [],
     ...overrides,
   };
 }
@@ -348,5 +350,62 @@ describe("readHomeSort and saveHomeSort", () => {
     });
     expect(readHomeSort()).toEqual(DEFAULT_HOME_SORT);
     expect(() => saveHomeSort({ key: "size", dir: "desc" })).not.toThrow();
+  });
+});
+
+describe("genre filter", () => {
+  const genreItems: HomeItem[] = [
+    item({ kind: "movie", id: 1, title: "Harbour Lights", genres: ["Drama", "Science Fiction"], watched: "unwatched" }),
+    item({ kind: "series", id: 2, title: "Harbour Watch", genres: ["Science Fiction"], watched: "watched" }),
+    item({ kind: "movie", id: 3, title: "Night Circuit", genres: ["Action", "Drama"], watched: "unwatched" }),
+    item({ kind: "series", id: 4, title: "Glass Orchard", genres: ["Animation"] }),
+  ];
+
+  it("keeps the movies and the series with the genre, and everything for null or missing", () => {
+    expect(titles(filterHomeItems(genreItems, { kind: "all", search: "", genre: "Science Fiction" }))).toEqual([
+      "Harbour Lights",
+      "Harbour Watch",
+    ]);
+    expect(filterHomeItems(genreItems, { kind: "all", search: "", genre: null })).toHaveLength(4);
+    expect(filterHomeItems(genreItems, { kind: "all", search: "" })).toHaveLength(4);
+  });
+
+  it("matches the exact name only", () => {
+    expect(filterHomeItems(genreItems, { kind: "all", search: "", genre: "science fiction" })).toEqual([]);
+  });
+
+  it("combines with kind, watched and search", () => {
+    const base = { kind: "all", search: "", genre: "Science Fiction" } as const;
+    expect(titles(filterHomeItems(genreItems, { ...base, kind: "series" }))).toEqual(["Harbour Watch"]);
+    expect(titles(filterHomeItems(genreItems, { ...base, watched: "unwatched" }))).toEqual(["Harbour Lights"]);
+    expect(titles(filterHomeItems(genreItems, { ...base, search: "watch" }))).toEqual(["Harbour Watch"]);
+  });
+});
+
+describe("genreOptions", () => {
+  const genreItems: HomeItem[] = [
+    item({ kind: "movie", id: 1, title: "A", genres: ["Drama", "Science Fiction"] }),
+    item({ kind: "series", id: 2, title: "B", genres: ["Science Fiction", "Animation"] }),
+    item({ kind: "movie", id: 3, title: "C", genres: ["Drama"] }),
+  ];
+
+  it("counts per kind and sorts A-Z", () => {
+    expect(genreOptions(genreItems, "all")).toEqual([
+      { genre: "Animation", count: 1 },
+      { genre: "Drama", count: 2 },
+      { genre: "Science Fiction", count: 2 },
+    ]);
+    expect(genreOptions(genreItems, "movie")).toEqual([
+      { genre: "Drama", count: 2 },
+      { genre: "Science Fiction", count: 1 },
+    ]);
+  });
+
+  it("keeps the chosen genre listed with count 0 when the kind has none", () => {
+    expect(genreOptions(genreItems, "movie", "Animation")).toEqual([
+      { genre: "Animation", count: 0 },
+      { genre: "Drama", count: 2 },
+      { genre: "Science Fiction", count: 1 },
+    ]);
   });
 });

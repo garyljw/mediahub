@@ -17,7 +17,11 @@
     "hasPoster": true,
     "tvdbId": 100004,
     "firstAired": "2026-10-19T20:00:00Z",
-    "latestAired": "2026-11-09T20:00:00Z"
+    "latestAired": "2026-11-09T20:00:00Z",
+    "genres": [
+      "Drama",
+      "Comedy"
+    ]
   },
   {
     "id": 5,
@@ -36,7 +40,10 @@
     "sortTitle": "paper harbour",
     "hasPoster": false,
     "tvdbId": 100005,
-    "firstAired": "2026-10-04T20:00:00Z"
+    "firstAired": "2026-10-04T20:00:00Z",
+    "genres": [
+      "Comedy"
+    ]
   },
   {
     "id": 6,
@@ -55,7 +62,8 @@
     "sortTitle": "quiet hills",
     "hasPoster": true,
     "tvdbId": 100006,
-    "firstAired": null
+    "firstAired": null,
+    "genres": []
   },
   {
     "id": 7,
@@ -74,7 +82,10 @@
     "sortTitle": "upcoming shore",
     "hasPoster": false,
     "tvdbId": null,
-    "firstAired": null
+    "firstAired": null,
+    "genres": [
+      "Drama"
+    ]
   },
   {
     "id": 8,
@@ -93,6 +104,10 @@
     "sortTitle": "lantern road",
     "hasPoster": true,
     "tvdbId": 100008,
-    "firstAired": null
+    "firstAired": null,
+    "genres": [
+      "Drama",
+      "Comedy"
+    ]
   }
 ]

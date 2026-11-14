@@ -7,6 +7,28 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.10.0",
+    date: "2026-11-14",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Genre filter:** Home can show one genre at a time, for movies and TV together (for example **Science Fiction**). Pick it under **Filters**; the list shows how many titles each genre has.",
+          },
+        ],
+      },
+      {
+        heading: "Improved",
+        notes: [
+          {
+            text: "**Filters button:** the Type and Watched chips now sit behind one **Filters** button next to the sort menu, so the toolbar takes two rows on a phone instead of four. Each filter that is on shows as a tag under the toolbar, and tapping its **x** switches it off. **Clear all** in the panel resets them.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.9.0",
     date: "2026-11-14",
     sections: [

@@ -26,6 +26,7 @@ function movieItem(row: MovieRow, watched: WatchedIndex | null, inFocus: boolean
     badge: { label: MOVIE_STATUS_LABEL[row.status], className: MOVIE_STATUS_CLASS[row.status] },
     onDisk: row.status === "downloaded",
     watched: row.tmdbId === null ? null : (watched?.movies.get(row.tmdbId) ?? null),
+    genres: row.genres,
     inFocus,
   };
 }
@@ -62,6 +63,7 @@ function seriesItem(row: SeriesRow, watched: WatchedIndex | null, inFocus: boole
     badge: seriesBadge(row),
     onDisk: row.episodeFileCount > 0,
     watched: row.tvdbId === null ? null : (watched?.series.get(row.tvdbId) ?? null),
+    genres: row.genres,
     inFocus,
   };
 }

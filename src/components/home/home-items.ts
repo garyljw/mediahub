@@ -49,6 +49,8 @@ export type HomeItem = {
   onDisk: boolean;
   /** The Plex watched state, or null when the item isn't in Plex (or Plex isn't connected). */
   watched: WatchedState | null;
+  /** The title's genre names, as Radarr or Sonarr list them. Empty when none. */
+  genres: string[];
   /** True when the title is in its Focus list (Movie Focus for movies, TV Focus for series). */
   inFocus: boolean;
 };
@@ -74,6 +76,8 @@ export type HomeFilter = {
    * never match a specific state.
    */
   watched?: HomeWatchFilter;
+  /** Null or missing keeps every item. Otherwise only items whose genres include this exact name. */
+  genre?: string | null;
 };
 
 /**
@@ -85,8 +89,29 @@ export function filterHomeItems(items: HomeItem[], filter: HomeFilter): HomeItem
     (item) =>
       (filter.kind === "all" || item.kind === filter.kind) &&
       matchesTitleOrYear(item, filter.search) &&
-      (filter.watched === undefined || filter.watched === "any" || item.watched === filter.watched),
+      (filter.watched === undefined || filter.watched === "any" || item.watched === filter.watched) &&
+      (filter.genre == null || item.genres.includes(filter.genre)),
   );
+}
+
+/** One entry in the genre filter: a genre name and how many titles of the chosen kind have it. */
+export type GenreOption = { genre: string; count: number };
+
+/**
+ * The distinct genres among the items of one kind (or all kinds), A–Z, each with its title count. `keep` is the genre
+ * the filter has chosen: it stays listed with count 0 when no item of this kind has it, so the choice stays visible
+ * and can be cleared.
+ */
+export function genreOptions(items: HomeItem[], kind: HomeKind, keep: string | null = null): GenreOption[] {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    if (kind !== "all" && item.kind !== kind) continue;
+    for (const genre of item.genres) counts.set(genre, (counts.get(genre) ?? 0) + 1);
+  }
+  if (keep !== null && !counts.has(keep)) counts.set(keep, 0);
+  return [...counts]
+    .map(([genre, count]) => ({ genre, count }))
+    .sort((a, b) => TITLE_COLLATOR.compare(a.genre, b.genre));
 }
 
 /** True when at least one title has a Plex watched state, i.e. Plex is connected and answered. */

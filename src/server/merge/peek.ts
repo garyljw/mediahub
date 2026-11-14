@@ -21,21 +21,25 @@ export function cutOverview(text: string | null | undefined): string {
   return chars.length > MAX_OVERVIEW ? `${chars.slice(0, MAX_OVERVIEW - 1).join("")}…` : chars.join("");
 }
 
+/** Pure: the genre names of a resource: strings only, trimmed, no empties, no repeats, in upstream order. Null or missing gives []. */
+export function cleanGenres(genres: string[] | null | undefined): string[] {
+  if (!Array.isArray(genres)) return [];
+  const clean = genres
+    .filter((genre): genre is string => typeof genre === "string")
+    .map((genre) => genre.trim())
+    .filter((genre) => genre !== "");
+  return [...new Set(clean)];
+}
+
 /**
  * Pure: the hover-card facts of one movie or series resource, or null when the resource is missing or has nothing
  * worth a card (no year, no genres and no overview). A year must be a positive integer. Genres keep the first three
- * non-empty strings, trimmed. The overview is trimmed, then cut by cutOverview.
+ * cleaned names (see cleanGenres). The overview is trimmed, then cut by cutOverview.
  */
 export function toPeek(resource: PeekSource | null | undefined): Peek | null {
   if (!resource) return null;
   const year = typeof resource.year === "number" && Number.isInteger(resource.year) && resource.year > 0 ? resource.year : null;
-  const genres = Array.isArray(resource.genres)
-    ? resource.genres
-        .filter((genre): genre is string => typeof genre === "string")
-        .map((genre) => genre.trim())
-        .filter((genre) => genre !== "")
-        .slice(0, MAX_GENRES)
-    : [];
+  const genres = cleanGenres(resource.genres).slice(0, MAX_GENRES);
   const overview = cutOverview(typeof resource.overview === "string" ? resource.overview.trim() : "");
   if (year === null && genres.length === 0 && overview === "") return null;
   return { year, genres, overview };

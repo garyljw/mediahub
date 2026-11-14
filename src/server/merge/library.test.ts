@@ -39,6 +39,14 @@ describe("toHomeItems: kinds, keys and hrefs", () => {
     expect(byKey("series:5").href).toBe("/tv/5");
   });
 
+  it("copies the genres from each row, for movies and series, and nothing else upstream", () => {
+    expect(byKey("movie:1").genres).toEqual(movies.find((m) => m.id === 1)?.genres);
+    expect(byKey("series:4").genres).toEqual(series.find((s) => s.id === 4)?.genres);
+    expect(byKey("movie:1").genres.length).toBeGreaterThan(0);
+    expect(Object.keys(byKey("movie:1"))).not.toEqual(expect.arrayContaining(["tmdbId"]));
+    expect(Object.keys(byKey("series:4"))).not.toEqual(expect.arrayContaining(["tvdbId"]));
+  });
+
   it("copies the title, year and sort fields", () => {
     expect(byKey("movie:3")).toMatchObject({ title: "Future Tense", year: 2027, sortTitle: "future tense" });
     expect(byKey("movie:4").year).toBeNull();
