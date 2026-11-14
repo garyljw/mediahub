@@ -33,6 +33,11 @@ export type SeriesRow = {
   added: string | null;
   /** Sonarr's firstAired: when the series started, so it sorts with movies of the same year. Null when Sonarr has none. */
   firstAired: string | null;
+  /**
+   * The most recent aired episode: the later of Sonarr's previousAiring and lastAired, ignoring any in the future.
+   * Null when neither qualifies.
+   */
+  latestAired: string | null;
   sortTitle: string;
   /** True when Sonarr has a poster for the series. The browser then fetches it from MediaHub's poster route. */
   hasPoster: boolean;
@@ -51,10 +56,27 @@ export function seriesStatus(series: SeriesResource): SeriesStatus {
 }
 
 /**
- * Pure: maps upstream series to rows, in upstream order. Skips series without an id or title. Sorting is done
- * by the caller.
+ * The later of previousAiring and lastAired that parses and isn't after `now`, as Sonarr sent it, or null.
+ * previousAiring skips unmonitored episodes and lastAired can be a future date, so each can miss what the other has.
  */
-export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileResource[]): SeriesRow[] {
+function latestAired(entry: SeriesResource, now: number): string | null {
+  let latest: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const date of [entry.previousAiring, entry.lastAired]) {
+    if (typeof date !== "string") continue;
+    const time = Date.parse(date);
+    if (Number.isNaN(time) || time > now || time <= latestTime) continue;
+    latest = date;
+    latestTime = time;
+  }
+  return latest;
+}
+
+/**
+ * Pure: maps upstream series to rows, in upstream order. Skips series without an id or title. Sorting is done
+ * by the caller. `now` is when "already aired" is judged.
+ */
+export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileResource[], now = Date.now()): SeriesRow[] {
   const profileNames = new Map(usableProfiles(profiles).map((p) => [p.id, p.name]));
 
   const rows: SeriesRow[] = [];
@@ -80,6 +102,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       sizeOnDisk: stats?.sizeOnDisk ?? 0,
       added: entry.added ?? null,
       firstAired: entry.firstAired ?? null,
+      latestAired: latestAired(entry, now),
       sortTitle: (entry.sortTitle || entry.title).toLowerCase(),
       hasPoster: entry.images?.some((image) => image.coverType === "poster") ?? false,
       tvdbId: typeof entry.tvdbId === "number" && Number.isSafeInteger(entry.tvdbId) && entry.tvdbId > 0 ? entry.tvdbId : null,

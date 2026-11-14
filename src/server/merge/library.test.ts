@@ -89,18 +89,20 @@ describe("toHomeItems: badges", () => {
 });
 
 describe("toHomeItems: sort fields", () => {
-  it("copies the release date and size for a movie, and leaves its download date for the page to fill in", () => {
+  it("copies the first and latest release dates and size for a movie, and leaves its download date for the page to fill in", () => {
     expect(byKey("movie:1")).toMatchObject({
       released: "2019-06-14T00:00:00Z",
+      latest: "2019-11-02T00:00:00Z",
       sizeOnDisk: 8000000000,
       downloaded: null,
     });
     expect(byKey("movie:4").released).toBeNull();
   });
 
-  it("uses the first aired date as a series' release date, and leaves its download date for the page to fill in", () => {
+  it("uses the first and latest aired dates as a series' release dates, and leaves its download date for the page to fill in", () => {
     expect(byKey("series:4")).toMatchObject({
       released: "2026-10-19T20:00:00Z",
+      latest: "2026-11-09T20:00:00Z",
       sizeOnDisk: 4000000000,
       downloaded: null,
     });

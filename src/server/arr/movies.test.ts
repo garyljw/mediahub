@@ -48,6 +48,7 @@ import {
 
 const ALLOWED_KEYS = [
   "added",
+  "latestReleaseDate",
   "fileAddedAt",
   "fileQuality",
   "hasPoster",
@@ -94,6 +95,8 @@ describe("toMovieRows", () => {
       added: "2024-03-12T10:21:45Z",
       // The earliest of the cinema, digital and physical dates, not Radarr's later releaseDate.
       releaseDate: "2019-05-01T00:00:00Z",
+      // The latest of the three dates, so it differs from releaseDate.
+      latestReleaseDate: "2019-08-20T00:00:00Z",
       fileAddedAt: "2024-03-13T08:00:00Z",
       sortTitle: "starfall protocol",
       hasPoster: true,
@@ -114,6 +117,7 @@ describe("toMovieRows", () => {
       sizeOnDisk: 0,
       added: "2024-05-01T08:00:00Z",
       releaseDate: "2021-09-03T00:00:00Z",
+      latestReleaseDate: "2021-09-03T00:00:00Z",
       // No file yet, so no download date, even though Radarr has a release date.
       fileAddedAt: null,
       sortTitle: "lantern road",

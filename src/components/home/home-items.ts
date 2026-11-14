@@ -32,6 +32,8 @@ export type HomeItem = {
   sortTitle: string;
   /** When it first came out: a movie's earliest release (cinema, digital or physical) or a series' first aired date. Null when unknown. */
   released: string | null;
+  /** A movie's latest release date (cinema, digital or physical) or a series' most recently aired episode. Null when unknown. */
+  latest: string | null;
   /** Bytes on disk. 0 when nothing is downloaded. */
   sizeOnDisk: number;
   /**
@@ -155,20 +157,21 @@ export function withDownloaded(items: HomeItem[], byKey: Record<string, HomeDown
 }
 
 /** The sorts the Home grid offers. Each key says which direction it starts in when first chosen. */
-export type HomeSortKey = "title" | "downloaded" | "released" | "size";
+export type HomeSortKey = "title" | "downloaded" | "released" | "latest" | "size";
 export type HomeSortDir = "asc" | "desc";
 
 export const HOME_SORTS: { key: HomeSortKey; label: string; defaultDir: HomeSortDir }[] = [
   { key: "title", label: "Title", defaultDir: "asc" },
   { key: "downloaded", label: "Date downloaded", defaultDir: "desc" },
-  { key: "released", label: "Released / aired", defaultDir: "desc" },
+  { key: "released", label: "First released", defaultDir: "desc" },
+  { key: "latest", label: "Latest release", defaultDir: "desc" },
   { key: "size", label: "Size on disk", defaultDir: "desc" },
 ];
 
 /** The value a sort compares for one item, or null when the item has nothing to compare. */
 function sortValue(item: HomeItem, key: HomeSortKey): number | null {
   if (key === "size") return item.sizeOnDisk > 0 ? item.sizeOnDisk : null;
-  return timeOf(item.released);
+  return timeOf(key === "latest" ? item.latest : item.released);
 }
 
 /** The download-date group: recorded imports first, then file dates, then titles with no date. */
@@ -190,7 +193,7 @@ function timeOf(value: string | null): number | null {
 }
 
 /**
- * Returns a new array in the chosen order. Title sorts A–Z (or Z–A) with compareHomeItems. Released and size sort
+ * Returns a new array in the chosen order. Title sorts A–Z (or Z–A) with compareHomeItems. First released, latest release and size sort
  * newest or largest first when descending, and smallest or oldest first when ascending, with an item that has no value
  * (no date, an unparsable date, or size 0) last in both directions. Date downloaded is grouped first (see downloadGroup).
  * Ties, and the no-value group, fall back to A–Z.

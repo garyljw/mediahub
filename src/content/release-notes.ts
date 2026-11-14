@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.9.0",
+    date: "2026-11-14",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Latest release sort:** Home can sort by **Latest release**: a series by its most recently aired episode and a movie by its latest release date (cinema, digital or physical), so shows with new episodes come to the top. The old sort is now called **First released** and works as before.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.8.1",
     date: "2026-11-12",
     sections: [
