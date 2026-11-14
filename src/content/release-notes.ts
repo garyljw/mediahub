@@ -7,6 +7,36 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.11.0",
+    date: "2026-11-14",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Popular page:** a new page in the sidebar (under **More** on a phone) showing what's popular right now, from TMDB. It has six sections: **Trending movies**, **Trending TV**, **Popular on** a streaming service you pick (with a Movies / TV switch), **Upcoming movies**, **Upcoming TV** and **On this week** (shows with an episode in the next seven days). Documentaries are left out, and TV also leaves out news, reality (including quiz and game shows), soaps and talk shows.",
+            details: [
+              "Titles you already have show **In library** and open their library page. Anything else opens a preview page with the synopsis, cast and an **Add** button.",
+              "**Add** works like the Add page: requesters add with the admin's defaults, and admins press **Add…** to choose the options first.",
+              "Posters have the same hover card as Home, and going back from a title returns you to the poster you clicked.",
+            ],
+          },
+          {
+            text: "**Set up Popular with a free TMDB token:** Popular stays off until an admin adds a TMDB token. It takes about five minutes:",
+            details: [
+              "**1.** Create a free account at themoviedb.org and sign in.",
+              "**2.** Open your account's **Settings**, then **API**, and request an API key. Choose the personal (non-commercial) option and fill in the short form about what you'll use it for.",
+              "**3.** On the same API page, copy the long **API Read Access Token**. Don't use the shorter **API Key**: MediaHub needs the Read Access Token.",
+              "**4.** In MediaHub, open **Settings → Connections**, paste the token under **TMDB** and press **Save**. MediaHub checks it with TMDB before saving it, and never shows it again.",
+              "**5.** Pick your **Country** (it decides which streaming services and upcoming movies you see) and an **Original language** for Upcoming TV and On this week (**Any** turns that filter off), then press **Save** again.",
+              "Open **Popular** in the sidebar. To turn it off later, press **Remove** under TMDB.",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.10.0",
     date: "2026-11-14",
     sections: [

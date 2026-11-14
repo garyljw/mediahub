@@ -17,6 +17,8 @@ export type TilePeekItem = {
   posterSrc: string | null;
   /** False for a title with nothing on disk: its card poster is greyscale, like its tile. */
   onDisk?: boolean;
+  /** The card's text, when the page already has it (Popular). The card then makes no request. */
+  peek?: Peek;
 };
 
 /** How long the pointer rests on a tile before its card opens. */
@@ -141,7 +143,7 @@ export function useTilePeek(itemFor: (key: string) => TilePeekItem | undefined) 
     };
     // Ask for the text once the pointer has rested briefly, so it is often ready by the time the card opens.
     timer.current = window.setTimeout(() => {
-      void loadPeek(item.kind, item.id);
+      if (!item.peek) void loadPeek(item.kind, item.id);
       timer.current = window.setTimeout(openCard, HOVER_DELAY_MS - PREFETCH_DELAY_MS);
     }, PREFETCH_DELAY_MS);
   };
@@ -182,7 +184,9 @@ function glowStyle(hues: PosterHues): CSSProperties {
 function TilePeekCard({ item, rect }: { item: TilePeekItem; rect: Rect }) {
   // undefined until the peek answers. Keyed to the item, so a card never shows another title's text.
   const [loaded, setLoaded] = useState<{ key: string; peek: Peek | null } | null>(null);
+  const inline = item.peek;
   useEffect(() => {
+    if (inline) return;
     let cancelled = false;
     void loadPeek(item.kind, item.id).then((peek) => {
       if (!cancelled) setLoaded({ key: item.key, peek });
@@ -190,8 +194,8 @@ function TilePeekCard({ item, rect }: { item: TilePeekItem; rect: Rect }) {
     return () => {
       cancelled = true;
     };
-  }, [item.key, item.kind, item.id]);
-  const peek = loaded?.key === item.key ? loaded.peek : undefined;
+  }, [inline, item.key, item.kind, item.id]);
+  const peek = inline ?? (loaded?.key === item.key ? loaded.peek : undefined);
   const hues = usePosterHues(item.posterSrc);
 
   if (item.posterSrc === null) return null;

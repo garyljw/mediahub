@@ -1,0 +1,92 @@
+{
+  "page": 1,
+  "results": [
+    {
+      "adult": false,
+      "backdrop_path": "/twiVn9oFXOVR0uoYgawyEBlnFu8.jpg",
+      "genre_ids": [
+        12,
+        28,
+        14
+      ],
+      "id": 1368337,
+      "title": "The Odyssey",
+      "original_language": "en",
+      "original_title": "The Odyssey",
+      "overview": "Odysseus, the legendary King of Ithaca, embarks on a long and perilous journey home following the Trojan War. Throughout his voyage, he is forced to confront the whims of gods, mythological monsters, and trials that stretch both his cunning and his humanity to the breaking point.",
+      "popularity": 465.3448,
+      "poster_path": "/5rhTDKUhPYvpdQIijFIs5VoWsON.jpg",
+      "release_date": "2026-07-15",
+      "softcore": false,
+      "video": false,
+      "vote_average": 8.021,
+      "vote_count": 4809,
+      "media_type": "movie"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/4NxnrRmI7goXMsRASwSegf50MC8.jpg",
+      "genre_ids": [
+        878,
+        28,
+        12
+      ],
+      "id": 1003596,
+      "title": "Avengers: Doomsday",
+      "original_language": "en",
+      "original_title": "Avengers: Doomsday",
+      "overview": "Beloved heroes from three distinct universes are set on a deadly collision course and face an existential threat unlike anything they've ever encountered.",
+      "popularity": 141.8632,
+      "poster_path": "/tTMmREfhVd51CCg7GN73wL8cIoT.jpg",
+      "release_date": "2026-12-16",
+      "softcore": false,
+      "video": false,
+      "vote_average": 0,
+      "vote_count": 0,
+      "media_type": "movie"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/tv4GxpgGF4n8bhBYgJg0ZyAUylF.jpg",
+      "genre_ids": [
+        28,
+        53
+      ],
+      "id": 1185344,
+      "title": "The Beast",
+      "original_language": "en",
+      "original_title": "The Beast",
+      "overview": "When a militia of unidentified hostiles coordinates a coup against the United States, the president must fight back by utilizing the highly classified offensive capabilities of his armored limousine, nicknamed The Beast.",
+      "popularity": 25.204,
+      "poster_path": "/ocg5JfJP19fodcv5uQUApkmZMdI.jpg",
+      "release_date": "2026-10-08",
+      "softcore": false,
+      "video": false,
+      "vote_average": 5.944,
+      "vote_count": 9,
+      "media_type": "movie"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/ncm7djsVTHQQMX2HEbEVxMUFchG.jpg",
+      "genre_ids": [
+        27
+      ],
+      "id": 1400837,
+      "title": "Other Mommy",
+      "original_language": "en",
+      "original_title": "Other Mommy",
+      "overview": "Young Bela forms a relationship with a sinister entity in her home that looks uncannily like her own mother, drawing her into a terrifying and increasingly dark world.",
+      "popularity": 282.4946,
+      "poster_path": "/fGRNCssTRrhYZxNzykGGCoMsAVq.jpg",
+      "release_date": "2026-10-07",
+      "softcore": false,
+      "video": false,
+      "vote_average": 6.282,
+      "vote_count": 380,
+      "media_type": "movie"
+    }
+  ],
+  "total_pages": 500,
+  "total_results": 10000
+}

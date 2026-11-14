@@ -1,11 +1,11 @@
-// Where a list page (Home, Movie Focus, TV Focus) was, so going to a title and back returns to the same place. Also
+// Where a list page (Home, Movie Focus, TV Focus, Popular) was, so going to a title and back returns to the same place. Also
 // the "← Back" target on a title's page. Client-safe: browser storage and window only, no runtime imports from src/server.
 import { useCallback, useEffect, useRef, type MouseEvent } from "react";
 import { FOCUS_NAME } from "@/components/focus/focus-kinds";
 import { WATCH_FILTER_CHIPS, type HomeKind, type HomeWatchFilter } from "./home-items";
 
-/** The three pages that are lists of tiles, and that remember a place. */
-export const LIST_PATHS = ["/", "/focus/movies", "/focus/tv"] as const;
+/** The pages that are lists of tiles, and that remember a place. */
+export const LIST_PATHS = ["/", "/focus/movies", "/focus/tv", "/popular"] as const;
 export type ListPath = (typeof LIST_PATHS)[number];
 
 export function isListPath(value: string): value is ListPath {
@@ -167,6 +167,7 @@ export const BACK_LABEL: Record<BackSource, string> = {
   "/": "Home",
   "/focus/movies": FOCUS_NAME.movie,
   "/focus/tv": FOCUS_NAME.series,
+  "/popular": "Popular",
   "/calendar": "Calendar",
   "/queue": "Queue",
   "/history": "History",
@@ -219,12 +220,20 @@ export function settleOn(tile: Element, viewportTop: number): void {
   });
 }
 
+/** List pages that open at the top from the nav, even when they have a saved place. Their back links still restore it. */
+const NAV_OPENS_AT_TOP: readonly ListPath[] = ["/popular"];
+
 /**
  * For a nav link's click: when the link is the list page already open, goes to its top instead of navigating and
- * returns true, so the caller can stop the link. Otherwise returns false.
+ * returns true, so the caller can stop the link. Otherwise returns false. For a page in NAV_OPENS_AT_TOP it also forgets
+ * the saved place first, so the page it navigates to starts at the top.
  */
 export function topIfOpen(href: string, pathname: string): boolean {
-  if (!isListPath(href) || href !== pathname) return false;
+  if (!isListPath(href)) return false;
+  if (href !== pathname) {
+    if (NAV_OPENS_AT_TOP.includes(href)) clearPlace(href);
+    return false;
+  }
   returnToTop(href);
   return true;
 }

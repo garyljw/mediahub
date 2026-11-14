@@ -1,0 +1,100 @@
+{
+  "page": 1,
+  "results": [
+    {
+      "adult": false,
+      "backdrop_path": "/i1phX1JpaqSnHBBGta6LBFYVCZq.jpg",
+      "genre_ids": [
+        10759,
+        10765
+      ],
+      "id": 84773,
+      "origin_country": [
+        "US"
+      ],
+      "original_language": "en",
+      "original_name": "The Lord of the Rings: The Rings of Power",
+      "overview": "Beginning in a time of relative peace, we follow an ensemble cast of characters as they confront the re-emergence of evil to Middle-earth. From the darkest depths of the Misty Mountains, to the majestic forests of Lindon, to the breathtaking island kingdom of Númenor, to the furthest reaches of the map, these kingdoms and characters will carve out legacies that live on long after they are gone.",
+      "popularity": 741.6876,
+      "poster_path": "/bMXWXKM9ydUmMTNvDnYo9QtCBRt.jpg",
+      "first_air_date": "2022-09-01",
+      "softcore": false,
+      "name": "The Lord of the Rings: The Rings of Power",
+      "vote_average": 7.214,
+      "vote_count": 4066,
+      "media_type": "tv"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/31o1Ufd7bStD5dGEcpzapOjwaqx.jpg",
+      "genre_ids": [
+        10765,
+        18
+      ],
+      "id": 213375,
+      "origin_country": [
+        "US"
+      ],
+      "original_language": "en",
+      "original_name": "VisionQuest",
+      "overview": "With a bounty on his head, Vision must confront his nature and resist Ultron's influence to survive.",
+      "popularity": 327.0585,
+      "poster_path": "/WGyAyBPncfuu8MZhLY9RtfZPM0.jpg",
+      "first_air_date": "2026-10-13",
+      "softcore": false,
+      "name": "VisionQuest",
+      "vote_average": 8.33,
+      "vote_count": 467,
+      "media_type": "tv"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/tjy25xpiFeo2gahl7N0hoxbRtG7.jpg",
+      "genre_ids": [
+        10759,
+        80,
+        18
+      ],
+      "id": 254630,
+      "origin_country": [
+        "US"
+      ],
+      "original_language": "en",
+      "original_name": "12 12 12",
+      "overview": "A heist takes 12 months to plan, 12 hours to execute—and a thief not caught within 12 days won't be caught at all. Across three pulse-pounding timelines, an FBI agent and a career criminal face off in a deadly game of cat and mouse through Europe.",
+      "popularity": 104.9911,
+      "poster_path": "/8q6BvFQuKM1Rud4E9NQDaMGy9EL.jpg",
+      "first_air_date": "2026-11-12",
+      "softcore": false,
+      "name": "12 12 12",
+      "vote_average": 4.6,
+      "vote_count": 17,
+      "media_type": "tv"
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/hYJqUoXRZnodGxgVZTM8uwr5kbC.jpg",
+      "genre_ids": [
+        9648,
+        18
+      ],
+      "id": 291507,
+      "origin_country": [
+        "US"
+      ],
+      "original_language": "en",
+      "original_name": "The Body",
+      "overview": "On Halloween night, an all-girls dance squad tumbles into Catholic guilt, unholy desires and ghostly visions when an initiation goes to hell.",
+      "popularity": 112.3114,
+      "poster_path": "/zleCYDRbW5mKwgZwVK4SNIrKXWx.jpg",
+      "first_air_date": "2026-11-11",
+      "softcore": false,
+      "name": "The Body",
+      "vote_average": 7.188,
+      "vote_count": 32,
+      "media_type": "tv"
+    }
+  ],
+  "total_pages": 500,
+  "total_results": 10000
+}

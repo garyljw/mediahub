@@ -2,10 +2,14 @@ import { requirePageUser } from "@/server/authz";
 import { getPlexAdminConfig } from "@/server/plex/admin-config";
 import { getPlexDataSummary } from "@/server/plex/data-connection";
 import { getConnectionSummary, type ArrApp } from "@/server/settings/connections";
+import { getTmdbConfig, getTmdbSummary } from "@/server/settings/tmdb";
+import { listRegions } from "@/server/tmdb/client";
+import { TmdbRequestError } from "@/server/tmdb/errors";
 import { readAutoImportMatchedById } from "@/server/settings/auto-import";
 import { AutoImportForm } from "@/components/settings/auto-import-form";
 import { ConnectionForm } from "@/components/settings/connection-form";
 import { PlexConnectionForm } from "@/components/settings/plex-connection-form";
+import { TmdbForm } from "@/components/settings/tmdb-form";
 
 export const metadata = { title: "Connections" };
 // The page reads the saved connections before rendering; loading.tsx shows a placeholder meanwhile.
@@ -16,16 +20,31 @@ const APPS: { app: ArrApp; name: string }[] = [
   { app: "sonarr", name: "Sonarr" },
 ];
 
+/** The country list for the select, or an empty list when there is no token or TMDB can't answer. */
+async function loadRegions() {
+  const config = getTmdbConfig();
+  if (!config) return [];
+  try {
+    return await listRegions(config.token);
+  } catch (error) {
+    if (!(error instanceof TmdbRequestError)) throw error;
+    console.error(error.message);
+    return [];
+  }
+}
+
 export default async function ConnectionsPage() {
   await requirePageUser("admin");
   // Only what the forms need crosses to the browser: never the stored keys or the Plex token.
   const plex = getPlexDataSummary();
   const plexSetUp = getPlexAdminConfig() !== null;
+  const tmdb = getTmdbSummary();
+  const regions = await loadRegions();
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Where MediaHub reaches Radarr, Sonarr and Plex. API keys and the Plex token are stored on the server and never
+        Where MediaHub reaches Radarr, Sonarr, Plex and TMDB. API keys and tokens are stored on the server and never
         shown again.
       </p>
       <div className="mt-6 space-y-6">
@@ -50,6 +69,12 @@ export default async function ConnectionsPage() {
                 Finish Plex sign-in setup first. Then connect the Plex server here.
               </p>
             )}
+          </div>
+        </section>
+        <section className="rounded-lg border p-5">
+          <h2 className="text-lg font-semibold">TMDB</h2>
+          <div className="mt-4">
+            <TmdbForm hasToken={tmdb.hasToken} region={tmdb.region} language={tmdb.language} regions={regions} />
           </div>
         </section>
         <section className="rounded-lg border p-5">

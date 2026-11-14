@@ -19,15 +19,16 @@ export type ItemPageProps = {
   extraLines: string[];
   backdropSrc: string | null;
   posterSrc: string | null;
-  /** The status badge's text and classes, each page's own. */
-  status: { label: string; className: string };
-  monitored: boolean;
-  qualityProfile: string;
+  /**
+   * The Radarr or Sonarr state: the status badge (its text and classes are each page's own), whether it is monitored,
+   * and its quality profile. Library pages pass it; a Popular preview of a title that isn't in the library leaves it out.
+   */
+  arr?: { status: { label: string; className: string }; monitored: boolean; qualityProfile: string };
   overview: string;
   /** The page's action bar, e.g. Search and admin buttons. */
   actions: ReactNode;
   /** A live queue line under the actions. */
-  activity: ReactNode;
+  activity?: ReactNode;
   /** The section after the hero: Cast on a movie, Seasons on a series. */
   typeSection: ReactNode;
   /** The eight facts in the Details grid, in order. */
@@ -35,7 +36,9 @@ export type ItemPageProps = {
   /** External site links. An entry with a null url is left out. */
   links: { label: string; url: string | null }[];
   /** The admin-only Settings card. Null hides the card. */
-  settings: ReactNode | null;
+  settings?: ReactNode | null;
+  /** Replaces the back link to Home (the Popular previews go back to Popular). */
+  back?: ReactNode;
 };
 
 export function ItemPageLayout({
@@ -45,21 +48,20 @@ export function ItemPageLayout({
   extraLines,
   backdropSrc,
   posterSrc,
-  status,
-  monitored,
-  qualityProfile,
+  arr,
   overview,
   actions,
   activity,
   typeSection,
   facts,
   links,
-  settings,
+  settings = null,
+  back,
 }: ItemPageProps) {
   return (
     <PosterWash posterSrc={posterSrc} className="space-y-6">
       {/* Home is the one library page, so every item page goes back there. It goes back in history to the list it came from, when known. */}
-      <BackLink />
+      {back ?? <BackLink />}
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         {backdropSrc !== null && <Backdrop src={backdropSrc} />}
@@ -82,16 +84,18 @@ export function ItemPageLayout({
                 {line}
               </p>
             ))}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              <Badge variant="outline" className={status.className}>
-                {status.label}
-              </Badge>
-              <span className="inline-flex items-center gap-1">
-                <MonitoredIcon monitored={monitored} />
-                <span>{monitored ? "Monitored" : "Unmonitored"}</span>
-              </span>
-              <span className="text-muted-foreground">Profile: {qualityProfile}</span>
-            </div>
+            {arr !== undefined && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <Badge variant="outline" className={arr.status.className}>
+                  {arr.status.label}
+                </Badge>
+                <span className="inline-flex items-center gap-1">
+                  <MonitoredIcon monitored={arr.monitored} />
+                  <span>{arr.monitored ? "Monitored" : "Unmonitored"}</span>
+                </span>
+                <span className="text-muted-foreground">Profile: {arr.qualityProfile}</span>
+              </div>
+            )}
             {overview !== "" && <p className="max-w-prose text-sm">{overview}</p>}
             {actions}
             {activity}

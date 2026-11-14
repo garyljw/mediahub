@@ -45,6 +45,8 @@ export type SeriesRow = {
   hasPoster: boolean;
   /** The TVDB id, used to match the series to Plex. Server-only: never copied into the Home items. */
   tvdbId: number | null;
+  /** The TMDB id, used to mark titles from TMDB that are already here. Null when Sonarr has none. */
+  tmdbId: number | null;
 };
 
 /**
@@ -109,6 +111,7 @@ export function toSeriesRows(series: SeriesResource[], profiles: QualityProfileR
       sortTitle: (entry.sortTitle || entry.title).toLowerCase(),
       hasPoster: entry.images?.some((image) => image.coverType === "poster") ?? false,
       tvdbId: typeof entry.tvdbId === "number" && Number.isSafeInteger(entry.tvdbId) && entry.tvdbId > 0 ? entry.tvdbId : null,
+      tmdbId: typeof entry.tmdbId === "number" && Number.isSafeInteger(entry.tmdbId) && entry.tmdbId > 0 ? entry.tmdbId : null,
     });
   }
 

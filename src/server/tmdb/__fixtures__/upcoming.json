@@ -1,0 +1,73 @@
+{
+  "dates": {
+    "maximum": "2026-12-09",
+    "minimum": "2026-11-18"
+  },
+  "page": 1,
+  "results": [
+    {
+      "adult": false,
+      "backdrop_path": "/ggqvhSdAASrseKuMlzk51sbvbE8.jpg",
+      "genre_ids": [
+        28,
+        53
+      ],
+      "id": 1562642,
+      "title": "Ghost Soldier",
+      "original_language": "en",
+      "original_title": "Ghost Soldier",
+      "overview": "Henry “Fitz” Fitzgerald has spent years living quietly off the grid, hiding from a past few people know anything about. But when a powerful foreign corporation moves into his hometown to seize his neighbors’ land for a massive payday, Fitz is forced to reveal who he really is: a former Special Forces soldier and advanced weapons developer. Armed with experimental technology, lethal combat skills, and an unwavering code of justice, Fitz wages a one-man war against an enemy that never saw him coming.",
+      "popularity": 132.1346,
+      "poster_path": "/8Y4oJ5iUs3hgPcDB3SIEmsNYjZk.jpg",
+      "release_date": "2026-11-27",
+      "softcore": false,
+      "video": false,
+      "vote_average": 8.727,
+      "vote_count": 11
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/sMmG82PtjK8A9rVc34gwKQtCm3A.jpg",
+      "genre_ids": [
+        27,
+        35,
+        14
+      ],
+      "id": 1514026,
+      "title": "Buddy",
+      "original_language": "en",
+      "original_title": "Buddy",
+      "overview": "Inside the colorful world of \"It's Buddy!\", a group of children spend their days singing, dancing, and helping Buddy - bright orange unicorn - spread happiness. But when one child refuses to play along, Buddy is not pleased and cracks begin to appear in this seemingly perfect world.",
+      "popularity": 105.8423,
+      "poster_path": "/1BdZbNvl1SfrrX8J9X5tQzN6Ivu.jpg",
+      "release_date": "2026-11-27",
+      "softcore": false,
+      "video": false,
+      "vote_average": 6.804,
+      "vote_count": 278
+    },
+    {
+      "adult": false,
+      "backdrop_path": "/aqFZcr2dxSZ2UwWSo1WC6C0rwDf.jpg",
+      "genre_ids": [
+        878,
+        28,
+        12
+      ],
+      "id": 1300968,
+      "title": "The Hunger Games: Sunrise on the Reaping",
+      "original_language": "en",
+      "original_title": "The Hunger Games: Sunrise on the Reaping",
+      "overview": "Return to the world of Panem 24 years before the events of The Hunger Games, starting on the morning of the reaping of the 50th Hunger Games, also known as the Second Quarter Quell.",
+      "popularity": 60.64,
+      "poster_path": "/j1MNyNNgNQL6f27cb3m3uKaPKd6.jpg",
+      "release_date": "2026-11-18",
+      "softcore": false,
+      "video": false,
+      "vote_average": 9,
+      "vote_count": 3
+    }
+  ],
+  "total_pages": 9,
+  "total_results": 173
+}

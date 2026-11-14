@@ -6,20 +6,20 @@ const labels = (items: { label: string }[]) => items.map((item) => item.label);
 describe("navItemsFor", () => {
   it("hides adminOnly items from a requester", () => {
     const items = navItemsFor(false);
-    expect(labels(items)).toEqual(["Home", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Release notes"]);
+    expect(labels(items)).toEqual(["Home", "Popular", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Release notes"]);
     expect(items.some((item) => item.adminOnly)).toBe(false);
   });
 
   it("shows every item to an admin, in order", () => {
-    expect(labels(navItemsFor(true))).toEqual(["Home", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Release notes", "Settings"]);
+    expect(labels(navItemsFor(true))).toEqual(["Home", "Popular", "Movie Focus", "TV Focus", "Calendar", "Queue", "History", "Release notes", "Settings"]);
     expect(navItemsFor(true)).toEqual(NAV_ITEMS);
   });
 });
 
 describe("tabBarItems", () => {
   it("puts Settings under More for an admin, and not for a requester", () => {
-    expect(labels(tabBarItems(true).more)).toEqual(["Calendar", "History", "Release notes", "Settings"]);
-    expect(labels(tabBarItems(false).more)).toEqual(["Calendar", "History", "Release notes"]);
+    expect(labels(tabBarItems(true).more)).toEqual(["Popular", "Calendar", "History", "Release notes", "Settings"]);
+    expect(labels(tabBarItems(false).more)).toEqual(["Popular", "Calendar", "History", "Release notes"]);
   });
 
   it("orders the tabs Home, Movie Focus, TV Focus, Queue", () => {

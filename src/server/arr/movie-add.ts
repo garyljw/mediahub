@@ -51,6 +51,7 @@ export const TMDB_POSTER_FILE = /^[A-Za-z0-9]{1,64}\.jpg$/;
 const TMDB_HOST = "image.tmdb.org";
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342/";
 const TMDB_HEADSHOT_BASE = "https://image.tmdb.org/t/p/w185/";
+const TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w1280/";
 
 /**
  * The file name of a TMDB poster URL, or null. Accepts only https, the exact host image.tmdb.org with
@@ -208,4 +209,9 @@ export function getTmdbPoster(file: string): Promise<Uint8Array<ArrayBuffer>> {
 /** One TMDB person headshot (w185), for the movie page's cast row. */
 export function getTmdbHeadshot(file: string): Promise<Uint8Array<ArrayBuffer>> {
   return getTmdbImage("TMDB headshot", TMDB_HEADSHOT_BASE, file);
+}
+
+/** One TMDB backdrop (w1280), for the Popular preview pages. */
+export function getTmdbBackdrop(file: string): Promise<Uint8Array<ArrayBuffer>> {
+  return getTmdbImage("TMDB backdrop", TMDB_BACKDROP_BASE, file);
 }

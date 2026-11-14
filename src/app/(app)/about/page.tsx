@@ -22,6 +22,18 @@ export default async function AboutPage() {
       <p className="mt-2 text-sm">MediaHub is released under the MIT licence.</p>
 
       <section className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight">TMDB</h2>
+        <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer" className="mt-3 inline-block">
+          {/* TMDB's own logo, unaltered, as their attribution rules ask. A plain img: it is a small static file. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/tmdb-logo.svg" alt="The Movie Database (TMDB)" width={245} height={18} className="h-[18px] w-auto" />
+        </a>
+        <p className="mt-3 text-sm text-muted-foreground">
+          This product uses the TMDB API but is not endorsed or certified by TMDB.
+        </p>
+      </section>
+
+      <section className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight">Open-source licences</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           MediaHub is built on the open-source projects listed below, each under its own licence.

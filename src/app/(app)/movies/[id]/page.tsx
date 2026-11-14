@@ -70,9 +70,11 @@ function MovieView({ page, isAdmin, inFocus }: { page: MovieDetailPage; isAdmin:
       extraLines={[directors, ratings].filter((line): line is string => line !== null)}
       backdropSrc={detail.hasBackdrop ? `/api/movies/${detail.id}/backdrop` : null}
       posterSrc={detail.hasPoster ? `/api/movies/${detail.id}/poster` : null}
-      status={{ label: STATUS_LABEL[detail.status], className: STATUS_CLASS[detail.status] }}
-      monitored={detail.monitored}
-      qualityProfile={detail.qualityProfile}
+      arr={{
+        status: { label: STATUS_LABEL[detail.status], className: STATUS_CLASS[detail.status] },
+        monitored: detail.monitored,
+        qualityProfile: detail.qualityProfile,
+      }}
       overview={detail.overview}
       actions={
         <MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />

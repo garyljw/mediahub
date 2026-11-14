@@ -6,11 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { backTarget, isPlainClick, readBackFrom, type BackFrom } from "@/components/home/return-place";
 
 /**
- * The back link on a movie or series page. Server and first render give "← Home". After mount it reads the list the
+ * The back link on a movie or series page (and a Popular preview). Server and first render give "← Home". After mount it reads the list the
  * user came from: when that list opened this title, the link goes back in history to it, so the list keeps its place.
  * Otherwise it stays a link to Home. It is a real link, so middle-click and new tabs still work.
  */
-export function BackLink() {
+export function BackLink({ fallback }: { fallback?: { href: string; label: string } } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const [stored, setStored] = useState<BackFrom | null>(null);
@@ -26,7 +26,9 @@ export function BackLink() {
     };
   }, []);
 
-  const target = backTarget(stored, pathname);
+  const found = backTarget(stored, pathname);
+  // Not opened from a list: link to the page's own fallback (a Popular preview goes to Popular), else to Home.
+  const target = found.mode === "link" && fallback ? { mode: "link" as const, ...fallback } : found;
 
   return (
     <Link
