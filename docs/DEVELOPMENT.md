@@ -11,6 +11,10 @@ How changes are planned, reviewed and merged is in [CLAUDE.md](../CLAUDE.md) and
 5. `npm run dev`, then open http://localhost:3000/setup and sign in with Plex. Pick the Plex server you own. The Plex account that owns it becomes MediaHub's admin, and setup signs you in. Until setup is done, the first person to finish it becomes the admin.
 6. As an admin, open Settings -> Connections and enter the Radarr and Sonarr addresses and API keys (Radarr or Sonarr: Settings -> General -> API Key). Each one is tested before it is saved. The keys are stored in the database, not in `.env.local`.
 
+On Windows, run tests with `npm test`, not `npx vitest`. `npm test` goes through `scripts/vitest.mjs`, which upper-cases the drive letter. VS Code's terminal starts in `c:\...`, and calling Vitest directly from there loads two copies of it, so every suite fails with "Cannot read properties of undefined (reading 'config')".
+
+`better-sqlite3`'s install script is turned off in `allowScripts`. The package comes with ready-built binaries for macOS, Linux and Windows, so the script (an automatic `node-gyp rebuild`) has nothing to do, and on Windows it fails when no C++ build tools are installed.
+
 Sign-up is disabled. Admins come from Plex setup, and requesters come from Settings → Users or the script in "Managing users from a dev checkout" below.
 
 ## Focus sync in a dev copy
