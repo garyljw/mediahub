@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Poster } from "@/components/poster/poster";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
-import { rememberOpenedFrom } from "@/components/home/return-place";
 import { SELECT_CLASS } from "@/components/library/table-parts";
 import { cn } from "@/lib/utils";
 import type { CalendarEntry, ReleaseType } from "@/server/merge/calendar";
@@ -193,7 +192,7 @@ export function CalendarView({
     posterPreview.activeKey !== null && visible.some((entry) => entry.key === posterPreview.activeKey);
 
   return (
-    <div className="space-y-4" onClick={rememberOpenedFrom("/calendar")}>
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div role="group" aria-label="View" className="hidden gap-1 sm:flex">
           <Button

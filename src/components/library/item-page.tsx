@@ -8,7 +8,7 @@ import { PosterTile } from "@/components/poster/poster";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { PosterWash, PosterWashLayer } from "@/components/poster/poster-wash";
-import { BackLink } from "./back-link";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
 
 export type ItemPageProps = {
   title: string;
@@ -37,8 +37,8 @@ export type ItemPageProps = {
   links: { label: string; url: string | null }[];
   /** The admin-only Settings card. Null hides the card. */
   settings?: ReactNode | null;
-  /** Replaces the back link to Home (the Popular previews go back to Popular). */
-  back?: ReactNode;
+  /** Replaces the breadcrumb, which starts at Home. A Popular preview passes one that starts at Popular. */
+  breadcrumb?: ReactNode;
 };
 
 export function ItemPageLayout({
@@ -56,12 +56,11 @@ export function ItemPageLayout({
   facts,
   links,
   settings = null,
-  back,
+  breadcrumb,
 }: ItemPageProps) {
   return (
     <PosterWash posterSrc={posterSrc} className="space-y-6">
-      {/* Home is the one library page, so every item page goes back there. It goes back in history to the list it came from, when known. */}
-      {back ?? <BackLink />}
+      {breadcrumb ?? <Breadcrumb label={title} />}
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         {backdropSrc !== null && <Backdrop src={backdropSrc} />}

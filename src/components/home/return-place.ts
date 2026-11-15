@@ -1,7 +1,6 @@
-// Where a list page (Home, Movie Focus, TV Focus, Popular) was, so going to a title and back returns to the same place. Also
-// the "← Back" target on a title's page. Client-safe: browser storage and window only, no runtime imports from src/server.
+// Where a list page (Home, Movie Focus, TV Focus, Popular) was, so going to a title and back returns to the same place.
+// Client-safe: browser storage and window only, no runtime imports from src/server.
 import { useCallback, useEffect, useRef, type MouseEvent } from "react";
-import { FOCUS_NAME } from "@/components/focus/focus-kinds";
 import { WATCH_FILTER_CHIPS, type HomeKind, type HomeWatchFilter } from "./home-items";
 
 /** The pages that are lists of tiles, and that remember a place. */
@@ -10,14 +9,6 @@ export type ListPath = (typeof LIST_PATHS)[number];
 
 export function isListPath(value: string): value is ListPath {
   return (LIST_PATHS as readonly string[]).includes(value);
-}
-
-/** The pages a title's back link can return to: the list pages, plus Calendar, Queue and History (no scroll place). */
-export const BACK_SOURCES = [...LIST_PATHS, "/calendar", "/queue", "/history"] as const;
-export type BackSource = (typeof BACK_SOURCES)[number];
-
-export function isBackSource(value: string): value is BackSource {
-  return (BACK_SOURCES as readonly string[]).includes(value);
 }
 
 /** The Home search and filter choices, remembered with the place so coming back shows the same list. */
@@ -91,99 +82,9 @@ function clearPlace(listPath: ListPath): void {
   }
 }
 
-/** The page a title's page was opened from, and that title's own path (e.g. "/movies/12"). */
-export type BackFrom = { list: BackSource; itemPath: string };
-
-const BACK_FROM_KEY = "mediahub.backFrom";
-
-/** The saved "came from" record, or null when there is none or it isn't valid. */
-export function readBackFrom(): BackFrom | null {
-  try {
-    const parsed: unknown = JSON.parse(globalThis.sessionStorage.getItem(BACK_FROM_KEY) ?? "null");
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { list, itemPath } = parsed as Record<string, unknown>;
-    if (typeof list !== "string" || !isBackSource(list)) return null;
-    if (typeof itemPath !== "string" || !itemPath.startsWith("/")) return null;
-    return { list, itemPath };
-  } catch {
-    return null;
-  }
-}
-
-/** Remembers that a title's page was opened from `list`, so its back link returns there. */
-export function rememberBackFrom(list: BackSource, itemPath: string): void {
-  try {
-    globalThis.sessionStorage.setItem(BACK_FROM_KEY, JSON.stringify({ list, itemPath } satisfies BackFrom));
-  } catch {
-    // Not remembered: the title's page then links to Home.
-  }
-}
-
-/** A movie or series page: "/movies/12" or "/tv/3". */
-const TITLE_PATH = /^\/(movies|tv)\/\d+$/;
-
-/**
- * A click handler for a view's root element: when the click was a plain click on a link to a title page, records that
- * the title was opened from `source`. React events bubble through portals, so links in dialogs inside the root count too.
- */
-export function rememberOpenedFrom(source: BackSource): (event: MouseEvent<HTMLElement>) => void {
-  return (event) => {
-    // A click that opens a new tab leaves this page open, so it is not a visit from here.
-    if (!isPlainClick(event)) return;
-    const target = event.target;
-    const itemPath = target instanceof Element ? target.closest("a[href]")?.getAttribute("href") : null;
-    // Only title pages have a back link. "Show more", filters and other links on the page are not visits to a title.
-    if (itemPath && TITLE_PATH.test(itemPath)) rememberBackFrom(source, itemPath);
-  };
-}
-
-/**
- * True when the page now open is neither the list nor the title the record was saved for, so the record is stale: the
- * user went somewhere else, and a later visit to that title (from Queue, a link or the address bar) must not "go back".
- */
-export function isStaleBackFrom(stored: BackFrom | null, pathname: string): boolean {
-  return stored !== null && pathname !== stored.list && pathname !== stored.itemPath;
-}
-
-/** Forgets the "came from" record once the user has gone somewhere other than its list or title. Used by the nav. */
-export function useForgetStaleBackFrom(pathname: string): void {
-  useEffect(() => {
-    if (!isStaleBackFrom(readBackFrom(), pathname)) return;
-    try {
-      globalThis.sessionStorage.removeItem(BACK_FROM_KEY);
-    } catch {
-      // Storage unavailable: nothing was remembered either.
-    }
-  }, [pathname]);
-}
-
 /** True for a plain left click: a click with a modifier key or another button opens a new tab or window instead. */
 export function isPlainClick(event: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-}
-
-/** The label each back source shows on a title's page: "← Home", "← Movie Focus", "← TV Focus", "← Calendar", "← Queue" or "← History". */
-export const BACK_LABEL: Record<BackSource, string> = {
-  "/": "Home",
-  "/focus/movies": FOCUS_NAME.movie,
-  "/focus/tv": FOCUS_NAME.series,
-  "/popular": "Popular",
-  "/calendar": "Calendar",
-  "/queue": "Queue",
-  "/history": "History",
-};
-
-export type BackTarget = { mode: "back"; list: BackSource; label: string } | { mode: "link"; href: "/"; label: "Home" };
-
-/**
- * Where a title's back link goes. When the page the user came from is the one that opened this title, it goes back in
- * the history to that list. Otherwise it links to Home.
- */
-export function backTarget(stored: BackFrom | null, pathname: string): BackTarget {
-  if (stored !== null && stored.itemPath === pathname) {
-    return { mode: "back", list: stored.list, label: BACK_LABEL[stored.list] };
-  }
-  return { mode: "link", href: "/", label: "Home" };
 }
 
 /**
@@ -220,7 +121,7 @@ export function settleOn(tile: Element, viewportTop: number): void {
   });
 }
 
-/** List pages that open at the top from the nav, even when they have a saved place. Their back links still restore it. */
+/** List pages that open at the top from the nav, even when they have a saved place. Coming back to them still restores it. */
 const NAV_OPENS_AT_TOP: readonly ListPath[] = ["/popular"];
 
 /**
@@ -297,7 +198,7 @@ const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home
 
 /**
  * Remembers a list page's place and brings it back, once per visit. Returns a click handler for the grid (it saves the
- * tile that was clicked, and the title's back target) and `restore`, which the grid calls once its tiles are on the page.
+ * tile that was clicked) and `restore`, which the grid calls once its tiles are on the page.
  * The place is also saved when the page unmounts, with the last scroll position. `filter` is the Home filter, or null.
  */
 export function usePlaceMemory(listPath: ListPath, filter: HomeFilterPlace | null) {
@@ -382,10 +283,8 @@ export function usePlaceMemory(listPath: ListPath, filter: HomeFilterPlace | nul
     const link = target instanceof Element ? target.closest<HTMLAnchorElement>("a[href]") : null;
     const tile = link?.closest<HTMLElement>("[data-focus-key]");
     const tileKey = tile?.dataset.focusKey;
-    const itemPath = link?.getAttribute("href");
-    if (!tile || tileKey === undefined || !itemPath) return;
+    if (!tile || tileKey === undefined) return;
     writePlace(listPath, { scrollY: window.scrollY, tileKey, tileTop: tile.getBoundingClientRect().top, filter });
-    rememberBackFrom(listPath, itemPath);
   }
 
   return { onGridClick, restore };

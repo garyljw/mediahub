@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { signOut } from "@/app/(app)/actions";
-import { isPlainClick, topIfOpen, useForgetStaleBackFrom } from "@/components/home/return-place";
+import { isPlainClick, topIfOpen } from "@/components/home/return-place";
 import { cn } from "@/lib/utils";
 import { isActive, tabBarItems, type NavItem } from "./nav";
 
@@ -27,7 +27,6 @@ type Props = {
 // Bottom navigation for narrow screens (below lg). The desktop sidebar takes over at lg.
 export function TabBar({ email, isAdmin }: Props) {
   const pathname = usePathname();
-  useForgetStaleBackFrom(pathname);
   const [moreOpen, setMoreOpen] = useState(false);
   const { tabs, more } = tabBarItems(isAdmin);
   const moreActive = more.some((item) => isActive(pathname, item.href));
