@@ -1,6 +1,7 @@
 import "server-only";
 import { radarrClient } from "./client";
 import { posterFileFromUrl } from "./movie-add";
+import { positiveIdOrNull } from "./detail-fields";
 import { getList } from "./request";
 import type { components as RadarrComponents } from "./generated/radarr";
 
@@ -20,6 +21,8 @@ export type CastMember = {
   name: string;
   character: string | null;
   photo: string | null;
+  /** The person's TMDB id, for their page. Null when Radarr sends none. */
+  personTmdbId: number | null;
 };
 
 /** The movie's cast row and its directors. */
@@ -53,6 +56,7 @@ export function toMovieCredits(credits: CreditResource[]): MovieCredits {
       name: credit.personName,
       character: typeof credit.character === "string" && credit.character.trim() !== "" ? credit.character : null,
       photo: headshotFile(credit),
+      personTmdbId: positiveIdOrNull(credit.personTmdbId),
     }));
 
   const directors: string[] = [];

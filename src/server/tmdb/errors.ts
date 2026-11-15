@@ -28,15 +28,20 @@ export function tmdbFailureText(error: TmdbRequestError): string {
 }
 
 /**
- * The text for a failed TMDB request on the Popular pages. A refused saved token is worded for the reader: an admin can
+ * The text for a failed TMDB request on the Popular and People pages (`feature` names which). A refused saved token is worded for the reader: an admin can
  * fix it, a requester is told to ask. Everything else is tmdbFailureText. (The settings form, which checks a token the
  * admin just typed, uses tmdbFailureText: "TMDB didn't accept that token.")
  */
-export function tmdbFailureFor(error: TmdbRequestError, isAdmin: boolean): string {
+export function tmdbFailureFor(error: TmdbRequestError, isAdmin: boolean, feature: "Popular" | "People's pages" = "Popular"): string {
   if (error.kind === "http" && error.status === 401) {
     return isAdmin
       ? "TMDB no longer accepts the saved token."
-      : "Popular can't reach TMDB right now. Ask the admin to check the TMDB token.";
+      : `${feature} can't reach TMDB right now. Ask the admin to check the TMDB token.`;
   }
   return tmdbFailureText(error);
+}
+
+/** True when TMDB answered 404: the title or person doesn't exist, so the page is the not-found page. */
+export function isTmdbNotFound(error: unknown): boolean {
+  return error instanceof TmdbRequestError && error.kind === "http" && error.status === 404;
 }

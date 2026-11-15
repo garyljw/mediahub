@@ -8,6 +8,8 @@ import providers from "./__fixtures__/providers.json";
 import regions from "./__fixtures__/regions.json";
 import genresTv from "./__fixtures__/genres-tv.json";
 import movieDetails from "./__fixtures__/movie-details.json";
+import personDetails from "./__fixtures__/person-details.json";
+import personCredits from "./__fixtures__/person-credits.json";
 import tvDetails from "./__fixtures__/tv-details.json";
 import tvList from "./__fixtures__/tv-list.json";
 import tvListNulls from "./__fixtures__/tv-list-nulls.json";
@@ -19,6 +21,8 @@ import {
   fetchRegions,
   getGenres,
   getMovieDetails,
+  getPerson,
+  getPersonCredits,
   getShowDetails,
   getProviders,
   getTrendingMovies,
@@ -150,6 +154,8 @@ describe("parsers", () => {
     expect(await getTvdbId(TOKEN, 84773)).toBe(367506);
     stubFetch(() => json(externalIdsNull));
     expect(await getTvdbId(TOKEN, 124)).toBeNull();
+    stubFetch(() => json({ tvdb_id: 0 }));
+    expect(await getTvdbId(TOKEN, 125)).toBeNull();
   });
 
   it("leaves documentaries and Reality out of the TV discover call and documentaries out of the movie one", async () => {
@@ -201,6 +207,110 @@ describe("detail pages", () => {
     clearTmdbCache();
     stubFetch(() => json({ ...tvDetails, episode_run_time: [], last_episode_to_air: { runtime: null } }));
     expect((await getShowDetails(TOKEN, 84773)).runtime).toBeNull();
+  });
+
+  // TMDB sends 0 for figures it doesn't know yet (seen live on an unreleased film's runtime). The page must still load.
+  it("reads a 0 runtime, season or episode count as unknown instead of refusing the reply", async () => {
+    stubFetch(() => json({ ...movieDetails, runtime: 0 }));
+    expect((await getMovieDetails(TOKEN, 1368337)).runtime).toBeNull();
+    stubFetch(() =>
+      json({ ...tvDetails, number_of_seasons: 0, number_of_episodes: 0, episode_run_time: [], last_episode_to_air: { runtime: 0 } }),
+    );
+    expect(await getShowDetails(TOKEN, 84773)).toMatchObject({ seasons: null, episodes: null, runtime: null });
+  });
+});
+
+describe("person pages", () => {
+  it("reads a person's details, asking for the English reply with the token only in the header", async () => {
+    const mock = stubFetch(() => json(personDetails));
+    const person = await getPerson(TOKEN, 900001);
+    const url = new URL(String(mock.mock.calls[0][0]));
+    expect(url.pathname).toBe("/3/person/900001");
+    expect(url.searchParams.get("language")).toBe("en-US");
+    expect(String(mock.mock.calls[0][0])).not.toContain(TOKEN);
+    expect((mock.mock.calls[0][1]!.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(person).toEqual({
+      id: 900001,
+      name: "Mira Tester",
+      biography: "Mira Tester is a made-up actor.\n\nShe was born in a town that does not exist.",
+      birthday: "1976-07-09",
+      deathday: null,
+      placeOfBirth: "Faketown, Exampleland",
+      knownFor: "Acting",
+      imdbId: "nm0000001",
+      photoFile: "abcTesterProfile123.jpg",
+    });
+  });
+
+  it("turns a bad IMDb id, bad dates, empty strings and a bad photo path into null", async () => {
+    stubFetch(() =>
+      json({ ...personDetails, imdb_id: "tt123", birthday: "1976", deathday: "", place_of_birth: "", known_for_department: "", biography: null, profile_path: "/../x.png" }),
+    );
+    expect(await getPerson(TOKEN, 900001)).toMatchObject({
+      imdbId: null,
+      birthday: null,
+      deathday: null,
+      placeOfBirth: null,
+      knownFor: null,
+      biography: "",
+      photoFile: null,
+    });
+  });
+
+  it("reads the cast credits and drops an item with an unknown media type or no title without failing the rest", async () => {
+    const mock = stubFetch(() => json(personCredits));
+    const credits = await getPersonCredits(TOKEN, 900001);
+    const url = new URL(String(mock.mock.calls[0][0]));
+    expect(url.pathname).toBe("/3/person/900001/combined_credits");
+    expect(url.searchParams.get("language")).toBe("en-US");
+    expect(credits).toEqual([
+      {
+        kind: "movie",
+        tmdbId: 700001,
+        title: "Fake Movie One",
+        date: "2021-05-20",
+        character: "Dana",
+        episodes: null,
+        posterFile: "pFakeMovie1.jpg",
+        backdropFile: "bdFakeMovie1.jpg",
+        genreIds: [18, 35],
+        adult: false,
+      },
+      {
+        kind: "tv",
+        tmdbId: 800001,
+        title: "Fake Show One",
+        date: "2019-04-02",
+        character: null,
+        episodes: 14,
+        posterFile: null,
+        backdropFile: null,
+        genreIds: [18],
+        adult: false,
+      },
+      {
+        kind: "tv",
+        tmdbId: 800002,
+        title: "Fake Show Two",
+        date: "2016-02-03",
+        character: "Eli",
+        episodes: 3,
+        posterFile: null,
+        backdropFile: null,
+        genreIds: [],
+        adult: false,
+      },
+    ]);
+  });
+
+  it("reads a reply with no cast as no credits", async () => {
+    stubFetch(() => json({ id: 900001 }));
+    expect(await getPersonCredits(TOKEN, 900001)).toEqual([]);
+  });
+
+  it("surfaces an unknown person as a TmdbRequestError with status 404", async () => {
+    stubFetch(() => json({ status_code: 34 }, 404));
+    await expect(getPerson(TOKEN, 1)).rejects.toMatchObject({ name: "TmdbRequestError", kind: "http", status: 404 });
   });
 });
 

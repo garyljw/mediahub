@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { PersonPhoto } from "@/components/poster/person-photo";
+import { CastRow } from "@/components/library/cast-row";
 import { formatAdded, formatSize } from "@/components/library/format";
 import { STATUS_CLASS, STATUS_LABEL } from "@/components/movies/movie-status";
 import { directorsLine, metaLine, ratingsLine } from "@/components/library/detail-format";
@@ -12,7 +12,7 @@ import { requirePageUser } from "@/server/authz";
 import { listFocusIds } from "@/server/focus/focus";
 import { ArrRequestError } from "@/server/arr/request";
 import { getMovieDetail, type MovieDetailPage } from "@/server/arr/movie-detail";
-import type { MovieCredits } from "@/server/arr/movie-credits";
+import { getTmdbConfig } from "@/server/settings/tmdb";
 
 export const metadata = { title: "Movies" };
 // The page waits for Radarr before rendering; loading.tsx shows a placeholder meanwhile.
@@ -24,34 +24,6 @@ const movieId = z
   .regex(/^\d{1,9}$/)
   .transform(Number)
   .refine((n) => n > 0);
-
-/** The cast row, or a message when Radarr's credits failed. Omitted when the cast is empty. */
-function CastRow({ credits }: { credits: MovieCredits | null }) {
-  if (credits === null) {
-    return (
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Cast</h2>
-        <p className="text-sm text-muted-foreground">Couldn&apos;t load the cast from Radarr.</p>
-      </section>
-    );
-  }
-  if (credits.cast.length === 0) return null;
-
-  return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-semibold">Cast</h2>
-      <ul className="flex snap-x gap-3 overflow-x-auto pb-2">
-        {credits.cast.map((member) => (
-          <li key={member.id} className="w-24 shrink-0 snap-start sm:w-28">
-            <PersonPhoto src={member.photo === null ? null : `/api/movies/headshot/${member.photo}`} />
-            <p className="mt-1.5 line-clamp-2 text-sm font-medium">{member.name}</p>
-            {member.character !== null && <p className="line-clamp-2 text-xs text-muted-foreground">{member.character}</p>}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 function MovieView({ page, isAdmin, inFocus }: { page: MovieDetailPage; isAdmin: boolean; inFocus: boolean }) {
   const { detail, profiles, credits } = page;
@@ -80,7 +52,21 @@ function MovieView({ page, isAdmin, inFocus }: { page: MovieDetailPage; isAdmin:
         <MovieDetailActions movieId={detail.id} title={detail.title} year={detail.year} isAdmin={isAdmin} inFocus={inFocus} />
       }
       activity={<MovieActivity movieId={detail.id} title={detail.title} />}
-      typeSection={<CastRow credits={credits} />}
+      typeSection={
+        <CastRow
+          members={(credits?.cast ?? []).map((member) => ({
+            key: member.id,
+            personId: member.personTmdbId,
+            name: member.name,
+            character: member.character,
+            episodes: null,
+            photo: member.photo,
+          }))}
+          // Person pages read from TMDB, so without a token there is nowhere to link to.
+          linkPeople={getTmdbConfig() !== null}
+          error={credits === null ? "Couldn't load the cast from Radarr." : undefined}
+        />
+      }
       facts={[
         { label: "Studio", value: detail.studio ?? "—" },
         { label: "File quality", value: detail.fileQuality ?? "—" },

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Backdrop } from "@/components/poster/backdrop";
 import { PosterTile } from "@/components/poster/poster";
+import { ClampedText } from "@/components/library/clamped-text";
 import { ExternalLinks, Fact } from "@/components/library/detail-parts";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { PosterWash, PosterWashLayer } from "@/components/poster/poster-wash";
@@ -39,6 +40,10 @@ export type ItemPageProps = {
   settings?: ReactNode | null;
   /** Replaces the breadcrumb, which starts at Home. A Popular preview passes one that starts at Popular. */
   breadcrumb?: ReactNode;
+  /** Clamps a long overview to six lines with a "Read more" button. The person page passes it for a long biography. */
+  clampOverview?: boolean;
+  /** What the poster slot shows when there is no image: a film icon (default) or a person icon. */
+  posterPlaceholder?: "title" | "person";
 };
 
 export function ItemPageLayout({
@@ -57,6 +62,8 @@ export function ItemPageLayout({
   links,
   settings = null,
   breadcrumb,
+  clampOverview = false,
+  posterPlaceholder = "title",
 }: ItemPageProps) {
   return (
     <PosterWash posterSrc={posterSrc} className="space-y-6">
@@ -70,7 +77,7 @@ export function ItemPageLayout({
           {/* self-start keeps the box at the poster's own height (a flex row would stretch it to the text column), so the shadow
               fits the poster. The shadow takes the poster's colour only when it has a wash. */}
           <div className="w-32 shrink-0 self-start rounded-md shadow-lg in-data-[washed]:shadow-[0_30px_60px_-18px_oklch(0.55_0.2_var(--h1)/.8)] sm:w-40 md:w-48">
-            <PosterTile src={posterSrc} />
+            <PosterTile src={posterSrc} placeholder={posterPlaceholder} />
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
@@ -95,7 +102,12 @@ export function ItemPageLayout({
                 <span className="text-muted-foreground">Profile: {arr.qualityProfile}</span>
               </div>
             )}
-            {overview !== "" && <p className="max-w-prose text-sm">{overview}</p>}
+            {overview !== "" &&
+              (clampOverview ? (
+                <ClampedText text={overview} className="max-w-prose text-sm whitespace-pre-line" />
+              ) : (
+                <p className="max-w-prose text-sm whitespace-pre-line">{overview}</p>
+              ))}
             {actions}
             {activity}
           </div>
@@ -106,6 +118,7 @@ export function ItemPageLayout({
 
       <section className="space-y-3 rounded-xl border bg-card p-4">
         <h2 className="text-lg font-semibold">Details</h2>
+        {facts.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
           {facts.map((fact) => (
             <Fact key={fact.label} label={fact.label}>
@@ -113,6 +126,7 @@ export function ItemPageLayout({
             </Fact>
           ))}
         </dl>
+        )}
         <ExternalLinks links={links} />
       </section>
 

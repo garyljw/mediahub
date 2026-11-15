@@ -7,6 +7,35 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.13.0",
+    date: "2026-11-15",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**People's pages:** click an actor's photo or name in the **Cast** row of any movie or TV page to open their page, laid out like a title page: their photo, biography, birth details, a backdrop from their latest released credit and their acting filmography.",
+            details: [
+              "The filmography is a poster grid, newest first, with an **All** / **Movies** / **TV** switch. Titles you already have show **In library** and open their library page; anything else opens a TMDB preview.",
+              "The cast on every page you reach links to people again, so you can keep following actors from title to title.",
+              "Self appearances (talk and award shows) and news, reality and talk shows are left out.",
+              "TV library pages now show their cast too, from TMDB, under **Seasons**.",
+              "People's pages need the TMDB token in **Settings → Connections**. Without one, the cast isn't linked.",
+            ],
+          },
+        ],
+      },
+      {
+        heading: "Fixed",
+        notes: [
+          {
+            text: "Some Popular previews said **TMDB sent a reply MediaHub couldn't read.** when TMDB didn't know a film's runtime or a show's season count yet. Those now show a dash instead.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.12.0",
     date: "2026-11-15",
     sections: [

@@ -10,11 +10,15 @@ import {
   MovieDetailsSchema,
   ShowDetailsSchema,
   MovieListSchema,
+  PersonCreditsSchema,
+  PersonDetailsSchema,
   ProvidersSchema,
   RegionsSchema,
   TvListSchema,
   type TmdbMovie,
   type TmdbMovieDetails,
+  type TmdbPerson,
+  type TmdbPersonCredit,
   type TmdbShowDetails,
   type TmdbProvider,
   type TmdbRegion,
@@ -185,6 +189,16 @@ export function getMovieDetails(token: string, id: number): Promise<TmdbMovieDet
 /** One show's page facts and cast. Cached for a day. A TMDB 404 is a TmdbRequestError with status 404. */
 export function getShowDetails(token: string, id: number): Promise<TmdbShowDetails> {
   return cachedGet("show details", `/tv/${id}`, token, ShowDetailsSchema, { language: "en-US", append_to_response: "aggregate_credits" }, TVDB_TTL_MS);
+}
+
+/** One person's details. Cached for a day. A TMDB 404 is a TmdbRequestError with status 404. */
+export function getPerson(token: string, id: number): Promise<TmdbPerson> {
+  return cachedGet("person details", `/person/${id}`, token, PersonDetailsSchema, { language: "en-US" }, TVDB_TTL_MS);
+}
+
+/** One person's acting credits (cast only). Cached for a day. */
+export function getPersonCredits(token: string, id: number): Promise<TmdbPersonCredit[]> {
+  return cachedGet("person credits", `/person/${id}/combined_credits`, token, PersonCreditsSchema, { language: "en-US" }, TVDB_TTL_MS);
 }
 
 export function getTrendingMovies(token: string): Promise<TmdbMovie[]> {

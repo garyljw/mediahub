@@ -51,6 +51,7 @@ export const TMDB_POSTER_FILE = /^[A-Za-z0-9]{1,64}\.jpg$/;
 const TMDB_HOST = "image.tmdb.org";
 const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342/";
 const TMDB_HEADSHOT_BASE = "https://image.tmdb.org/t/p/w185/";
+const TMDB_PROFILE_BASE = "https://image.tmdb.org/t/p/h632/";
 const TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w1280/";
 
 /**
@@ -214,4 +215,9 @@ export function getTmdbHeadshot(file: string): Promise<Uint8Array<ArrayBuffer>> 
 /** One TMDB backdrop (w1280), for the Popular preview pages. */
 export function getTmdbBackdrop(file: string): Promise<Uint8Array<ArrayBuffer>> {
   return getTmdbImage("TMDB backdrop", TMDB_BACKDROP_BASE, file);
+}
+
+/** One TMDB person photo (h632), for the person pages. */
+export function getTmdbProfile(file: string): Promise<Uint8Array<ArrayBuffer>> {
+  return getTmdbImage("TMDB person photo", TMDB_PROFILE_BASE, file);
 }

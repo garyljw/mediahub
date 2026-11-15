@@ -1,0 +1,68 @@
+{
+  "id": 900001,
+  "cast": [
+    {
+      "adult": false,
+      "backdrop_path": "/bdFakeMovie1.jpg",
+      "genre_ids": [18, 35],
+      "id": 700001,
+      "original_language": "en",
+      "overview": "A made-up movie.",
+      "poster_path": "/pFakeMovie1.jpg",
+      "release_date": "2021-05-20",
+      "title": "Fake Movie One",
+      "character": "Dana",
+      "credit_id": "52fe0000000000",
+      "order": 0,
+      "media_type": "movie"
+    },
+    {
+      "adult": false,
+      "backdrop_path": null,
+      "genre_ids": [18],
+      "id": 800001,
+      "poster_path": null,
+      "first_air_date": "2015-01-01",
+      "first_credit_air_date": "2019-04-02",
+      "name": "Fake Show One",
+      "character": "",
+      "credit_id": "52fe0000000001",
+      "episode_count": 14,
+      "media_type": "tv"
+    },
+    {
+      "adult": false,
+      "backdrop_path": null,
+      "genre_ids": [],
+      "id": 800002,
+      "poster_path": null,
+      "first_air_date": "2016-02-03",
+      "name": "Fake Show Two",
+      "character": "Eli",
+      "episode_count": 3,
+      "media_type": "tv"
+    },
+    {
+      "adult": false,
+      "id": 700002,
+      "title": "Mystery Item",
+      "character": "Someone",
+      "media_type": "person"
+    },
+    {
+      "adult": false,
+      "id": 700003,
+      "title": "",
+      "character": "Nobody",
+      "media_type": "movie"
+    }
+  ],
+  "crew": [
+    {
+      "id": 700009,
+      "title": "Crew Only Movie",
+      "job": "Director",
+      "media_type": "movie"
+    }
+  ]
+}

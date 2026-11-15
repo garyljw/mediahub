@@ -4,6 +4,8 @@ import { listSeries } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { loadSeriesAddOptions } from "@/server/add/add-options";
 import { getTmdbConfig } from "@/server/settings/tmdb";
+import { isTmdbNotFound } from "@/server/tmdb/errors";
+import { tmdbIdParam } from "@/server/tmdb/ids";
 import { getShowDetails } from "@/server/tmdb/client";
 import { yearOf } from "@/server/merge/popular";
 import { formatAdded, formatRuntime } from "@/components/library/format";
@@ -11,9 +13,7 @@ import { PopularPreviewView } from "@/components/popular/preview-view";
 import { PreviewAdd } from "@/components/popular/preview-add";
 import {
   failureNotice,
-  isTmdbNotFound,
   NotSetUp,
-  tmdbIdParam,
 } from "../../preview";
 
 export const metadata = { title: "Popular" };
