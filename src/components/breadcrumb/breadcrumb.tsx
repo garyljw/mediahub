@@ -3,19 +3,9 @@
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { NAV_ITEMS } from "@/components/app-shell/nav";
 import { isPlainClick } from "@/components/home/return-place";
 import { cn } from "@/lib/utils";
-import { readStep, readTrail, visit, writeTrail, type Crumb } from "./trail";
-
-const HOME = NAV_ITEMS.find((item) => item.href === "/");
-const DEFAULT_ROOT: Crumb = { path: "/", label: HOME?.label ?? "Home" };
-
-/** The nav item with this path, as a crumb. For pages whose trail starts somewhere other than Home. */
-export function navCrumb(href: string): Crumb {
-  const item = NAV_ITEMS.find((entry) => entry.href === href);
-  return item ? { path: item.href, label: item.label } : DEFAULT_ROOT;
-}
+import { DEFAULT_ROOT, readStep, readTrail, visit, writeTrail, type Crumb } from "./trail";
 
 /**
  * The trail of pages that led to this one, ending with this page's `label`. Server and first render show the root and
