@@ -13,7 +13,7 @@ const cache = vi.hoisted(() => ({ clear: vi.fn() }));
 vi.mock("@/server/db", () => ({ db: () => testDb.current }));
 vi.mock("@/server/tmdb/client", () => ({ clearTmdbCache: cache.clear }));
 
-import { getTmdbConfig, getTmdbSummary, removeTmdbConfig, saveTmdbConfig } from "./tmdb";
+import { getChosenServices, getTmdbConfig, getTmdbSummary, removeTmdbConfig, saveChosenServices, saveTmdbConfig } from "./tmdb";
 
 beforeEach(() => {
   cache.clear.mockClear();
@@ -50,5 +50,20 @@ describe("tmdb settings", () => {
     removeTmdbConfig();
     expect(getTmdbConfig()).toBeNull();
     expect(testDb.current!.select().from(schema.setting).all()).toEqual([]);
+  });
+
+  it("keeps the chosen services in order, reads a bad stored value as none, and removes them with the config", () => {
+    expect(getChosenServices()).toEqual([]);
+    saveChosenServices([337, 8]);
+    expect(getChosenServices()).toEqual([337, 8]);
+    testDb.current?.update(schema.setting).set({ value: "[8,0]" }).run();
+    expect(getChosenServices()).toEqual([]);
+    testDb.current?.update(schema.setting).set({ value: "[337,8,337]" }).run();
+    expect(getChosenServices()).toEqual([337, 8]);
+    testDb.current?.update(schema.setting).set({ value: "not json" }).run();
+    expect(getChosenServices()).toEqual([]);
+    saveChosenServices([8]);
+    removeTmdbConfig();
+    expect(getChosenServices()).toEqual([]);
   });
 });

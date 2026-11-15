@@ -1,5 +1,6 @@
 import "server-only";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/server/db";
 import { setting } from "@/server/db/schema";
 import { clearTmdbCache } from "@/server/tmdb/client";
@@ -15,6 +16,7 @@ export type TmdbConfig = { token: string; region: string; language: TmdbLanguage
 const TOKEN_KEY = "tmdb.token";
 const REGION_KEY = "tmdb.region";
 const LANGUAGE_KEY = "tmdb.language";
+const SERVICES_KEY = "tmdb.services";
 
 function languageOf(value: string | undefined): TmdbLanguage {
   return TMDB_LANGUAGE_CODES.find((code) => code === value) ?? DEFAULT_TMDB_LANGUAGE;
@@ -61,8 +63,34 @@ export function saveTmdbConfig({ token, region, language }: TmdbConfig): void {
   clearTmdbCache();
 }
 
-/** Removes the token, country and language. */
+/** Removes the token, country, language and chosen services. */
 export function removeTmdbConfig(): void {
-  db().delete(setting).where(inArray(setting.key, [TOKEN_KEY, REGION_KEY, LANGUAGE_KEY])).run();
+  db().delete(setting).where(inArray(setting.key, [TOKEN_KEY, REGION_KEY, LANGUAGE_KEY, SERVICES_KEY])).run();
   clearTmdbCache();
+}
+
+const ServicesSchema = z.array(z.number().int().positive());
+
+/** The TMDB provider ids the admin chose for the Popular page, in display order. Empty when none, or when the stored value is unreadable. */
+export function getChosenServices(): number[] {
+  const row = db().select().from(setting).where(eq(setting.key, SERVICES_KEY)).get();
+  if (!row) return [];
+  try {
+    const parsed = ServicesSchema.safeParse(JSON.parse(row.value));
+    // Duplicates are dropped (first wins), so a hand-edited value can't show a service twice.
+    return parsed.success ? [...new Set(parsed.data)] : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Stores the chosen provider ids in display order. The caller checks them against TMDB first. */
+export function saveChosenServices(ids: readonly number[]): void {
+  const value = JSON.stringify(ids);
+  const updatedAt = new Date();
+  db()
+    .insert(setting)
+    .values({ key: SERVICES_KEY, value, updatedAt })
+    .onConflictDoUpdate({ target: setting.key, set: { value, updatedAt } })
+    .run();
 }

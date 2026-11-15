@@ -7,6 +7,25 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.12.0",
+    date: "2026-11-15",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Choose the streaming services on Popular:** a new **Settings → Popular** page lets an admin pick which services **Popular on** offers, instead of TMDB's top 12.",
+            details: [
+              "Search for a service and click it to add it, then drag your list into the order you want. The Popular page starts on the first one.",
+              "One list covers movies and TV. A service with nothing of that kind in your country is left out.",
+              "With none picked, Popular shows TMDB's top 12 as before. **Reset to top 12** goes back to that.",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.11.0",
     date: "2026-11-14",
     sections: [

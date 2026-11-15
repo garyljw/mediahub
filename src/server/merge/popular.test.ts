@@ -6,7 +6,7 @@ import tvList from "@/server/tmdb/__fixtures__/tv-list.json";
 import providersFixture from "@/server/tmdb/__fixtures__/providers.json";
 import { MovieListSchema, ProvidersSchema, TvListSchema } from "@/server/tmdb/schemas";
 import library from "./__fixtures__/popular-library.json";
-import { chooseService, libraryByTmdbId, movieTiles, popularServices, showTiles } from "./popular";
+import { chooseService, libraryByTmdbId, mergeServices, movieTiles, offeredServices, showTiles } from "./popular";
 
 // The TMDB fixtures are saved live replies, run through the real parsers.
 const movies = MovieListSchema.parse(movieList);
@@ -73,20 +73,36 @@ describe("services", () => {
   const providers = ProvidersSchema.parse(providersFixture);
   it("puts the most prominent services first and caps the list", () => {
     // The live fixture ranks services differently in GB than globally (Prime is 2nd in GB, 4th globally).
-    expect(popularServices(providers, "GB").map((p) => p.id)).toEqual([8, 9, 350, 337, 2285]);
-    expect(popularServices(providers, "ZZ").map((p) => p.id)).toEqual([8, 350, 337, 9, 2285]);
+    expect(offeredServices(providers, "GB", []).map((p) => p.id)).toEqual([8, 9, 350, 337, 2285]);
+    expect(offeredServices(providers, "ZZ", []).map((p) => p.id)).toEqual([8, 350, 337, 9, 2285]);
     const many = Array.from({ length: 20 }, (_, i) => ({ id: 1000 + i, name: `S${i}`, logoPath: null, displayPriority: 19 - i, displayPriorities: {} }));
-    const top = popularServices(many, "GB");
+    const top = offeredServices(many, "GB", []);
     expect(top).toHaveLength(12);
     expect(top[0].id).toBe(1019);
   });
 
   it("defaults to Netflix, then the first service, and takes a requested one only when offered", () => {
-    const services = popularServices(providers, "GB");
+    const services = offeredServices(providers, "GB", []);
     expect(chooseService(services, null)?.id).toBe(8);
     expect(chooseService(services, 337)?.id).toBe(337);
     expect(chooseService(services, 4242)?.id).toBe(8);
     expect(chooseService(services.filter((p) => p.id !== 8), null)?.id).toBe(9);
     expect(chooseService([], 8)).toBeNull();
+  });
+
+  it("offers the chosen services in the chosen order and drops ids the country lacks", () => {
+    expect(offeredServices(providers, "GB", [337, 4242, 8]).map((p) => p.id)).toEqual([337, 8]);
+  });
+
+  it("merges the movie and TV services, a service in both once, in ranked order", () => {
+    const [netflix, ...rest] = offeredServices(providers, "GB", []);
+    expect(mergeServices([netflix], [netflix, ...rest], "GB").map((p) => p.id)).toEqual(offeredServices(providers, "GB", []).map((p) => p.id));
+  });
+
+  it("starts a chosen list at its first service, not Netflix", () => {
+    const chosen = offeredServices(providers, "GB", [337, 8]);
+    expect(chooseService(chosen, null, false)?.id).toBe(337);
+    expect(chooseService(chosen, 4242, false)?.id).toBe(337);
+    expect(chooseService(chosen, 8, false)?.id).toBe(8);
   });
 });

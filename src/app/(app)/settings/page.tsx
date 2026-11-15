@@ -18,6 +18,11 @@ const SECTIONS = [
     description: "Quality profile, root folder and monitoring that new movies and series start with.",
   },
   {
+    href: "/settings/popular",
+    title: "Popular",
+    description: "Which streaming services the Popular page offers, and their order.",
+  },
+  {
     href: "/settings/users",
     title: "Users",
     description: "Add, reset and remove requester accounts.",

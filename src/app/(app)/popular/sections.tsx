@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   chooseService,
   movieTiles,
-  popularServices,
+  offeredServices,
   showTiles,
   type PopularTile,
 } from "@/server/merge/popular";
@@ -26,6 +26,7 @@ import {
   getUpcomingMovies,
   getUpcomingShows,
 } from "@/server/tmdb/client";
+import { getChosenServices } from "@/server/settings/tmdb";
 import { TmdbRequestError, tmdbFailureFor } from "@/server/tmdb/errors";
 import type { TmdbMovie, TmdbShow } from "@/server/tmdb/schemas";
 
@@ -189,10 +190,11 @@ function chipClass(selected: boolean): string {
  */
 export async function PopularOnService({ ctx, params }: { ctx: PopularContext; params: PopularParams }) {
   const { mode } = params;
+  const chosenIds = getChosenServices();
   let services;
   try {
     // Only the shown kind's services: a service may stream movies but not TV in this country.
-    services = popularServices(await getProviders(ctx.token, mode, ctx.region), ctx.region);
+    services = offeredServices(await getProviders(ctx.token, mode, ctx.region), ctx.region, chosenIds);
   } catch (error) {
     const failure = failureMessage(error, ctx.isAdmin);
     return (
@@ -203,12 +205,28 @@ export async function PopularOnService({ ctx, params }: { ctx: PopularContext; p
       </>
     );
   }
-  const chosen = chooseService(services, params.service);
+  const chosen = chooseService(services, params.service, chosenIds.length === 0);
   if (chosen === null) {
     return (
       <>
         <h2 className="text-lg font-semibold tracking-tight">Popular on a service</h2>
-        <p className="text-sm text-muted-foreground">TMDB lists no streaming services for this country.</p>
+        <p className="text-sm text-muted-foreground">
+          {chosenIds.length === 0 ? (
+            "TMDB lists no streaming services for this country."
+          ) : (
+            <>
+              None of the chosen services has {mode === "movie" ? "movies" : "TV"} in this country.
+              {ctx.isAdmin && (
+                <>
+                  {" "}
+                  <Link href="/settings/popular" className="underline">
+                    Change in Settings
+                  </Link>
+                </>
+              )}
+            </>
+          )}
+        </p>
         <SectionSettled section="service" />
       </>
     );
