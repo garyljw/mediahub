@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BackLink } from "@/components/library/back-link";
+import { Breadcrumb, navCrumb } from "@/components/breadcrumb/breadcrumb";
 import { ItemPageLayout } from "@/components/library/item-page";
 import { PersonPhoto } from "@/components/poster/person-photo";
 import type { TmdbCastMember } from "@/server/tmdb/schemas";
@@ -59,8 +59,8 @@ export function PopularPreviewView({
 }) {
   return (
     <ItemPageLayout
-      // Back in history when opened from Popular, so its address and place return. Otherwise a link to Popular.
-      back={<BackLink fallback={{ href: "/popular", label: "Popular" }} />}
+      // The trail starts at Popular, not Home.
+      breadcrumb={<Breadcrumb label={title} root={navCrumb("/popular")} />}
       title={title}
       year={year}
       meta={meta}

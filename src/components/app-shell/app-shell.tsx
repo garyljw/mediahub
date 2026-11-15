@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TrailTracker } from "@/components/breadcrumb/use-trail";
 import { Brand } from "./brand";
 import { NavLinks } from "./nav-links";
 import { SessionKeepAlive } from "./session-keep-alive";
@@ -16,6 +17,7 @@ export function AppShell({ user, isAdmin, children }: Props) {
   return (
     <div className="min-h-screen">
       <SessionKeepAlive />
+      <TrailTracker />
       {/* Desktop sidebar (lg and up) */}
       <aside className="fixed inset-y-0 left-0 hidden w-56 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-14 items-center px-4">

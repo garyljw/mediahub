@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { isPlainClick, topIfOpen, useForgetStaleBackFrom } from "@/components/home/return-place";
+import { isPlainClick, topIfOpen } from "@/components/home/return-place";
 import { isActive, navItemsFor, type NavItem } from "./nav";
 
 type Props = {
@@ -15,7 +15,6 @@ type Props = {
 
 export function NavLinks({ isAdmin, onNavigate }: Props) {
   const pathname = usePathname();
-  useForgetStaleBackFrom(pathname);
   const items = navItemsFor(isAdmin);
   const mainItems = items.filter((item) => !item.adminOnly);
   const adminItems = items.filter((item) => item.adminOnly);

@@ -33,7 +33,7 @@ export function tabBarItems(isAdmin: boolean): { tabs: NavItem[]; more: NavItem[
   return { tabs, more };
 }
 
-// A movie or series page, e.g. /movies/123. Its back link goes to Home, so Home is the nav item it highlights.
+// A movie or series page, e.g. /movies/123. Home is the nav item it highlights.
 const ITEM_PAGE = /^\/(movies|tv)\/[^/]+/;
 
 /** True for an exact match or a child route, so /settings/users highlights Settings but /settingsx does not. Item pages highlight Home. */
