@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AlertTriangle } from "lucide-react";
@@ -6,6 +7,7 @@ import { WATCHED_CLASS, WATCHED_LABEL, type WatchedState } from "@/components/ho
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { metaLine, seriesRatingLine } from "@/components/library/detail-format";
+import { CastRow } from "@/components/library/cast-row";
 import { ItemPageLayout } from "@/components/library/item-page";
 import { MonitoredIcon } from "@/components/library/monitored-icon";
 import { EPISODE_STATUS_CLASS, EPISODE_STATUS_LABEL, STATUS_CLASS, STATUS_LABEL } from "@/components/tv/series-status";
@@ -37,6 +39,9 @@ import { formatLocalDateTime } from "@/server/merge/local-time";
 import { seasonWatchedState, toEpisodeWatched } from "@/server/merge/watched";
 import { getSeriesEpisodeWatched } from "@/server/plex/watched";
 import { ArrRequestError } from "@/server/arr/request";
+import { getTmdbConfig } from "@/server/settings/tmdb";
+import { getShowDetails, TmdbRequestError } from "@/server/tmdb/client";
+import { isTmdbNotFound } from "@/server/tmdb/errors";
 import { getSeriesDetail, type SeasonRow, type SeriesDetail, type SeriesDetailPage } from "@/server/arr/series-detail";
 
 export const metadata = { title: "TV" };
@@ -351,6 +356,39 @@ async function episodeWatchedFor(detail: SeriesDetail): Promise<Map<number, Watc
   return toEpisodeWatched(episodes, plexEpisodes);
 }
 
+/**
+ * The Cast section from TMDB, loaded on its own so the page doesn't wait for TMDB. Nothing when there is no TMDB
+ * token, Sonarr has no TMDB id, or TMDB doesn't know the id. Any other TMDB failure becomes a message in the section;
+ * a non-TMDB error is rethrown.
+ */
+async function SeriesCast({ tmdbId }: { tmdbId: number | null }) {
+  const config = getTmdbConfig();
+  if (config === null || tmdbId === null) return null;
+  let show: Awaited<ReturnType<typeof getShowDetails>>;
+  try {
+    show = await getShowDetails(config.token, tmdbId);
+  } catch (error) {
+    if (isTmdbNotFound(error)) return null;
+    if (!(error instanceof TmdbRequestError)) throw error;
+    // TmdbRequestError messages never contain the host, token or response body, so they are safe to log.
+    console.error(`TV series page: ${error.message}`);
+    return <CastRow members={[]} linkPeople={false} error="Couldn't load the cast from TMDB." />;
+  }
+  return (
+    <CastRow
+      linkPeople
+      members={show.cast.map((member) => ({
+        key: member.id,
+        personId: member.id,
+        name: member.name,
+        character: member.character,
+        episodes: member.episodes,
+        photo: member.photo,
+      }))}
+    />
+  );
+}
+
 function SeriesView({
   page,
   isAdmin,
@@ -398,6 +436,7 @@ function SeriesView({
         }
         activity={<SeriesActivitySummary episodeIds={episodeIds} title={detail.title} />}
         typeSection={
+          <>
           <section aria-label="Seasons" className="space-y-3">
             <h2 className="text-lg font-semibold">Seasons</h2>
             {watchFailed && (
@@ -421,6 +460,10 @@ function SeriesView({
               ))
             )}
           </section>
+          <Suspense fallback={null}>
+            <SeriesCast tmdbId={detail.tmdbId} />
+          </Suspense>
+          </>
         }
         facts={[
           { label: "Network", value: detail.network ?? "—" },

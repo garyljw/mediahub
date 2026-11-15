@@ -42,6 +42,7 @@ describe("toMovieCredits", () => {
       name: "Lena Vance",
       character: "Ilse Marrow",
       photo: "cDyZLf8ddz0EgoUjpv4jjzy7qxA.jpg",
+      personTmdbId: 17286,
     });
   });
 
@@ -60,7 +61,7 @@ describe("toMovieCredits", () => {
 
   it("returns only the id, name, character and photo for each cast member", () => {
     for (const member of result.cast) {
-      expect(Object.keys(member).sort()).toEqual(["character", "id", "name", "photo"]);
+      expect(Object.keys(member).sort()).toEqual(["character", "id", "name", "personTmdbId", "photo"]);
     }
   });
 
@@ -90,6 +91,17 @@ describe("toMovieCredits", () => {
       { id: 4, personName: "Has Order", order: 9, type: "cast" },
     ];
     expect(toMovieCredits(odd).cast.map((member) => member.name)).toEqual(["Has Order", "No Order"]);
+  });
+
+  it("gives the person's TMDB id, and null when it is missing or not a positive whole number", () => {
+    const odd = [
+      { id: 1, personName: "A", order: 0, type: "cast", personTmdbId: 77 },
+      { id: 2, personName: "B", order: 1, type: "cast" },
+      { id: 3, personName: "C", order: 2, type: "cast", personTmdbId: 0 },
+      { id: 4, personName: "D", order: 3, type: "cast", personTmdbId: -5 },
+      { id: 5, personName: "E", order: 4, type: "cast", personTmdbId: 1.5 },
+    ] as CreditResource[];
+    expect(toMovieCredits(odd).cast.map((member) => member.personTmdbId)).toEqual([77, null, null, null, null]);
   });
 
   it("returns empty lists for no credits", () => {

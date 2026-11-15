@@ -25,6 +25,7 @@ import { letterIndex } from "./letter";
 import { readPlace, usePlaceMemory, writePlace } from "./return-place";
 import { addHref } from "@/components/add/add-link";
 import { cn } from "@/lib/utils";
+import { chipClass } from "@/components/library/chip";
 import type { QueueActivity } from "@/server/arr/activity";
 import { HomeGridSkeleton } from "@/components/skeletons/page-skeletons";
 import {
@@ -60,16 +61,6 @@ const KIND_CHIPS: { kind: HomeKind; label: string }[] = [
 
 /** The Select value for "no genre filter". Radix Select items can't have an empty value. */
 const ALL_GENRES = "__all__";
-
-const CHIP_CLASS = "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
-
-/** A filter chip's classes, selected or not. Shared by the kind and watch-status chips so they stay alike. */
-function chipClass(selected: boolean): string {
-  return cn(
-    CHIP_CLASS,
-    selected ? "border-transparent bg-brand text-primary-foreground glow-brand" : "border-border bg-background text-foreground hover:bg-accent",
-  );
-}
 
 /**
  * The Home poster grid: movies and TV together, with instant search, a Filters panel (kind, watch status and genre) and a sort.

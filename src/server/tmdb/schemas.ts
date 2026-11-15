@@ -93,10 +93,14 @@ export const RegionsSchema = z
     results.map((r) => ({ code: r.iso_3166_1, name: r.english_name })).sort((a, b) => a.name.localeCompare(b.name)),
   );
 
-/** tvdb_id may be null or missing: the caller treats that as "can't add". */
+// TMDB sends 0 for a figure or id it doesn't know yet (seen live on an unreleased film's runtime). Anything that isn't a
+// whole number above 0 reads as null, and never fails the whole reply.
+const positiveOrNull = z.number().nullish().transform((v) => (v != null && Number.isInteger(v) && v > 0 ? v : null));
+
+/** tvdb_id may be null, missing or 0: the caller treats all three as "can't add". */
 export const ExternalIdsSchema = z
-  .object({ tvdb_id: z.number().int().positive().nullish() })
-  .transform(({ tvdb_id }) => ({ tvdbId: tvdb_id ?? null }));
+  .object({ tvdb_id: positiveOrNull })
+  .transform(({ tvdb_id }) => ({ tvdbId: tvdb_id }));
 
 // Detail pages. Everything optional is tolerated as null or "" (TMDB sends both). Image paths are reduced to a bare
 // ".jpg" file name for MediaHub's own image routes, and anything of another shape is dropped.
@@ -155,7 +159,6 @@ export type TmdbShowDetails = {
   cast: TmdbCastMember[];
 };
 
-const positiveOrNull = z.number().positive().nullish().transform((v) => v ?? null);
 const names = z
   .array(z.object({ name: z.string().nullish() }))
   .nullish()
@@ -192,6 +195,8 @@ export const MovieDetailsSchema = z
   })
   .transform((m): TmdbMovieDetails => {
     const cast = [...(m.credits?.cast ?? [])]
+      // An id that isn't positive can't open a person page, so the member is left out.
+      .filter((c) => c.id > 0)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
       .slice(0, MAX_CAST)
       .map((c) => ({ id: c.id, name: c.name, character: c.character, episodes: null, photo: imageFile(c.profile_path) }));
@@ -220,7 +225,7 @@ export const ShowDetailsSchema = z
     number_of_seasons: positiveOrNull,
     number_of_episodes: positiveOrNull,
     episode_run_time: z.array(z.number()).nullish(),
-    last_episode_to_air: z.object({ runtime: z.number().positive().nullish() }).nullish(),
+    last_episode_to_air: z.object({ runtime: positiveOrNull }).nullish(),
     genres: genreList,
     overview: z.string().nullish().transform((v) => v ?? ""),
     tagline: text,
@@ -248,6 +253,7 @@ export const ShowDetailsSchema = z
   })
   .transform((s): TmdbShowDetails => {
     const cast = [...(s.aggregate_credits?.cast ?? [])]
+      .filter((c) => c.id > 0)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
       .slice(0, MAX_CAST)
       .map((c) => {
@@ -279,4 +285,114 @@ export const ShowDetailsSchema = z
       createdBy: s.created_by,
       cast,
     };
+  });
+
+// Person pages. A person's details and their acting credits (cast only: crew is ignored).
+
+const DATE_TEXT = /^\d{4}-\d{2}-\d{2}$/;
+const dateOrNull = z
+  .string()
+  .nullish()
+  .transform((v) => (v && DATE_TEXT.test(v) ? v : null));
+
+export type TmdbPerson = {
+  id: number;
+  name: string;
+  /** May hold paragraph breaks ("\n\n"). "" when TMDB has none. */
+  biography: string;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  knownFor: string | null;
+  imdbId: string | null;
+  photoFile: string | null;
+};
+
+export const PersonDetailsSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    biography: z.string().nullish().transform((v) => v ?? ""),
+    birthday: dateOrNull,
+    deathday: dateOrNull,
+    place_of_birth: text,
+    known_for_department: text,
+    imdb_id: z
+      .string()
+      .nullish()
+      .transform((v) => (v && /^nm\d+$/.test(v) ? v : null)),
+    profile_path: z.string().nullish(),
+  })
+  .transform(
+    (p): TmdbPerson => ({
+      id: p.id,
+      name: p.name,
+      biography: p.biography.trim(),
+      birthday: p.birthday,
+      deathday: p.deathday,
+      placeOfBirth: p.place_of_birth,
+      knownFor: p.known_for_department,
+      imdbId: p.imdb_id,
+      photoFile: imageFile(p.profile_path),
+    }),
+  );
+
+export type TmdbPersonCredit = {
+  kind: "movie" | "tv";
+  tmdbId: number;
+  title: string;
+  date: string | null;
+  character: string | null;
+  episodes: number | null;
+  posterFile: string | null;
+  backdropFile: string | null;
+  genreIds: number[];
+  adult: boolean;
+};
+
+const PersonCreditItem = z.object({
+  media_type: z.enum(["movie", "tv"]),
+  id: z.number().int().positive(),
+  adult: z.boolean().nullish(),
+  character: z.string().nullish(),
+  title: z.string().nullish(),
+  name: z.string().nullish(),
+  release_date: z.string().nullish(),
+  first_air_date: z.string().nullish(),
+  // TMDB's date for this person's first appearance; the show's own first air date is the fallback.
+  first_credit_air_date: z.string().nullish(),
+  episode_count: z.number().nullish(),
+  poster_path: z.string().nullish(),
+  backdrop_path: z.string().nullish(),
+  genre_ids: genreIds,
+});
+
+export const PersonCreditsSchema = z
+  .object({ cast: z.array(z.unknown()).nullish() })
+  .transform(({ cast }): TmdbPersonCredit[] => {
+    const credits: TmdbPersonCredit[] = [];
+    // One odd item (an unknown media type, no title) is dropped; it must not fail the whole reply.
+    for (const raw of cast ?? []) {
+      const parsed = PersonCreditItem.safeParse(raw);
+      if (!parsed.success) continue;
+      const item = parsed.data;
+      const title = ((item.media_type === "movie" ? item.title : item.name) ?? "").trim();
+      if (title === "") continue;
+      const valid = (v: string | null | undefined) => (v && DATE_TEXT.test(v) ? v : null);
+      const date = item.media_type === "movie" ? valid(item.release_date) : (valid(item.first_credit_air_date) ?? valid(item.first_air_date));
+      const character = item.character?.trim() ?? "";
+      credits.push({
+        kind: item.media_type,
+        tmdbId: item.id,
+        title,
+        date,
+        character: character === "" ? null : character,
+        episodes: item.media_type === "tv" && item.episode_count && item.episode_count > 0 ? item.episode_count : null,
+        posterFile: imageFile(item.poster_path),
+        backdropFile: imageFile(item.backdrop_path),
+        genreIds: item.genre_ids,
+        adult: item.adult === true,
+      });
+    }
+    return credits;
   });

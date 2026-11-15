@@ -2,30 +2,8 @@ import type { ReactNode } from "react";
 import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
 import { navCrumb } from "@/components/breadcrumb/trail";
 import { ItemPageLayout } from "@/components/library/item-page";
-import { PersonPhoto } from "@/components/poster/person-photo";
+import { CastRow } from "@/components/library/cast-row";
 import type { TmdbCastMember } from "@/server/tmdb/schemas";
-
-/** The cast row, in the movie page's look. A show's members also show how many episodes they were in. */
-function CastRow({ cast }: { cast: TmdbCastMember[] }) {
-  if (cast.length === 0) return null;
-  return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-semibold">Cast</h2>
-      <ul className="flex snap-x gap-3 overflow-x-auto pb-2">
-        {cast.map((member) => (
-          <li key={member.id} className="w-24 shrink-0 snap-start sm:w-28">
-            <PersonPhoto src={member.photo === null ? null : `/api/movies/headshot/${member.photo}`} />
-            <p className="mt-1.5 line-clamp-2 text-sm font-medium">{member.name}</p>
-            {member.character !== null && <p className="line-clamp-2 text-xs text-muted-foreground">{member.character}</p>}
-            {member.episodes !== null && (
-              <p className="text-xs text-muted-foreground">{member.episodes === 1 ? "1 episode" : `${member.episodes} episodes`}</p>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 /**
  * A TMDB preview of a title that isn't in the library, in the item pages' layout. The page builds the lines and facts
@@ -70,7 +48,20 @@ export function PopularPreviewView({
       posterSrc={posterFile === null ? null : `/api/movies/lookup-poster/${posterFile}`}
       overview={overview}
       actions={actions}
-      typeSection={<CastRow cast={cast} />}
+      typeSection={
+        <CastRow
+          members={cast.map((member) => ({
+            key: member.id,
+            personId: member.id,
+            name: member.name,
+            character: member.character,
+            episodes: member.episodes,
+            photo: member.photo,
+          }))}
+          // A preview only renders when TMDB is set up, so person pages are there to open.
+          linkPeople
+        />
+      }
       facts={facts}
       links={links}
     />

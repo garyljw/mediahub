@@ -7,7 +7,7 @@ import { SectionSettled } from "@/components/popular/popular-place";
 import type { PopularSectionId } from "@/components/popular/popular-sections";
 import { PopularTiles } from "@/components/popular/popular-tiles";
 import { PosterGridSkeleton } from "@/components/skeletons/page-skeletons";
-import { cn } from "@/lib/utils";
+import { chipClass } from "@/components/library/chip";
 import {
   chooseService,
   movieTiles,
@@ -171,16 +171,6 @@ export async function UpcomingShows({ ctx }: { ctx: PopularContext }) {
 
 export async function ShowsOnThisWeek({ ctx }: { ctx: PopularContext }) {
   return <TileList ctx={ctx} source={showSource("this-week", ctx.showGenres, () => getShowsOnThisWeek(ctx.token, ctx.language))} />;
-}
-
-const CHIP_CLASS =
-  "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
-
-function chipClass(selected: boolean): string {
-  return cn(
-    CHIP_CLASS,
-    selected ? "border-transparent bg-brand text-primary-foreground glow-brand" : "border-border bg-background text-foreground hover:bg-accent",
-  );
 }
 
 /**

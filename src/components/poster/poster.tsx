@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Film } from "lucide-react";
+import { Film, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Peek } from "@/server/merge/peek";
 import { PEEK_HEIGHT, PEEK_WIDTH, PREVIEW_HEIGHT, PREVIEW_WIDTH } from "./poster-preview";
@@ -87,7 +87,16 @@ export function Poster({ src, size = "sm" }: { src: string | null; size?: "sm" |
  * `previewThumb` marks the image as a thumbnail for usePosterPreview, for lists that show tiles at thumbnail size
  * (the season cards).
  */
-export function PosterTile({ src, previewThumb = false }: { src: string | null; previewThumb?: boolean }) {
+export function PosterTile({
+  src,
+  previewThumb = false,
+  placeholder = "title",
+}: {
+  src: string | null;
+  previewThumb?: boolean;
+  /** The icon shown when there is no image: a film for a title (default), a person for a person. */
+  placeholder?: "title" | "person";
+}) {
   const { failed, loaded, imgRef, onLoad, onError } = usePosterImage(src);
 
   if (src !== null && !failed) {
@@ -114,7 +123,7 @@ export function PosterTile({ src, previewThumb = false }: { src: string | null; 
 
   return (
     <div aria-hidden className="flex aspect-[2/3] w-full items-center justify-center rounded-md bg-muted">
-      <Film className="size-8 text-muted-foreground/60" />
+      {placeholder === "person" ? <User className="size-8 text-muted-foreground/60" /> : <Film className="size-8 text-muted-foreground/60" />}
     </div>
   );
 }

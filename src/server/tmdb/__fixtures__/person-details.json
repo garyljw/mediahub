@@ -1,0 +1,16 @@
+{
+  "adult": false,
+  "also_known_as": ["M. Tester"],
+  "biography": "Mira Tester is a made-up actor.\n\nShe was born in a town that does not exist.",
+  "birthday": "1976-07-09",
+  "deathday": null,
+  "gender": 1,
+  "homepage": null,
+  "id": 900001,
+  "imdb_id": "nm0000001",
+  "known_for_department": "Acting",
+  "name": "Mira Tester",
+  "place_of_birth": "Faketown, Exampleland",
+  "popularity": 12.5,
+  "profile_path": "/abcTesterProfile123.jpg"
+}

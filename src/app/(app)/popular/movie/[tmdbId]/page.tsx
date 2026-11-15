@@ -4,6 +4,8 @@ import { listMovies } from "@/server/arr/movies";
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { loadMovieAddOptions } from "@/server/add/add-options";
 import { getTmdbConfig } from "@/server/settings/tmdb";
+import { isTmdbNotFound } from "@/server/tmdb/errors";
+import { tmdbIdParam } from "@/server/tmdb/ids";
 import { getMovieDetails } from "@/server/tmdb/client";
 import { yearOf } from "@/server/merge/popular";
 import { directorsLine, metaLine } from "@/components/library/detail-format";
@@ -12,9 +14,7 @@ import { PopularPreviewView } from "@/components/popular/preview-view";
 import { PreviewAdd } from "@/components/popular/preview-add";
 import {
   failureNotice,
-  isTmdbNotFound,
   NotSetUp,
-  tmdbIdParam,
 } from "../../preview";
 
 export const metadata = { title: "Popular" };

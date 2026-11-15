@@ -1,16 +1,8 @@
 import "server-only";
 import Link from "next/link";
-import { z } from "zod";
 import { TmdbRequestError, tmdbFailureFor } from "@/server/tmdb/errors";
 
 // Shared by the two Popular preview pages (a TMDB movie or show that isn't in the library).
-
-// Plain digits, positive, at most 100,000,000 (the same ceiling as the add actions). Anything else is not a title.
-export const tmdbIdParam = z
-  .string()
-  .regex(/^\d{1,9}$/)
-  .transform(Number)
-  .refine((n) => n > 0 && n <= 100_000_000);
 
 /** A heading with a "← Popular" link and a message, for the cases where there is nothing to preview. */
 export function PreviewNotice({ children, alert = false }: { children: React.ReactNode; alert?: boolean }) {
@@ -43,11 +35,6 @@ export function NotSetUp({ isAdmin }: { isAdmin: boolean }) {
       )}
     </PreviewNotice>
   );
-}
-
-/** True when TMDB answered 404: the title doesn't exist, so the page is the not-found page. */
-export function isTmdbNotFound(error: unknown): boolean {
-  return error instanceof TmdbRequestError && error.kind === "http" && error.status === 404;
 }
 
 /** The notice for a failed TMDB request. A non-TMDB error is rethrown. The log line holds only the safe message. */
