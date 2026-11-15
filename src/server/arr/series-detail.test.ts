@@ -33,7 +33,7 @@ vi.mock("@/server/settings/connections", () => ({
   getConnection: (app: "radarr" | "sonarr") => fakeConnections[app],
 }));
 
-import { getSeriesDetail, toSeriesDetail } from "./series-detail";
+import { findEpisode, getSeriesDetail, toSeriesDetail } from "./series-detail";
 import { sortedProfileOptions } from "./profiles";
 
 function detail(overrides: Partial<SeriesResource> = {}, episodeList: EpisodeResource[] = episodes) {
@@ -314,6 +314,22 @@ describe("toSeriesDetail", () => {
     expect(season1?.episodes[1]).toMatchObject({ quality: null, size: 0 });
   });
 
+  it("maps an episode's synopsis and length, with no synopsis for a missing one and no length for 0", () => {
+    const [episode] = episodes.filter((e) => e.id === 102);
+    const first = (overrides: Partial<EpisodeResource>) =>
+      detail({}, [{ ...episode, ...overrides }])?.seasons.find((s) => s.seasonNumber === 1)?.episodes[0];
+    expect(first({ overview: "  A made-up plot.\n", runtime: 44 })).toMatchObject({ overview: "A made-up plot.", runtime: 44 });
+    expect(first({ overview: undefined, runtime: 0 })).toMatchObject({ overview: "", runtime: null });
+    expect(first({ overview: null as unknown as string, runtime: undefined })).toMatchObject({ overview: "", runtime: null });
+  });
+
+  it("finds an episode and its season by id, and returns null for an id the series doesn't have", () => {
+    const found = findEpisode(detail()!, 201);
+    expect(found?.season.seasonNumber).toBe(2);
+    expect(found?.episode.id).toBe(201);
+    expect(findEpisode(detail()!, 999999)).toBeNull();
+  });
+
   it("uses TBA for a missing title and null for a missing air date", () => {
     const season1 = detail()?.seasons.find((s) => s.seasonNumber === 1);
     expect(season1?.episodes.find((e) => e.episodeNumber === 6)?.title).toBe("TBA");
@@ -383,6 +399,8 @@ describe("toSeriesDetail", () => {
         // A season Sonarr doesn't list has no monitored flag, so nothing in it is wanted.
         status: "unmonitored",
         monitored: true,
+        overview: "",
+        runtime: null,
         quality: null,
         size: 0,
         hasFile: false,

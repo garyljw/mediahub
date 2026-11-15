@@ -19,7 +19,7 @@ import {
 
 // How long a result note stays beside its control.
 const NOTE_MS = 4000;
-const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try again.";
+export const UNREACHABLE = "Couldn't reach MediaHub. Check your connection and try again.";
 
 /** A short result shown beside one control. `ok` picks the live-region role: a status when it worked, an alert when not. */
 type Note = { ok: boolean; text: string };

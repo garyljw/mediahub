@@ -1,9 +1,11 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { WATCHED_CLASS, WATCHED_LABEL, type WatchedState } from "@/components/home/home-items";
+import { WatchedBadge } from "@/components/tv/watched-badge";
+import { type WatchedState } from "@/components/home/home-items";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatAdded, formatCount, formatSize } from "@/components/library/format";
 import { metaLine, seriesRatingLine } from "@/components/library/detail-format";
@@ -36,13 +38,13 @@ import { requirePageUser } from "@/server/authz";
 import { listFocusIds } from "@/server/focus/focus";
 import { env } from "@/server/env";
 import { formatLocalDateTime } from "@/server/merge/local-time";
-import { seasonWatchedState, toEpisodeWatched } from "@/server/merge/watched";
-import { getSeriesEpisodeWatched } from "@/server/plex/watched";
+import { seasonWatchedState } from "@/server/merge/watched";
+import { episodeWatchedFor } from "@/server/plex/episode-watched";
 import { ArrRequestError } from "@/server/arr/request";
 import { getTmdbConfig } from "@/server/settings/tmdb";
 import { getShowDetails, TmdbRequestError } from "@/server/tmdb/client";
 import { isTmdbNotFound } from "@/server/tmdb/errors";
-import { getSeriesDetail, type SeasonRow, type SeriesDetail, type SeriesDetailPage } from "@/server/arr/series-detail";
+import { getSeriesDetail, type SeasonRow, type SeriesDetailPage } from "@/server/arr/series-detail";
 
 export const metadata = { title: "TV" };
 // The page waits for Sonarr and Plex before rendering; loading.tsx shows a placeholder meanwhile.
@@ -64,12 +66,6 @@ const HEAD = "h-8 border-b py-1.5 px-2";
 function seasonProgress(season: SeasonRow): number {
   if (season.episodeCount === 0) return 0;
   return Math.min(100, Math.round((season.episodeFileCount / season.episodeCount) * 100));
-}
-
-/** The Plex watched badge for one episode, or a muted dash when Plex has no state for it. */
-function WatchedBadge({ state }: { state: WatchedState | undefined }) {
-  if (state === undefined) return <span className="text-muted-foreground">—</span>;
-  return <Badge className={WATCHED_CLASS[state]}>{WATCHED_LABEL[state]}</Badge>;
 }
 
 function SeasonDetails({
@@ -176,7 +172,10 @@ function SeasonDetails({
               </span>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="font-medium">
-                  <span className="tabular-nums text-muted-foreground">{episode.episodeNumber}.</span> {episode.title}
+                  <span className="tabular-nums text-muted-foreground">{episode.episodeNumber}.</span>{" "}
+                  <Link href={`/tv/${seriesId}/episode/${episode.id}`} className="hover:underline">
+                    {episode.title}
+                  </Link>
                 </p>
                 <NarrowEpisodeFacts airDate={episode.airDate} quality={episode.quality} size={episode.size} />
                 <div className="flex flex-wrap items-center gap-2">
@@ -252,7 +251,9 @@ function SeasonDetails({
                   </TableCell>
                   <TableCell className={`${CELL} tabular-nums`}>{episode.episodeNumber}</TableCell>
                   <TableCell className={`${CELL} whitespace-normal`}>
-                    {episode.title}
+                    <Link href={`/tv/${seriesId}/episode/${episode.id}`} className="hover:underline">
+                      {episode.title}
+                    </Link>
                   </TableCell>
                   <TableCell className={`${CELL} tabular-nums text-muted-foreground`}>
                     {formatAdded(episode.airDate)}
@@ -335,25 +336,6 @@ function NarrowEpisodeFacts({
 /** An airing time in MediaHub's display time zone, or an em dash. Formatted here on the server, see CLAUDE.md. */
 function localTime(iso: string | null): string {
   return iso === null ? "—" : formatLocalDateTime(iso, env().DISPLAY_TIMEZONE);
-}
-
-/**
- * Each episode's Plex watched state. Null when there is no Plex connection, no TVDB id, or Plex doesn't list the
- * series (no column, no message). "failed" when Plex can't be read, which shows a status line instead.
- */
-async function episodeWatchedFor(detail: SeriesDetail): Promise<Map<number, WatchedState> | null | "failed"> {
-  if (detail.tvdbId === null) return null;
-  const plexEpisodes = await getSeriesEpisodeWatched(detail.tvdbId);
-  if (plexEpisodes === null || plexEpisodes === "failed") return plexEpisodes;
-  const episodes = detail.seasons.flatMap((season) =>
-    season.episodes.map((episode) => ({
-      id: episode.id,
-      tvdbId: episode.tvdbId,
-      seasonNumber: season.seasonNumber,
-      episodeNumber: episode.episodeNumber,
-    })),
-  );
-  return toEpisodeWatched(episodes, plexEpisodes);
 }
 
 /**

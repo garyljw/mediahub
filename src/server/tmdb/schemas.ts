@@ -287,6 +287,39 @@ export const ShowDetailsSchema = z
     };
   });
 
+// An episode's credits: the series regulars in that episode (cast), then its guests. Crew is ignored.
+
+const MAX_EPISODE_CAST = 30;
+
+const EpisodeCreditItem = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  character: text,
+  profile_path: z.string().nullish(),
+  order: z.number().nullish(),
+});
+
+export const EpisodeCreditsSchema = z
+  .object({
+    cast: z.array(EpisodeCreditItem).nullish(),
+    guest_stars: z.array(EpisodeCreditItem).nullish(),
+  })
+  .transform((credits): TmdbCastMember[] => {
+    const byOrder = (a: { order?: number | null }, b: { order?: number | null }) =>
+      (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+    const seen = new Set<number>();
+    const members: TmdbCastMember[] = [];
+    for (const list of [credits.cast, credits.guest_stars]) {
+      for (const c of [...(list ?? [])].sort(byOrder)) {
+        // An id that isn't positive can't open a person page. A person in both lists shows once, as a regular.
+        if (c.id <= 0 || seen.has(c.id)) continue;
+        seen.add(c.id);
+        members.push({ id: c.id, name: c.name, character: c.character, episodes: null, photo: imageFile(c.profile_path) });
+      }
+    }
+    return members.slice(0, MAX_EPISODE_CAST);
+  });
+
 // Person pages. A person's details and their acting credits (cast only: crew is ignored).
 
 const DATE_TEXT = /^\d{4}-\d{2}-\d{2}$/;

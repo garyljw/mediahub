@@ -1,0 +1,16 @@
+{
+  "id": 5550001,
+  "cast": [
+    { "id": 900102, "name": "Ben Sample", "character": "Mate Fake", "profile_path": "/abcBenProfile123.jpg", "order": 1, "credit_id": "fake-credit-2" },
+    { "id": 900101, "name": "Ana Example", "character": "Captain Test", "profile_path": "/abcAnaProfile123.jpg", "order": 0, "credit_id": "fake-credit-1" }
+  ],
+  "guest_stars": [
+    { "id": 900202, "name": "Di Guest", "character": "", "profile_path": "/abcDiProfile123.jpg", "order": 6, "credit_id": "fake-credit-4" },
+    { "id": 900201, "name": "Cy Guest", "character": "Harbour Master", "profile_path": null, "order": 5, "credit_id": "fake-credit-3" },
+    { "id": 900101, "name": "Ana Example", "character": "Captain Test (flashback)", "profile_path": "/abcAnaProfile123.jpg", "order": 7, "credit_id": "fake-credit-5" },
+    { "id": 0, "name": "Nobody Known", "character": "Extra", "profile_path": null, "order": 8, "credit_id": "fake-credit-6" }
+  ],
+  "crew": [
+    { "id": 900301, "name": "Eve Director", "job": "Director", "department": "Directing", "profile_path": "/abcEveProfile123.jpg", "credit_id": "fake-credit-7" }
+  ]
+}

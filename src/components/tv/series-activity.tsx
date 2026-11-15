@@ -21,6 +21,16 @@ export function SeriesActivityProvider({ seriesId, children }: { seriesId: numbe
   return <SeriesActivityContext.Provider value={activity}>{children}</SeriesActivityContext.Provider>;
 }
 
+/** The warning shown when the last queue poll failed. */
+function ActivityFailedLine() {
+  return (
+    <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
+      <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+      Couldn&apos;t update activity from Sonarr.
+    </p>
+  );
+}
+
 /** One episode row's Activity cell. `name` labels its progress bar, e.g. "Season 1 episode 4". */
 export function EpisodeActivityCell({ episodeId, name }: { episodeId: number; name: string }) {
   const { byId } = useContext(SeriesActivityContext);
@@ -31,6 +41,19 @@ export function EpisodeActivityCell({ episodeId, name }: { episodeId: number; na
 export function EpisodeActivityLine({ episodeId, name }: { episodeId: number; name: string }) {
   const { byId } = useContext(SeriesActivityContext);
   return <ActivityBlock name={name} activity={byId.get(episodeId)} />;
+}
+
+/**
+ * An episode page's queue line. The episode's own queue block when it is queued; otherwise a warning when the last
+ * poll failed, like the series line; otherwise nothing.
+ */
+export function EpisodeHeroActivity({ episodeId, name }: { episodeId: number; name: string }) {
+  const { byId, failed } = useContext(SeriesActivityContext);
+  const activity = byId.get(episodeId);
+  if (activity === undefined) {
+    return failed ? <ActivityFailedLine /> : null;
+  }
+  return <ActivityBlock name={name} activity={activity} />;
 }
 
 /** The Activity column header for an episode table. */
@@ -69,13 +92,7 @@ export function SeriesActivitySummary({ episodeIds, title }: { episodeIds: numbe
   const summary = seasonActivitySummary(byId, episodeIds);
 
   if (summary === null) {
-    if (!failed) return null;
-    return (
-      <p role="status" className="inline-flex items-center gap-1.5 text-sm text-amber-800 dark:text-amber-300">
-        <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
-        Couldn&apos;t update activity from Sonarr.
-      </p>
-    );
+    return failed ? <ActivityFailedLine /> : null;
   }
 
   const Icon = ACTIVITY_ICON[summary.state];
