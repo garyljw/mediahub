@@ -7,6 +7,25 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.14.0",
+    date: "2026-11-15",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Episode pages:** click an episode's title on a series page to open its own page, laid out like a movie page with the show's poster and backdrop: the episode's synopsis, status, file details and cast.",
+            details: [
+              "The cast lists the episode's regulars, then its guest stars, from TMDB. Click a photo to open that person's page. It needs the TMDB token in **Settings → Connections**, and is left out when TMDB numbers the episode differently from Sonarr.",
+              "The same episode actions as the series page: **Search** for everyone; **Pick a release…**, **Monitor** / **Unmonitor** and **Delete file…** for admins.",
+              "With Plex connected, the page shows whether you've watched the episode.",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.13.0",
     date: "2026-11-15",
     sections: [

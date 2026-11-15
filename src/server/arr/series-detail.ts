@@ -22,6 +22,10 @@ export type EpisodeRow = {
   episodeNumber: number;
   /** "TBA" when Sonarr has no title. */
   title: string;
+  /** The episode's synopsis, trimmed. "" when Sonarr sends none. */
+  overview: string;
+  /** The episode's length in minutes when Sonarr sends a whole number above 0, otherwise null. */
+  runtime: number | null;
   /** The local date it aired, "YYYY-MM-DD", or null. */
   airDate: string | null;
   status: EpisodeStatus;
@@ -122,6 +126,8 @@ function toEpisodeRow(episode: EpisodeResource, id: number, episodeNumber: numbe
     id,
     episodeNumber,
     title: episode.title || "TBA",
+    overview: episode.overview?.trim() ?? "",
+    runtime: typeof episode.runtime === "number" && Number.isInteger(episode.runtime) && episode.runtime > 0 ? episode.runtime : null,
     // The local date, not airDateUtc: a 9pm US airing is already the next day in UTC.
     airDate: episode.airDate && AIR_DATE.test(episode.airDate) ? episode.airDate : null,
     status,
@@ -239,6 +245,15 @@ export function toSeriesDetail(
     tmdbId: positiveIdOrNull(series.tmdbId),
     seasons,
   };
+}
+
+/** One episode with the season it belongs to, by Sonarr episode id. Null when the series has no such episode. */
+export function findEpisode(detail: SeriesDetail, episodeId: number): { season: SeasonRow; episode: EpisodeRow } | null {
+  for (const season of detail.seasons) {
+    const episode = season.episodes.find((e) => e.id === episodeId);
+    if (episode) return { season, episode };
+  }
+  return null;
 }
 
 /** What the series page loads: the series, and the quality profiles the settings form offers (the page only uses them for admins). */

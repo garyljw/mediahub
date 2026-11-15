@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { TmdbRequestError, type TmdbFailureKind } from "./errors";
 import {
   AuthenticationSchema,
+  EpisodeCreditsSchema,
   ExternalIdsSchema,
   GenresSchema,
   EXCLUDED_MOVIE_GENRES,
@@ -15,6 +16,7 @@ import {
   ProvidersSchema,
   RegionsSchema,
   TvListSchema,
+  type TmdbCastMember,
   type TmdbMovie,
   type TmdbMovieDetails,
   type TmdbPerson,
@@ -184,6 +186,31 @@ export function getGenres(token: string, kind: "movie" | "tv"): Promise<Map<numb
 /** One movie's page facts and cast. Cached for a day. A TMDB 404 is a TmdbRequestError with status 404. */
 export function getMovieDetails(token: string, id: number): Promise<TmdbMovieDetails> {
   return cachedGet("movie details", `/movie/${id}`, token, MovieDetailsSchema, { language: "en-US", append_to_response: "credits" }, TVDB_TTL_MS);
+}
+
+/** The TVDB id TMDB has for one episode, or null. Used to check TMDB numbers the episode like Sonarr does. A TMDB 404 is a TmdbRequestError with status 404. */
+export async function getEpisodeTvdbId(token: string, tmdbSeriesId: number, seasonNumber: number, episodeNumber: number): Promise<number | null> {
+  const ids = await cachedGet(
+    "episode external ids",
+    `/tv/${tmdbSeriesId}/season/${seasonNumber}/episode/${episodeNumber}/external_ids`,
+    token,
+    ExternalIdsSchema,
+    {},
+    TVDB_TTL_MS,
+  );
+  return ids.tvdbId;
+}
+
+/** One episode's cast: the series regulars in it, then its guests. Cached for a day. A TMDB 404 is a TmdbRequestError with status 404. */
+export function getEpisodeCredits(token: string, tmdbSeriesId: number, seasonNumber: number, episodeNumber: number): Promise<TmdbCastMember[]> {
+  return cachedGet(
+    "episode credits",
+    `/tv/${tmdbSeriesId}/season/${seasonNumber}/episode/${episodeNumber}/credits`,
+    token,
+    EpisodeCreditsSchema,
+    { language: "en-US" },
+    TVDB_TTL_MS,
+  );
 }
 
 /** One show's page facts and cast. Cached for a day. A TMDB 404 is a TmdbRequestError with status 404. */

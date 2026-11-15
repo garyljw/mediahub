@@ -1,5 +1,6 @@
 import "server-only";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import episodeCredits from "./__fixtures__/episode-credits.json";
 import externalIds from "./__fixtures__/external-ids.json";
 import externalIdsNull from "./__fixtures__/external-ids-null.json";
 import movieList from "./__fixtures__/movie-list.json";
@@ -19,6 +20,8 @@ import {
   discoverMovies,
   discoverShows,
   fetchRegions,
+  getEpisodeCredits,
+  getEpisodeTvdbId,
   getGenres,
   getMovieDetails,
   getPerson,
@@ -35,6 +38,7 @@ import {
   TmdbRequestError,
   validateToken,
 } from "./client";
+import { isTmdbNotFound } from "./errors";
 
 const TOKEN = "fake-tmdb-token-0123456789abcdef";
 
@@ -217,6 +221,40 @@ describe("detail pages", () => {
       json({ ...tvDetails, number_of_seasons: 0, number_of_episodes: 0, episode_run_time: [], last_episode_to_air: { runtime: 0 } }),
     );
     expect(await getShowDetails(TOKEN, 84773)).toMatchObject({ seasons: null, episodes: null, runtime: null });
+  });
+});
+
+describe("episode credits", () => {
+  it("lists the regulars, then the guests, each in order, without duplicates, bad ids or crew", async () => {
+    stubFetch(() => json(episodeCredits));
+    expect(await getEpisodeCredits(TOKEN, 84773, 1, 2)).toEqual([
+      { id: 900101, name: "Ana Example", character: "Captain Test", episodes: null, photo: "abcAnaProfile123.jpg" },
+      { id: 900102, name: "Ben Sample", character: "Mate Fake", episodes: null, photo: "abcBenProfile123.jpg" },
+      { id: 900201, name: "Cy Guest", character: "Harbour Master", episodes: null, photo: null },
+      { id: 900202, name: "Di Guest", character: null, episodes: null, photo: "abcDiProfile123.jpg" },
+    ]);
+  });
+
+  it("asks for the English reply at the episode's credits path, and reports a missing episode as a not-found error", async () => {
+    const mock = stubFetch(() => json(episodeCredits));
+    await getEpisodeCredits(TOKEN, 84773, 0, 5);
+    const url = new URL(String(mock.mock.calls[0][0]));
+    expect(url.pathname).toBe("/3/tv/84773/season/0/episode/5/credits");
+    expect(url.searchParams.get("language")).toBe("en-US");
+    clearTmdbCache();
+    stubFetch(() => json({ success: false, status_code: 34 }, 404));
+    const error = await getEpisodeCredits(TOKEN, 84773, 9, 9).catch((e: unknown) => e);
+    expect(isTmdbNotFound(error)).toBe(true);
+  });
+});
+
+describe("episode external ids", () => {
+  it("asks for the episode's external ids and returns its TVDB id", async () => {
+    const mock = stubFetch(() => json({ id: 1, imdb_id: "tt0000001", tvdb_id: 7700123 }));
+    expect(await getEpisodeTvdbId(TOKEN, 84773, 2, 3)).toBe(7700123);
+    const url = new URL(String(mock.mock.calls[0][0]));
+    expect(url.pathname).toBe("/3/tv/84773/season/2/episode/3/external_ids");
+    expect(url.search).toBe("");
   });
 });
 
