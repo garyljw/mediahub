@@ -96,6 +96,7 @@ const PAGE_ROLES: Record<string, string[]> = {
   "settings/page.tsx": ["admin"],
   "settings/connections/page.tsx": ["admin"],
   "settings/add-defaults/page.tsx": ["admin"],
+  "settings/popular/page.tsx": ["admin"],
   "settings/users/page.tsx": ["admin"],
   "settings/updates/page.tsx": ["admin"],
   "settings/system/page.tsx": ["admin"],

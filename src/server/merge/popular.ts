@@ -124,32 +124,55 @@ export function showTiles(
 export const SERVICE_LIMIT = 12;
 
 /**
- * The services to offer for one kind (movies or TV) in a country: the most prominent first (TMDB's display priority for that country, then name),
- * cut to SERVICE_LIMIT. This is the only place the providers are sorted.
+ * The services in the order the Popular page ranks them: TMDB's display priority for the country, then name. This is the
+ * only place the providers are sorted.
  */
-export function popularServices(
-  providers: readonly TmdbProvider[],
-  region: string,
-): TmdbProvider[] {
+export function rankServices(providers: readonly TmdbProvider[], region: string): TmdbProvider[] {
   // TMDB ranks services per country (display_priorities), and also has one global rank. The country's rank wins.
-  const rank = (p: TmdbProvider) =>
-    p.displayPriorities[region] ?? p.displayPriority;
-  return [...providers]
-    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-    .slice(0, SERVICE_LIMIT);
+  const rank = (p: TmdbProvider) => p.displayPriorities[region] ?? p.displayPriority;
+  return [...providers].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
-/** The Netflix id, the default service when the country has it. */
+/** The movie and TV services as one ranked list. A service in both appears once. */
+export function mergeServices(
+  movie: readonly TmdbProvider[],
+  tv: readonly TmdbProvider[],
+  region: string,
+): TmdbProvider[] {
+  const byId = new Map<number, TmdbProvider>();
+  for (const p of [...movie, ...tv]) if (!byId.has(p.id)) byId.set(p.id, p);
+  return rankServices([...byId.values()], region);
+}
+
+/**
+ * The services to offer for one kind (movies or TV) in a country. With no chosen ids: the most prominent SERVICE_LIMIT.
+ * With chosen ids: those of them TMDB offers for this kind, in the chosen order.
+ */
+export function offeredServices(
+  providers: readonly TmdbProvider[],
+  region: string,
+  chosenIds: readonly number[],
+): TmdbProvider[] {
+  if (chosenIds.length === 0) return rankServices(providers, region).slice(0, SERVICE_LIMIT);
+  const byId = new Map(providers.map((p) => [p.id, p]));
+  return chosenIds.flatMap((id) => byId.get(id) ?? []);
+}
+
+/** The Netflix id, the default service when the country has it and no list is chosen. */
 const NETFLIX_ID = 8;
 
-/** The requested service when it is on offer, else Netflix if offered, else the first. Null when there are none. */
+/**
+ * The requested service when it is on offer. Otherwise Netflix if offered (only when no list is chosen: a chosen list
+ * starts at its first service), else the first. Null when there are none.
+ */
 export function chooseService(
   services: readonly TmdbProvider[],
   requestedId: number | null,
+  preferNetflix = true,
 ): TmdbProvider | null {
   return (
     services.find((s) => s.id === requestedId) ??
-    services.find((s) => s.id === NETFLIX_ID) ??
+    (preferNetflix ? services.find((s) => s.id === NETFLIX_ID) : undefined) ??
     services[0] ??
     null
   );
