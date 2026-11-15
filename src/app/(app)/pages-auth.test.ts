@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -103,7 +103,7 @@ const PAGE_ROLES: Record<string, string[]> = {
 };
 
 describe("(app) pages", () => {
-  const pages = findPageFiles(APP_DIR).map((page) => page.slice(APP_DIR.length + 1));
+  const pages = findPageFiles(APP_DIR).map((page) => relative(APP_DIR, page).split(sep).join("/"));
 
   it("finds the expected pages, so the checks below cannot pass vacuously", () => {
     expect(pages.length).toBeGreaterThanOrEqual(7);
