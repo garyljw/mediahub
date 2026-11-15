@@ -1,9 +1,23 @@
 // The breadcrumb trail: the pages the user has stepped through in this tab, so a page can show how they got there.
 // Client-safe: browser storage only, no imports from src/server. Which pages can appear is not listed anywhere: the
 // roots are the nav items, and every other crumb is a page that renders a Breadcrumb with its own label.
+import { NAV_ITEMS } from "@/components/app-shell/nav";
 
 /** One page in the trail. `path` is a pathname (no query string); `label` is the text shown for it. */
 export type Crumb = { path: string; label: string };
+
+/**
+ * The nav item with this path, as a crumb (Home when there is none), for pages whose trail starts somewhere other than
+ * Home. It lives here, not in breadcrumb.tsx, because server components call it, and a function exported from a
+ * "use client" file can't run on the server.
+ */
+export function navCrumb(href: string): Crumb {
+  const item = NAV_ITEMS.find((entry) => entry.href === href) ?? NAV_ITEMS[0];
+  return { path: item.href, label: item.label };
+}
+
+/** The first crumb when a page names no other: Home. */
+export const DEFAULT_ROOT: Crumb = navCrumb("/");
 
 /** A plain click from one page to another, recorded when the link is clicked. */
 export type Step = { from: string; to: string };

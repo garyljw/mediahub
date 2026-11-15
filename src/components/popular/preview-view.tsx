@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Breadcrumb, navCrumb } from "@/components/breadcrumb/breadcrumb";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 import { ItemPageLayout } from "@/components/library/item-page";
 import { PersonPhoto } from "@/components/poster/person-photo";
 import type { TmdbCastMember } from "@/server/tmdb/schemas";
