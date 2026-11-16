@@ -23,7 +23,8 @@ function buzz() {
  * The A–Z jump bar for Home, when it is sorted by title. `index` maps each letter to the first shown tile with that letter.
  * Tap a letter to jump to it. On touch, press and drag along the bar: the letter under the finger is worked out from its
  * height, over every letter (not from what is under the finger), and the page jumps as the letter changes. Letters with no
- * titles are dimmed and jump to the next letter that has some, in the bar's order.
+ * titles are dimmed and jump to the next letter that has some, in the bar's order. The bubble clears on any sign the press
+ * ended, because iOS doesn't always deliver pointerup to the bar after a tap.
  */
 export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: ReadonlyMap<string, string> }) {
   const order = letterOrder(dir);
@@ -31,6 +32,8 @@ export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: Readonly
   const navRef = useRef<HTMLElement>(null);
   // The drag in progress, and the letter it last landed on, so a move within one letter does nothing.
   const drag = useRef<{ last: string | null } | null>(null);
+  // Removes the window listeners that watch for the end of the press, while one is active.
+  const stopWatching = useRef<(() => void) | null>(null);
   const [bubble, setBubble] = useState<string | null>(null);
   // Too short for every letter: show every other one, with a dot between. Every letter still resolves by position.
   const [short, setShort] = useState(false);
@@ -45,6 +48,9 @@ export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: Readonly
     observer.observe(nav);
     return () => observer.disconnect();
   }, []);
+
+  // Drop any window listeners if the bar goes away mid-press.
+  useEffect(() => () => stopWatching.current?.(), []);
 
   function jumpTo(letter: string) {
     const target = jumpLetter(letter, order, available);
@@ -80,10 +86,30 @@ export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: Readonly
     // Capture, so the move and up events keep coming to the bar even when the finger leaves it.
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { last: null };
+    // A quick tap on iOS can end without the bar seeing pointerup, so the end of this press anywhere clears it. Another
+    // finger lifting elsewhere doesn't: only this pointer, or the last touch on the screen, counts.
+    stopWatching.current?.();
+    const pointerId = event.pointerId;
+    const onPointerEnd = (end: globalThis.PointerEvent) => {
+      if (end.pointerId === pointerId) endDrag();
+    };
+    const onTouchEnd = (end: TouchEvent) => {
+      if (end.touches.length === 0) endDrag();
+    };
+    const pointerNames = ["pointerup", "pointercancel"] as const;
+    const touchNames = ["touchend", "touchcancel"] as const;
+    for (const name of pointerNames) window.addEventListener(name, onPointerEnd);
+    for (const name of touchNames) window.addEventListener(name, onTouchEnd, { passive: true });
+    stopWatching.current = () => {
+      for (const name of pointerNames) window.removeEventListener(name, onPointerEnd);
+      for (const name of touchNames) window.removeEventListener(name, onTouchEnd);
+    };
     moveTo(event.clientY);
   }
 
   function endDrag() {
+    stopWatching.current?.();
+    stopWatching.current = null;
     drag.current = null;
     setBubble(null);
   }
@@ -99,6 +125,7 @@ export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: Readonly
         }}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
         className="fixed top-4 right-0.5 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex w-6 touch-none flex-col items-center select-none lg:bottom-4"
       >
         {order.map((letter, position) => {
@@ -109,7 +136,11 @@ export function LetterBar({ dir, index }: { dir: "asc" | "desc"; index: Readonly
               key={letter}
               type="button"
               aria-label={letter === "#" ? "Jump to numbers and symbols" : `Jump to ${letter}`}
-              onClick={() => jumpTo(letter)}
+              onClick={() => {
+                // A click means the press is over, so clear the bubble too.
+                endDrag();
+                jumpTo(letter);
+              }}
               className={cn(
                 "flex min-h-0 w-full flex-1 items-center justify-center rounded-sm text-[10px] leading-none font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                 !has && "opacity-40",
