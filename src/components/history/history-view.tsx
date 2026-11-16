@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useState, useTransition, type HTMLAttributes } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { markHistoryFailed } from "@/app/(app)/history/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
 import { PosterLink } from "@/components/poster/poster-link";
-import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { toggleOnClick, CELL, HEAD, SELECT_CLASS } from "@/components/library/table-parts";
 import type { HistoryDetails, HistoryEntry } from "@/server/merge/history";
 import {
@@ -53,15 +52,12 @@ function DetailList({ details }: { details: HistoryDetails }) {
 /** One history event on narrow screens: the title and facts (all wrapping), the expand button, and Mark as failed. */
 function HistoryCard({
   entry,
-  previewHandlers,
   isOpen,
   canMarkFailed,
   onToggle,
   onMarkFailed,
 }: {
   entry: HistoryEntry;
-  /** The poster hover preview's handlers (mouse only), as on the table rows. */
-  previewHandlers: HTMLAttributes<HTMLLIElement>;
   isOpen: boolean;
   canMarkFailed: boolean;
   onToggle: () => void;
@@ -69,12 +65,12 @@ function HistoryCard({
 }) {
   const detailsId = `history-card-details-${entry.key}`;
   return (
-    <li className="cursor-pointer rounded-xl border bg-card p-3" {...previewHandlers} onClick={toggleOnClick(onToggle)}>
+    <li className="cursor-pointer rounded-xl border bg-card p-3" onClick={toggleOnClick(onToggle)}>
       <div className="flex gap-3">
         <PosterLink href={entry.href}>
           <Poster src={entry.posterSrc} />
         </PosterLink>
-        <div className="flex min-w-0 flex-1 items-start gap-2" data-poster-anchor>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="min-w-0 break-words font-medium">
@@ -149,15 +145,11 @@ export function HistoryView({
   const [shownTarget, setShownTarget] = useState<HistoryEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const posterPreview = usePosterPreview<string>();
 
   // The desktop table's columns: When, Poster and Title. The expanded details row spans all of them.
   const columnCount = 3;
   const appName = shownTarget?.app === "sonarr" ? "Sonarr" : "Radarr";
   const release = shownTarget?.details.sourceTitle ?? shownTarget?.title ?? "";
-  // The preview belongs to a row. Hide it when that row is gone (for example after a filter change).
-  const previewVisible =
-    posterPreview.activeKey !== null && entries.some((entry) => entry.key === posterPreview.activeKey);
 
   function go(next: HistoryParams) {
     router.push(historyHref(next));
@@ -322,11 +314,6 @@ export function HistoryView({
           {entries.map((entry) => (
             <HistoryCard
               key={entry.key}
-              previewHandlers={posterPreview.rowHandlers(entry.key, entry.posterSrc, {
-                title: entry.title,
-                kind: entry.kind === "movie" ? "movie" : "series",
-                peek: entry.peek,
-              })}
               entry={entry}
               isOpen={expanded.has(entry.key)}
               canMarkFailed={canMarkFailed}
@@ -381,8 +368,6 @@ export function HistoryView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {previewVisible && posterPreview.preview}
     </div>
   );
 }
