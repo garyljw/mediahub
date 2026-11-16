@@ -124,7 +124,7 @@ export default async function EpisodePage({ params }: { params: Promise<{ id: st
   return (
     <SeriesActivityProvider key={detail.id} seriesId={detail.id}>
       <ItemPageLayout
-        breadcrumb={<Breadcrumb label={`${detail.title} · ${code}`} parents={[{ path: `/tv/${detail.id}`, label: detail.title }]} />}
+        breadcrumb={<Breadcrumb label={`${detail.title} · ${code}`} parent={{ path: `/tv/${detail.id}`, label: detail.title }} />}
         title={episode.title}
         year={null}
         meta={metaLine({

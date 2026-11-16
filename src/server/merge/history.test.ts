@@ -147,6 +147,12 @@ describe("toHistoryEntries", () => {
     expect(entry.href).toBe("/tv/201");
   });
 
+  it("uses the nested episode's id when the record's episodeId is 0", () => {
+    const record = { ...episodeRecords[0], episodeId: 0, episode: { ...episodeRecords[0].episode, id: 301 } } as EpisodeHistoryRecord;
+    const [entry] = toHistoryEntries([], [record], 10, LONDON);
+    expect(entry.href).toBe("/tv/201/episode/301");
+  });
+
   it("names a movie that is missing from the record, with no poster or detail", () => {
     expect(find("movie-7")).toMatchObject({ title: "Unknown movie", detail: "", posterSrc: null, href: null });
   });

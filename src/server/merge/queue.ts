@@ -6,6 +6,7 @@ import { episodeCode } from "@/components/library/release";
 import { compareQueueRows, type QueueRow, type QueueRowDetails } from "@/components/queue/queue-rows";
 import { hasPoster } from "./images";
 import { canManualImport } from "./manual-import";
+import { validId } from "./ids";
 import { toPeek } from "./peek";
 
 export type { QueueRow, QueueRowDetails };
@@ -14,10 +15,6 @@ type MovieQueueItem = RadarrComponents["schemas"]["QueueResource"];
 type EpisodeQueueItem = SonarrComponents["schemas"]["QueueResource"];
 
 /** A positive integer id, or null. */
-function validId(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
-}
-
 /** A non-negative integer, or null. Used for season and episode numbers (season 0 is specials). */
 function countOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;

@@ -5,6 +5,7 @@ import { formatSize } from "@/components/library/format";
 import { episodeCode } from "@/components/library/release";
 import type { HistoryEventFilter } from "@/components/history/history-params";
 import { hasPoster } from "./images";
+import { validId } from "./ids";
 import { toPeek, type Peek } from "./peek";
 import { formatLocalDateTime } from "./local-time";
 
@@ -219,8 +220,7 @@ function episodeSortable(record: EpisodeHistoryRecord, timeZone: string): Sortab
   const episode = record.episode;
   const series = record.series;
   const seriesId = typeof series?.id === "number" ? series.id : null;
-  const rawEpisodeId = record.episodeId ?? episode?.id;
-  const episodeId = typeof rawEpisodeId === "number" && Number.isSafeInteger(rawEpisodeId) && rawEpisodeId > 0 ? rawEpisodeId : null;
+  const episodeId = validId(record.episodeId) ?? validId(episode?.id);
   const event = eventOf(record.eventType);
   const season = episode?.seasonNumber;
   const number = episode?.episodeNumber;
