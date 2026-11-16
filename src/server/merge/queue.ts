@@ -207,7 +207,9 @@ export function toQueueRows(
       kind: "episodes",
       title: nonEmpty(seriesSource.series?.title) ?? "Unknown series",
       detail: episodeDetail(episodes),
-      href: seriesId !== null ? `/tv/${seriesId}` : null,
+      // One episode opens its own page. A season pack (several episodes) or no known episode opens the series page.
+      href:
+        seriesId === null ? null : episodes.length === 1 ? `/tv/${seriesId}/episode/${episodes[0].id}` : `/tv/${seriesId}`,
       posterSrc: seriesId !== null && hasPoster(seriesSource.series?.images) ? `/api/tv/${seriesId}/poster` : null,
       peek: toPeek(seriesSource.series),
       ...factsOf(winner, state, severity, now, includeDetails),

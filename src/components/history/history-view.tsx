@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
+import { PosterLink } from "@/components/poster/poster-link";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { toggleOnClick, CELL, HEAD, SELECT_CLASS } from "@/components/library/table-parts";
 import type { HistoryDetails, HistoryEntry } from "@/server/merge/history";
@@ -70,7 +71,9 @@ function HistoryCard({
   return (
     <li className="cursor-pointer rounded-xl border bg-card p-3" {...previewHandlers} onClick={toggleOnClick(onToggle)}>
       <div className="flex gap-3">
-        <Poster src={entry.posterSrc} />
+        <PosterLink href={entry.href}>
+          <Poster src={entry.posterSrc} />
+        </PosterLink>
         <div className="flex min-w-0 flex-1 items-start gap-2" data-poster-anchor>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -248,7 +251,9 @@ export function HistoryView({
                   >
                     <TableCell className={`${CELL} align-top whitespace-nowrap text-muted-foreground`}>{entry.when}</TableCell>
                     <TableCell className={`${CELL} align-top`}>
-                      <Poster src={entry.posterSrc} size="lg" />
+                      <PosterLink href={entry.href}>
+                        <Poster src={entry.posterSrc} size="lg" />
+                      </PosterLink>
                     </TableCell>
                     {/* Everything about the event sits beside the poster, so on a wide screen nothing is far from the
                         title. The synopsis is in the row, so the table needs no hover preview. */}

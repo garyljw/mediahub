@@ -106,12 +106,12 @@ describe("toHistoryEntries", () => {
     });
   });
 
-  it("shows an episode with its code, title, series link and poster route", () => {
+  it("shows an episode with its code, title, episode link and poster route", () => {
     expect(find("episode-1")).toMatchObject({
       title: "Harbour Lights",
       detail: "S02E05 · Tidewater",
       posterSrc: "/api/tv/201/poster",
-      href: "/tv/201",
+      href: "/tv/201/episode/301",
     });
   });
 
@@ -136,9 +136,15 @@ describe("toHistoryEntries", () => {
     expect(find("episode-8").peek).toBeNull();
   });
 
-  it("gives no poster when the included resource has none, and still links the series", () => {
+  it("gives no poster when the included resource has none, and still links the episode", () => {
     expect(find("movie-2").posterSrc).toBeNull();
-    expect(find("episode-4")).toMatchObject({ posterSrc: null, href: "/tv/202" });
+    expect(find("episode-4")).toMatchObject({ posterSrc: null, href: "/tv/202/episode/304" });
+  });
+
+  it("links the series page when the record has no episode id", () => {
+    const record = { ...episodeRecords[0], episodeId: undefined, episode: undefined } as EpisodeHistoryRecord;
+    const [entry] = toHistoryEntries([], [record], 10, LONDON);
+    expect(entry.href).toBe("/tv/201");
   });
 
   it("names a movie that is missing from the record, with no poster or detail", () => {

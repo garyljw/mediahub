@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
 import { formatAdded } from "@/components/library/format";
 import { ItemPageLayout } from "@/components/library/item-page";
 import { FilmographyView } from "@/components/person/filmography-view";
@@ -32,6 +33,7 @@ function settle<T>(load: Promise<T>): Promise<Settled<T>> {
 function PeopleNotice({ children, alert = false }: { children: React.ReactNode; alert?: boolean }) {
   return (
     <div className="space-y-4">
+      <Breadcrumb label="People" />
       <h1 className="text-2xl font-semibold tracking-tight">People</h1>
       <p role={alert ? "alert" : undefined} className={alert ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
         {children}

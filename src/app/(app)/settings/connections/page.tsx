@@ -10,6 +10,8 @@ import { AutoImportForm } from "@/components/settings/auto-import-form";
 import { ConnectionForm } from "@/components/settings/connection-form";
 import { PlexConnectionForm } from "@/components/settings/plex-connection-form";
 import { TmdbForm } from "@/components/settings/tmdb-form";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "Connections" };
 // The page reads the saved connections before rendering; loading.tsx shows a placeholder meanwhile.
@@ -42,6 +44,9 @@ export default async function ConnectionsPage() {
   const regions = await loadRegions();
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumb label="Connections" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Where MediaHub reaches Radarr, Sonarr, Plex and TMDB. API keys and tokens are stored on the server and never

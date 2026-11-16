@@ -1,16 +1,16 @@
 import "server-only";
 import Link from "next/link";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 import { TmdbRequestError, tmdbFailureFor } from "@/server/tmdb/errors";
 
 // Shared by the two Popular preview pages (a TMDB movie or show that isn't in the library).
 
-/** A heading with a "← Popular" link and a message, for the cases where there is nothing to preview. */
+/** A breadcrumb, a heading and a message, for the cases where there is nothing to preview. */
 export function PreviewNotice({ children, alert = false }: { children: React.ReactNode; alert?: boolean }) {
   return (
     <div className="space-y-4">
-      <Link href="/popular" className="text-sm text-muted-foreground hover:underline">
-        ← Popular
-      </Link>
+      <Breadcrumb label="Preview" root={navCrumb("/popular")} />
       <h1 className="text-2xl font-semibold tracking-tight">Popular</h1>
       <p role={alert ? "alert" : undefined} className={alert ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
         {children}

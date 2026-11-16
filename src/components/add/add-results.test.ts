@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { type AddItem, filterByKind, initialId, mergeResults, movieFormFor, movieItems, seriesFormFor, seriesItems } from "./add-results";
 
 function movie(id: number): AddItem {
-  return { key: `movie-${id}`, kind: "movie", externalId: id, title: `Movie ${id}`, year: null, network: null, overview: "", posterSrc: null, inLibrary: false };
+  return { key: `movie-${id}`, kind: "movie", externalId: id, title: `Movie ${id}`, year: null, network: null, overview: "", posterSrc: null, inLibrary: false, href: null };
 }
 
 function series(id: number): AddItem {
-  return { key: `series-${id}`, kind: "series", externalId: id, title: `Series ${id}`, year: null, network: null, overview: "", posterSrc: null, inLibrary: false };
+  return { key: `series-${id}`, kind: "series", externalId: id, title: `Series ${id}`, year: null, network: null, overview: "", posterSrc: null, inLibrary: false, href: null };
 }
 
 describe("mergeResults", () => {
@@ -103,10 +103,21 @@ describe("filterByKind", () => {
 });
 
 describe("movieItems and seriesItems", () => {
+  const movieHit = { tmdbId: 910001, title: "Lantern Harbour", year: 2021, overview: "A harbour.", inLibrary: false, libraryId: null, posterFile: "abc123.jpg" };
+  const seriesHit = {
+    tvdbId: 200001,
+    title: "Harbour Lights",
+    year: 2018,
+    network: "Example TV",
+    overview: "",
+    inLibrary: false,
+    libraryId: null,
+    tmdbId: 910777,
+    posterPath: "banners/v4/series/200001/posters/abc.jpg",
+  };
+
   it("maps a movie hit to a row with the TMDB id and the lookup poster route", () => {
-    expect(
-      movieItems([{ tmdbId: 910001, title: "Lantern Harbour", year: 2021, overview: "A harbour.", inLibrary: true, posterFile: "abc123.jpg" }]),
-    ).toEqual([
+    expect(movieItems([movieHit], true)).toEqual([
       {
         key: "movie-910001",
         kind: "movie",
@@ -116,29 +127,14 @@ describe("movieItems and seriesItems", () => {
         network: null,
         overview: "A harbour.",
         posterSrc: "/api/movies/lookup-poster/abc123.jpg",
-        inLibrary: true,
+        inLibrary: false,
+        href: "/popular/movie/910001",
       },
     ]);
   });
 
-  it("maps a movie hit with no poster to a null poster source", () => {
-    expect(movieItems([{ tmdbId: 1, title: "Film", year: null, overview: "", inLibrary: false, posterFile: null }])[0].posterSrc).toBeNull();
-  });
-
   it("maps a series hit to a row with the TVDB id, network and the TV poster route", () => {
-    expect(
-      seriesItems([
-        {
-          tvdbId: 200001,
-          title: "Harbour Lights",
-          year: 2018,
-          network: "Example TV",
-          overview: "",
-          inLibrary: false,
-          posterPath: "banners/v4/series/200001/posters/abc.jpg",
-        },
-      ]),
-    ).toEqual([
+    expect(seriesItems([seriesHit], true)).toEqual([
       {
         key: "series-200001",
         kind: "series",
@@ -149,14 +145,24 @@ describe("movieItems and seriesItems", () => {
         overview: "",
         posterSrc: "/api/tv/lookup-poster/banners/v4/series/200001/posters/abc.jpg",
         inLibrary: false,
+        href: "/popular/tv/910777",
       },
     ]);
   });
 
+  it.each([
+    ["a movie in the library opens its library page", () => movieItems([{ ...movieHit, inLibrary: true, libraryId: 42 }], false)[0], "/movies/42"],
+    ["a series in the library opens its library page", () => seriesItems([{ ...seriesHit, inLibrary: true, libraryId: 11 }], false)[0], "/tv/11"],
+    ["a movie not in the library opens the preview page when previews are on", () => movieItems([movieHit], true)[0], "/popular/movie/910001"],
+    ["a series not in the library opens the preview page when previews are on", () => seriesItems([seriesHit], true)[0], "/popular/tv/910777"],
+    ["a title not in the library has no link when previews are off", () => movieItems([movieHit], false)[0], null],
+    ["a series with no TMDB id has no link", () => seriesItems([{ ...seriesHit, tmdbId: null }], true)[0], null],
+  ])("%s", (_name, row, href) => {
+    expect(row().href).toBe(href);
+  });
+
   it("keeps a movie and a series with the same id as different rows", () => {
-    const keys = [...movieItems([{ tmdbId: 5, title: "A", year: null, overview: "", inLibrary: false, posterFile: null }]), ...seriesItems([{ tvdbId: 5, title: "B", year: null, network: null, overview: "", inLibrary: false, posterPath: null }])].map(
-      (item) => item.key,
-    );
+    const keys = [...movieItems([{ ...movieHit, tmdbId: 5 }], false), ...seriesItems([{ ...seriesHit, tvdbId: 5 }], false)].map((item) => item.key);
     expect(new Set(keys).size).toBe(2);
   });
 });

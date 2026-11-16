@@ -11,6 +11,8 @@ import { ArrRequestError } from "@/server/arr/request";
 import { getConnection, type ArrApp } from "@/server/settings/connections";
 import { getMovieAddDefaults, getSeriesAddDefaults } from "@/server/settings/add-defaults";
 import { AddDefaultsForm, type DefaultsFolder, type DefaultsProfile } from "@/components/settings/add-defaults-form";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "Add defaults" };
 // The page waits for Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
@@ -75,6 +77,9 @@ export default async function AddDefaultsPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumb label="Add defaults" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">Add defaults</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         The quality profile and root folder that new movies and series are added with. Requesters always use these, and admins start with the profile.

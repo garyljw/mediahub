@@ -10,31 +10,34 @@ import { DEFAULT_ROOT, readStep, readTrail, visit, writeTrail, type Crumb } from
 /**
  * The trail of pages that led to this one, ending with this page's `label`. Server and first render show the root and
  * this page, because storage isn't there on the server. After mount it shows the stored trail with this page added.
- * Every crumb but the last is a real link, so middle-click and new tabs work.
+ * Every crumb but the last is a real link, so middle-click and new tabs work. `parents` are the pages this one belongs
+ * under (a show, for its episode): when the trail starts afresh here, they sit between the root and this page.
  */
-export function Breadcrumb({ label, root = DEFAULT_ROOT }: { label: string; root?: Crumb }) {
+export function Breadcrumb({ label, root = DEFAULT_ROOT, parents }: { label: string; root?: Crumb; parents?: Crumb[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [trail, setTrail] = useState<Crumb[] | null>(null);
   const [expanded, setExpanded] = useState(false);
   const rootPath = root.path;
   const rootLabel = root.label;
+  // A new array on every render, so the effect depends on its content, not its identity.
+  const parentsKey = JSON.stringify(parents ?? []);
 
   // Read after mount, not during render: the first render must not depend on storage.
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (cancelled) return;
-      const next = visit(readTrail(), { path: pathname, label }, readStep(), { path: rootPath, label: rootLabel });
+      const next = visit(readTrail(), { path: pathname, label }, readStep(), { path: rootPath, label: rootLabel }, JSON.parse(parentsKey) as Crumb[]);
       writeTrail(next);
       setTrail(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [pathname, label, rootPath, rootLabel]);
+  }, [pathname, label, rootPath, rootLabel, parentsKey]);
 
-  const crumbs: Crumb[] = trail ?? [root, { path: pathname, label }];
+  const crumbs: Crumb[] = trail ?? [root, ...(parents ?? []), { path: pathname, label }];
   const last = crumbs.length - 1;
   // On a phone a long trail shows the first crumb, "…", the parent and this page. Tapping "…" shows all of it.
   const collapsible = crumbs.length > 3 && !expanded;

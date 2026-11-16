@@ -76,6 +76,11 @@ describe("toQueueRows Sonarr rows", () => {
     expect(find("sonarr-301")).toMatchObject({ detail: "S01E01 · TBA", state: "delayed", severity: "ok" });
   });
 
+  it("links one episode to its page, and a pack or several episodes to the series page", () => {
+    expect(find("sonarr-201").href).toBe("/tv/20/episode/2005");
+    expect(find("sonarr-401").href).toBe("/tv/40");
+  });
+
   it("counts episodes across several seasons without naming a season", () => {
     expect(find("sonarr-401").detail).toBe("2 episodes");
   });

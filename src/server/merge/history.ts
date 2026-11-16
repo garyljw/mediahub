@@ -219,6 +219,8 @@ function episodeSortable(record: EpisodeHistoryRecord, timeZone: string): Sortab
   const episode = record.episode;
   const series = record.series;
   const seriesId = typeof series?.id === "number" ? series.id : null;
+  const rawEpisodeId = record.episodeId ?? episode?.id;
+  const episodeId = typeof rawEpisodeId === "number" && Number.isSafeInteger(rawEpisodeId) && rawEpisodeId > 0 ? rawEpisodeId : null;
   const event = eventOf(record.eventType);
   const season = episode?.seasonNumber;
   const number = episode?.episodeNumber;
@@ -240,7 +242,8 @@ function episodeSortable(record: EpisodeHistoryRecord, timeZone: string): Sortab
       quality: nonEmpty(record.quality?.quality?.name),
       posterSrc: seriesId !== null && hasPoster(series?.images) ? `/api/tv/${seriesId}/poster` : null,
       peek: toPeek(series),
-      href: seriesId !== null ? `/tv/${seriesId}` : null,
+      // The episode's page when both ids are known, the series page when only the series is, else no link.
+      href: seriesId === null ? null : episodeId === null ? `/tv/${seriesId}` : `/tv/${seriesId}/episode/${episodeId}`,
       canMarkFailed: event === "grabbed",
       details: detailsOf(record),
     },

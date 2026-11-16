@@ -2,6 +2,7 @@ import { listMovies, type MovieRow } from "@/server/arr/movies";
 import { listSeries, type SeriesRow } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-options";
+import { getTmdbConfig } from "@/server/settings/tmdb";
 import { getWatchedIndex } from "@/server/plex/watched";
 import type { WatchedIndex } from "@/server/merge/watched";
 import { listFocusIds } from "@/server/focus/focus";
@@ -102,6 +103,7 @@ export async function FocusListPage({ kind, isAdmin }: { kind: FocusKind; isAdmi
         <FocusAdd
           kind={kind}
           isAdmin={isAdmin}
+          canPreview={getTmdbConfig() !== null}
           candidates={candidates}
           movieOptions={movieOptions}
           seriesOptions={seriesOptions}

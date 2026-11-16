@@ -18,12 +18,30 @@ export type AddItem = {
   /** A MediaHub poster route, or null when there is no usable poster. */
   posterSrc: string | null;
   inLibrary: boolean;
+  /** Where the title opens: its library page, the TMDB preview page, or null when neither is available. */
+  href: string | null;
 };
 
 export type AddKind = "all" | "movie" | "series";
 
+/**
+ * Where a search hit opens: the library page when it is in the library, else the TMDB preview page when a TMDB token
+ * is saved and a TMDB id is known, else nowhere.
+ */
+export function hitHref(
+  kind: "movie" | "series",
+  libraryId: number | null,
+  tmdbId: number | null,
+  canPreview: boolean,
+): string | null {
+  const segment = kind === "movie" ? "movies" : "tv";
+  if (libraryId !== null) return `/${segment}/${libraryId}`;
+  if (canPreview && tmdbId !== null) return `/popular/${kind === "movie" ? "movie" : "tv"}/${tmdbId}`;
+  return null;
+}
+
 /** Movie search hits as rows, in the order Radarr returned them. */
-export function movieItems(results: readonly LookupResult[]): AddItem[] {
+export function movieItems(results: readonly LookupResult[], canPreview: boolean): AddItem[] {
   return results.map(
     (result): AddItem => ({
       key: `movie-${result.tmdbId}`,
@@ -35,12 +53,13 @@ export function movieItems(results: readonly LookupResult[]): AddItem[] {
       overview: result.overview,
       posterSrc: result.posterFile === null ? null : `/api/movies/lookup-poster/${result.posterFile}`,
       inLibrary: result.inLibrary,
+      href: hitHref("movie", result.libraryId, result.tmdbId, canPreview),
     }),
   );
 }
 
 /** Series search hits as rows, in the order Sonarr returned them. */
-export function seriesItems(results: readonly SeriesLookupResult[]): AddItem[] {
+export function seriesItems(results: readonly SeriesLookupResult[], canPreview: boolean): AddItem[] {
   return results.map(
     (result): AddItem => ({
       key: `series-${result.tvdbId}`,
@@ -52,6 +71,7 @@ export function seriesItems(results: readonly SeriesLookupResult[]): AddItem[] {
       overview: result.overview,
       posterSrc: result.posterPath === null ? null : `/api/tv/lookup-poster/${result.posterPath}`,
       inLibrary: result.inLibrary,
+      href: hitHref("series", result.libraryId, result.tmdbId, canPreview),
     }),
   );
 }

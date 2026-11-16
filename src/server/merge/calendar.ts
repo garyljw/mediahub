@@ -156,7 +156,8 @@ function episodeEntry(
       status: status === "unaired" ? "upcoming" : status,
       posterSrc: hasPoster(series.images) ? `/api/tv/${episode.seriesId}/poster` : null,
       peek: toPeek(series),
-      href: `/tv/${episode.seriesId}`,
+      // The episode's own page, or the series page when Sonarr gave no usable episode id.
+      href: episode.id > 0 ? `/tv/${episode.seriesId}/episode/${episode.id}` : `/tv/${episode.seriesId}`,
     },
     sortKey: (series.sortTitle || series.title).toLowerCase(),
   };

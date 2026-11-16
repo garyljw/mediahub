@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addFocusItem, addNewToFocus, searchFocusTitles, type FocusResult } from "@/app/(app)/focus/actions";
 import { AdminPanel } from "@/components/add/admin-add-panel";
@@ -12,6 +13,7 @@ import {
   type MovieFormDefaults,
   type SeriesForm,
   type SeriesFormDefaults,
+  hitHref,
 } from "@/components/add/add-results";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,7 @@ import { SearchInput } from "@/components/search-input";
 import type { HomeItem } from "@/components/home/home-items";
 import { GENERIC_ERROR, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
+import { PosterLink } from "@/components/poster/poster-link";
 import type { TitleHit } from "@/server/title-search";
 import { FOCUS_APP, FOCUS_NAME, type FocusKind } from "./focus-kinds";
 import { libraryMatches, libraryRowKey, remoteRowKey, remoteTerm } from "./focus-add-items";
@@ -48,12 +51,15 @@ async function fetchHits(kind: FocusKind, term: string): Promise<Outcome> {
 export function FocusAdd({
   kind,
   isAdmin,
+  canPreview,
   candidates,
   movieOptions,
   seriesOptions,
 }: {
   kind: FocusKind;
   isAdmin: boolean;
+  /** True when a TMDB token is saved, so titles not in the library can open their preview page. */
+  canPreview: boolean;
   /** Library titles that aren't in this list. The page builds them, and this component filters them. */
   candidates: HomeItem[];
   /** Admin only, for the panel. Null for a requester, or when Radarr's options could not be loaded. */
@@ -242,9 +248,15 @@ export function FocusAdd({
                           </Button>
                         )}
                       </div>
-                      <Poster src={item.posterSrc} size="lg" />
+                      <PosterLink href={item.href}>
+                        <Poster src={item.posterSrc} size="lg" />
+                      </PosterLink>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium">{label}</p>
+                        <p className="font-medium">
+                          <Link href={item.href} className="hover:underline">
+                            {label}
+                          </Link>
+                        </p>
                       </div>
                     </div>
                     {rowError !== undefined && (
@@ -287,6 +299,7 @@ export function FocusAdd({
                 const rowError = rowErrors.get(key);
                 const open = isAdmin && pickingKey === key;
                 const label = resultLabel(hit);
+                const href = hitHref(kind, null, hit.tmdbId, canPreview);
                 const idBase = `${fieldId}-${key}`;
                 return (
                   <li key={key} className="p-3">
@@ -326,9 +339,19 @@ export function FocusAdd({
                           </Button>
                         )}
                       </div>
-                      <Poster src={hit.posterSrc} size="lg" />
+                      <PosterLink href={href}>
+                        <Poster src={hit.posterSrc} size="lg" />
+                      </PosterLink>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium">{label}</p>
+                        <p className="font-medium">
+                          {href === null ? (
+                            label
+                          ) : (
+                            <Link href={href} className="hover:underline">
+                              {label}
+                            </Link>
+                          )}
+                        </p>
                         {hit.network !== null && <p className="text-sm text-muted-foreground">{hit.network}</p>}
                         {hit.overview !== "" && <p className="line-clamp-3 text-sm text-muted-foreground">{hit.overview}</p>}
                       </div>

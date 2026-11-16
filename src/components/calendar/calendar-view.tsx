@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Poster } from "@/components/poster/poster";
+import { PosterLink } from "@/components/poster/poster-link";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { SELECT_CLASS } from "@/components/library/table-parts";
 import { cn } from "@/lib/utils";
@@ -124,7 +125,9 @@ function DayList({
                     peek: entry.peek,
                   })}
                 >
-                  <Poster src={entry.posterSrc} />
+                  <PosterLink href={entry.href}>
+                    <Poster src={entry.posterSrc} />
+                  </PosterLink>
                   <div className="min-w-0 flex-1" data-poster-anchor>
                     <div className="truncate font-medium" title={entry.title}>
                       <Link href={entry.href} className="hover:underline">
