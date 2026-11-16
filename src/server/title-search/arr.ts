@@ -15,6 +15,7 @@ export function movieHits(results: readonly LookupResult[]): TitleHit[] {
     overview: result.overview,
     posterSrc: result.posterFile === null ? null : `/api/movies/lookup-poster/${result.posterFile}`,
     inLibrary: result.inLibrary,
+    tmdbId: result.tmdbId,
   }));
 }
 
@@ -28,6 +29,7 @@ export function seriesHits(results: readonly SeriesLookupResult[]): TitleHit[] {
     overview: result.overview,
     posterSrc: result.posterPath === null ? null : `/api/tv/lookup-poster/${result.posterPath}`,
     inLibrary: result.inLibrary,
+    tmdbId: result.tmdbId,
   }));
 }
 

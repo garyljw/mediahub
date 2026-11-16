@@ -20,6 +20,10 @@ export type SeriesLookupResult = {
   overview: string;
   /** True when the series is already in the Sonarr library. */
   inLibrary: boolean;
+  /** The Sonarr library id when the series is in the library, else null. */
+  libraryId: number | null;
+  /** The TMDB id Sonarr reports for the series, or null. Used for the preview page link. */
+  tmdbId: number | null;
   /** The TVDB poster path (e.g. "banners/v4/series/81189/posters/5f2e8d5ae9d1c.jpg"), or null. Validated by tvdbPosterPath. */
   posterPath: string | null;
 };
@@ -124,6 +128,8 @@ export function toSeriesLookupResults(series: SeriesResource[]): SeriesLookupRes
       // Sonarr's lookup fills in the library id for a series already in the library, so no separate library
       // fetch is needed. A missing or zero id means it is not in the library.
       inLibrary: typeof entry.id === "number" && entry.id > 0,
+      libraryId: positiveIdOrNull(entry.id),
+      tmdbId: positiveIdOrNull(entry.tmdbId),
       posterPath: tvdbPosterPath(entry),
     });
   }

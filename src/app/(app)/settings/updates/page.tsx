@@ -1,6 +1,8 @@
 import { requirePageUser } from "@/server/authz";
 import { getUpdatesView } from "@/server/updater/app-view";
 import { UpdateCheckButton } from "@/components/settings/update-check-button";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "Updates" };
 // The page reads the saved update state before rendering; loading.tsx shows a placeholder meanwhile.
@@ -12,6 +14,9 @@ export default async function UpdatesPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumb label="Updates" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">Updates</h1>
       <p className="mt-2 text-sm text-muted-foreground">Installed version: {view.runningVersion}</p>
 

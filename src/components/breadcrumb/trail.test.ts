@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_CRUMBS, readStep, readTrail, visit, type Crumb } from "./trail";
+import { MAX_CRUMBS, readStep, readTrail, visit, type Crumb, type Step } from "./trail";
 
 const HOME: Crumb = { path: "/", label: "Home" };
 const crumb = (path: string, label = path): Crumb => ({ path, label });
@@ -7,7 +7,7 @@ const crumb = (path: string, label = path): Crumb => ({ path, label });
 describe("visit", () => {
   const click = (from: string, to: string) => ({ from, to });
 
-  it.each([
+  it.each<[string, Crumb[], Crumb, Step | null, Crumb[], Crumb[]?]>([
     ["pushes a page reached by a click from the last page", [HOME, crumb("/movies/1")], crumb("/person/9"), click("/movies/1", "/person/9"), [HOME, crumb("/movies/1"), crumb("/person/9")]],
     ["cuts back to a page already in the trail", [HOME, crumb("/movies/1"), crumb("/person/9")], crumb("/movies/1"), null, [HOME, crumb("/movies/1")]],
     ["updates the label of the page it cuts back to", [HOME, crumb("/movies/1", "Old")], crumb("/movies/1", "New"), null, [HOME, crumb("/movies/1", "New")]],
@@ -15,8 +15,9 @@ describe("visit", () => {
     ["starts again at the root when the click came from another page", [HOME, crumb("/movies/1")], crumb("/movies/2"), click("/queue", "/movies/2"), [HOME, crumb("/movies/2")]],
     ["starts again at the root when the click went to another page", [HOME, crumb("/movies/1")], crumb("/movies/2"), click("/movies/1", "/movies/3"), [HOME, crumb("/movies/2")]],
     ["starts again when there is no trail", [], crumb("/movies/2"), click("/", "/movies/2"), [HOME, crumb("/movies/2")]],
-  ])("%s", (_, trail, page, step, expected) => {
-    expect(visit(trail, page, step, HOME)).toEqual(expected);
+    ["puts the page's parents between the root and the page when it starts again", [], crumb("/tv/3/episode/4"), null, [HOME, crumb("/tv/3"), crumb("/tv/3/episode/4")], [crumb("/tv/3")]],
+  ])("%s", (_, trail, page, step, expected, parents) => {
+    expect(visit(trail, page, step, HOME, parents)).toEqual(expected);
   });
 
   it("ends a loop A, person, B, same person, A as [root, A]", () => {

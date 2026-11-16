@@ -22,6 +22,7 @@ const movie: LookupResult = {
   year: 1999,
   overview: "An insomniac office worker.",
   inLibrary: false,
+  libraryId: null,
   posterFile: "abc123.jpg",
 };
 
@@ -32,6 +33,8 @@ const series: SeriesLookupResult = {
   network: "Example Network",
   overview: "A made-up series.",
   inLibrary: true,
+  libraryId: 11,
+  tmdbId: 8800,
   posterPath: "banners/v4/series/81189/posters/5f2e8d.jpg",
 };
 
@@ -51,6 +54,7 @@ describe("movieHits", () => {
         overview: "An insomniac office worker.",
         posterSrc: "/api/movies/lookup-poster/abc123.jpg",
         inLibrary: false,
+        tmdbId: 550,
       },
     ]);
   });
@@ -77,6 +81,7 @@ describe("seriesHits", () => {
         overview: "A made-up series.",
         posterSrc: "/api/tv/lookup-poster/banners/v4/series/81189/posters/5f2e8d.jpg",
         inLibrary: true,
+        tmdbId: 8800,
       },
     ]);
   });

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/search-input";
 import { GENERIC_ERROR, normalizeTerm, resultLabel } from "@/components/library/add";
 import { Poster } from "@/components/poster/poster";
+import { PosterLink } from "@/components/poster/poster-link";
 import { AdminPanel } from "@/components/add/admin-add-panel";
 import { MIN_TERM_LENGTH } from "@/components/add/add-link";
 import { cn } from "@/lib/utils";
@@ -46,19 +47,19 @@ type Outcome = { ok: true; items: AddItem[] } | { ok: false; error: string };
 type Results = { movies: Outcome; series: Outcome };
 
 /** Each call catches its own failure, so the two searches never reject. */
-async function fetchMovies(term: string): Promise<Outcome> {
+async function fetchMovies(term: string, canPreview: boolean): Promise<Outcome> {
   try {
     const response = await searchMovies({ term });
-    return response.ok ? { ok: true, items: movieItems(response.results) } : { ok: false, error: response.error };
+    return response.ok ? { ok: true, items: movieItems(response.results, canPreview) } : { ok: false, error: response.error };
   } catch {
     return { ok: false, error: GENERIC_ERROR };
   }
 }
 
-async function fetchSeries(term: string): Promise<Outcome> {
+async function fetchSeries(term: string, canPreview: boolean): Promise<Outcome> {
   try {
     const response = await searchSeries({ term });
-    return response.ok ? { ok: true, items: seriesItems(response.results) } : { ok: false, error: response.error };
+    return response.ok ? { ok: true, items: seriesItems(response.results, canPreview) } : { ok: false, error: response.error };
   } catch {
     return { ok: false, error: GENERIC_ERROR };
   }
@@ -71,12 +72,15 @@ async function fetchSeries(term: string): Promise<Outcome> {
  */
 export function AddSearch({
   isAdmin,
+  canPreview,
   movieOptions,
   seriesOptions,
   initialQuery,
   initialKind,
 }: {
   isAdmin: boolean;
+  /** True when a TMDB token is saved, so titles not in the library can open their preview page. */
+  canPreview: boolean;
   /** The text to start with, from the address (e.g. when Home jumps here). Searched at once when long enough. */
   initialQuery: string;
   initialKind: AddKind;
@@ -121,7 +125,7 @@ export function AddSearch({
     requestRef.current += 1;
     const requestId = requestRef.current;
     setSearching(true);
-    void Promise.all([fetchMovies(term), fetchSeries(term)]).then(([movies, series]) => {
+    void Promise.all([fetchMovies(term, canPreview), fetchSeries(term, canPreview)]).then(([movies, series]) => {
       if (requestRef.current !== requestId) return;
       setResults({ movies, series });
       setSearching(false);
@@ -276,7 +280,8 @@ export function AddSearch({
             const rowError = rowErrors.get(item.key);
             const open = isAdmin && pickingKey === item.key;
             const appName = item.kind === "movie" ? "Radarr" : "Sonarr";
-            const openHref = addedId === null ? null : item.kind === "movie" ? `/movies/${addedId}` : `/tv/${addedId}`;
+            // Once added, the title opens its new library page when the id came back.
+            const href = addedId === null ? item.href : item.kind === "movie" ? `/movies/${addedId}` : `/tv/${addedId}`;
             const label = resultLabel(item);
             const idBase = `${fieldId}-${item.key}`;
 
@@ -285,14 +290,7 @@ export function AddSearch({
                 <div className="flex items-start gap-3">
                   <div className="flex w-20 shrink-0 flex-col items-start gap-1.5">
                     {isAdded ? (
-                      <>
-                        <Badge variant="secondary">Added</Badge>
-                        {openHref !== null && (
-                          <Link href={openHref} className="text-sm font-medium underline">
-                            Open
-                          </Link>
-                        )}
-                      </>
+                      <Badge variant="secondary">Added</Badge>
                     ) : item.inLibrary ? (
                       <Badge variant="secondary">In library</Badge>
                     ) : isAdmin ? (
@@ -316,10 +314,18 @@ export function AddSearch({
                       </Button>
                     )}
                   </div>
-                  <Poster src={item.posterSrc} size="lg" />
+                  <PosterLink href={href}>
+                    <Poster src={item.posterSrc} size="lg" />
+                  </PosterLink>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">
-                      {label}
+                      {href === null ? (
+                        label
+                      ) : (
+                        <Link href={href} className="hover:underline">
+                          {label}
+                        </Link>
+                      )}
                       <Badge variant="outline" className="ml-2 align-middle">
                         {item.kind === "movie" ? "Movie" : "TV"}
                       </Badge>

@@ -1,6 +1,5 @@
 // Loading placeholders for each page. Each one keeps its page's outer layout and heading, so nothing moves when the data
 // arrives. Shapes only: no data is read here, so these can be shared between users. Server-safe, no "use client".
-import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FOCUS_NAME, type FocusKind } from "@/components/focus/focus-kinds";
 import { POSTER_GRID_CLASS } from "@/components/poster/poster-grid";
@@ -59,14 +58,12 @@ export function HomeSkeleton() {
   );
 }
 
-/** A movie or series page: the Home link, the hero, and the Details card. */
+/** A movie or series page: the breadcrumb bar, the hero, and the Details card. */
 export function ItemPageSkeleton() {
   return (
     <div aria-busy="true" className="space-y-6">
       <LoadingStatus />
-      <Link href="/" className="text-sm text-muted-foreground hover:underline">
-        ← Home
-      </Link>
+      <Skeleton className="h-5 w-40" />
 
       <section className="relative overflow-hidden rounded-xl border bg-card/60 backdrop-blur-sm">
         <div className="relative flex flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
@@ -172,14 +169,12 @@ export function CalendarSkeleton() {
   );
 }
 
-/** The Add page: the Home link, the heading, the search box, and a few result rows. */
+/** The Add page: the breadcrumb bar, the heading, the search box, and a few result rows. */
 export function AddSkeleton() {
   return (
     <div aria-busy="true" className="space-y-4">
       <LoadingStatus />
-      <Link href="/" className="text-sm text-muted-foreground hover:underline">
-        ← Home
-      </Link>
+      <Skeleton className="h-5 w-40" />
       <h1 className="text-2xl font-semibold tracking-tight">Add</h1>
       <Skeleton className="h-9 w-full sm:max-w-sm" />
       <div className="space-y-3">

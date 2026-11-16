@@ -7,6 +7,30 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.15.0",
+    date: "2026-11-16",
+    sections: [
+      {
+        heading: "Improved",
+        notes: [
+          {
+            text: "**Every title is clickable:** click a movie's or show's poster or name anywhere in MediaHub to open its page.",
+            details: [
+              "On **Add** and in the Focus search, a title already in your library opens its page; one that isn't opens the TMDB preview with its overview, cast and an **Add** button (this needs the TMDB token in **Settings → Connections**).",
+              "On **Calendar**, **Queue** and **History**, the poster opens the page as well as the name, and a TV episode opens its episode page. A download covering several episodes still opens the show.",
+            ],
+          },
+          {
+            text: "**Breadcrumbs everywhere:** the **Add** page and the **Settings** pages show the trail back to where you came from, and an episode page opened on its own shows its show in the trail.",
+          },
+          {
+            text: "**History on narrow screens** no longer opens the poster preview when the pointer rests on a card.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.14.0",
     date: "2026-11-15",
     sections: [

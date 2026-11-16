@@ -3,6 +3,8 @@ import { getRadarrDiskSpace, getSonarrDiskSpace } from "@/server/arr/disk-space"
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { mergeDisks } from "@/server/merge/disk-space";
 import { formatSize } from "@/components/library/format";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "System" };
 // The page asks Radarr and Sonarr before rendering; loading.tsx shows a placeholder meanwhile.
@@ -25,6 +27,9 @@ export default async function SystemPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumb label="System" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">System</h1>
       <h2 className="mt-6 text-lg font-medium">Disk space</h2>
 

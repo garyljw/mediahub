@@ -4,6 +4,8 @@ import { requirePageUser } from "@/server/authz";
 import { mergeServices } from "@/server/merge/popular";
 import { getChosenServices, getTmdbConfig } from "@/server/settings/tmdb";
 import { getProviders, TmdbRequestError } from "@/server/tmdb/client";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "Popular" };
 // The page waits for TMDB before rendering; the Settings loading.tsx shows a placeholder meanwhile.
@@ -12,6 +14,9 @@ export const instant = false;
 function Heading() {
   return (
     <>
+      <div className="mb-4">
+        <Breadcrumb label="Popular" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">Popular</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Pick the streaming services the Popular page offers, and drag them into order. With none picked, it shows

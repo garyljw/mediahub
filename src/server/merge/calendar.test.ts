@@ -324,10 +324,10 @@ describe("toCalendarEntries", () => {
     expect(special.kind).toBe("episode");
   });
 
-  it("links a movie to its movie page and an episode to its series", () => {
+  it("links a movie to its movie page and an episode to its episode page", () => {
     expect(find("movie-101-cinema").href).toBe("/movies/101");
-    expect(find("episode-703").href).toBe("/tv/7");
-    expect(find("episode-801").href).toBe("/tv/8");
+    expect(find("episode-703").href).toBe("/tv/7/episode/703");
+    expect(find("episode-801").href).toBe("/tv/8/episode/801");
   });
 
   it("gives a poster route only when the item has a poster", () => {

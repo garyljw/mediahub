@@ -2,6 +2,8 @@ import { requirePageUser } from "@/server/authz";
 import { getAuth } from "@/server/auth";
 import { listUsers } from "@/server/users";
 import { UsersManager, type UserRow } from "@/components/settings/users-manager";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
+import { navCrumb } from "@/components/breadcrumb/trail";
 
 export const metadata = { title: "Users" };
 // The page waits for the user list before rendering; loading.tsx shows a placeholder meanwhile.
@@ -22,6 +24,9 @@ export default async function UsersPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <Breadcrumb label="Users" root={navCrumb("/settings")} />
+      </div>
       <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Requesters sign in with an email and password. Admins sign in with Plex.

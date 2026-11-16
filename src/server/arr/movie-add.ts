@@ -18,6 +18,8 @@ export type LookupResult = {
   overview: string;
   /** True when the movie is already in the Radarr library. */
   inLibrary: boolean;
+  /** The Radarr library id when the movie is in the library, else null. */
+  libraryId: number | null;
   /** The TMDB poster file name (e.g. "abc123.jpg"), or null when there is no usable poster. Validated by tmdbPosterFile. */
   posterFile: string | null;
 };
@@ -91,7 +93,7 @@ function yearOrNull(year: unknown): number | null {
 }
 
 /** Pure: Radarr search hits to dialog results, in upstream order, capped at MAX_RESULTS. */
-export function toLookupResults(movies: MovieResource[], libraryTmdbIds: Set<number>): LookupResult[] {
+export function toLookupResults(movies: MovieResource[], library: Map<number, number>): LookupResult[] {
   const results: LookupResult[] = [];
   for (const movie of movies) {
     if (results.length >= MAX_RESULTS) break;
@@ -102,7 +104,8 @@ export function toLookupResults(movies: MovieResource[], libraryTmdbIds: Set<num
       title: movie.title,
       year: yearOrNull(movie.year),
       overview: cutOverview(movie.overview),
-      inLibrary: libraryTmdbIds.has(movie.tmdbId),
+      inLibrary: library.has(movie.tmdbId),
+      libraryId: library.get(movie.tmdbId) ?? null,
       posterFile: tmdbPosterFile(movie),
     });
   }
@@ -119,11 +122,12 @@ export async function lookupMovies(term: string): Promise<LookupResult[]> {
     getList("Radarr movie lookup", (signal) => client.GET("/api/v3/movie/lookup", { params: { query: { term } }, signal })),
     getList("Radarr movie", (signal) => client.GET("/api/v3/movie", { signal })),
   ]);
-  const libraryTmdbIds = new Set<number>();
+  const libraryIds = new Map<number, number>();
   for (const movie of library) {
-    if (typeof movie.tmdbId === "number") libraryTmdbIds.add(movie.tmdbId);
+    const id = positiveIdOrNull(movie.id);
+    if (typeof movie.tmdbId === "number" && id !== null) libraryIds.set(movie.tmdbId, id);
   }
-  return toLookupResults(hits, libraryTmdbIds);
+  return toLookupResults(hits, libraryIds);
 }
 
 /** Root folders Radarr can add movies to, as dropdown options. */

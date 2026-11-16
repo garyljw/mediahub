@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Poster } from "@/components/poster/poster";
+import { PosterLink } from "@/components/poster/poster-link";
 import { usePosterPreview } from "@/components/poster/use-poster-preview";
 import { ACTIVITY_CLASS, ACTIVITY_ICON } from "@/components/library/activity-cell";
 import { showsEtaFor, showsProgressFor, stateLabel } from "@/components/library/activity";
@@ -144,7 +145,9 @@ function QueueCard({
       onClick={showDetails && row.details !== null ? toggleOnClick(onToggle) : undefined}
     >
       <div className="flex gap-3">
-        <Poster src={row.posterSrc} />
+        <PosterLink href={row.href}>
+          <Poster src={row.posterSrc} />
+        </PosterLink>
         <div className="flex min-w-0 flex-1 items-start gap-2" data-poster-anchor>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -310,7 +313,9 @@ export function QueueView({
                     onClick={showDetails && row.details !== null ? toggleOnClick(() => toggleExpanded(row.key)) : undefined}
                   >
                     <TableCell className={CELL}>
-                      <Poster src={row.posterSrc} />
+                      <PosterLink href={row.href}>
+                        <Poster src={row.posterSrc} />
+                      </PosterLink>
                     </TableCell>
                     <TableCell className={`${CELL} max-w-0 w-full min-w-48`} data-poster-anchor>
                       <div className="flex min-w-0 items-center gap-2">

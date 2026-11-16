@@ -30,7 +30,7 @@ const clientMock = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
 vi.mock("./client", () => ({ radarrClient: () => clientMock }));
 
 const hits = lookupFixture as MovieResource[];
-const LIBRARY = new Set([910005]);
+const LIBRARY = new Map([[910005, 42]]);
 
 describe("toLookupResults", () => {
   const results = toLookupResults(hits, LIBRARY);
@@ -44,9 +44,9 @@ describe("toLookupResults", () => {
     expect(results.map((r) => r.tmdbId)).toEqual([910001, 910002, 910004, 910005]);
   });
 
-  it("returns only the six dialog fields", () => {
+  it("returns only the seven dialog fields", () => {
     for (const result of results) {
-      expect(Object.keys(result).sort()).toEqual(["inLibrary", "overview", "posterFile", "title", "tmdbId", "year"]);
+      expect(Object.keys(result).sort()).toEqual(["inLibrary", "libraryId", "overview", "posterFile", "title", "tmdbId", "year"]);
     }
   });
 
@@ -74,7 +74,7 @@ describe("toLookupResults", () => {
 
   it("counts and cuts by code point, so an emoji at the cut point is kept whole", () => {
     const overview = `${"a".repeat(298)}😀bcd`; // 302 code points, 303 UTF-16 units
-    const [result] = toLookupResults([{ tmdbId: 1, title: "Emoji", overview } as MovieResource], new Set());
+    const [result] = toLookupResults([{ tmdbId: 1, title: "Emoji", overview } as MovieResource], new Map());
     expect(result.overview).toBe(`${"a".repeat(298)}😀…`);
     expect(Array.from(result.overview)).toHaveLength(300);
   });
@@ -82,7 +82,7 @@ describe("toLookupResults", () => {
   it("leaves an overview of exactly 300 code points unchanged", () => {
     const overview = `${"a".repeat(298)}😀`; // 299 code points
     const exact = `${overview}b`; // 300 code points
-    const [result] = toLookupResults([{ tmdbId: 1, title: "Exact", overview: exact } as MovieResource], new Set());
+    const [result] = toLookupResults([{ tmdbId: 1, title: "Exact", overview: exact } as MovieResource], new Map());
     expect(result.overview).toBe(exact);
   });
 
@@ -96,11 +96,13 @@ describe("toLookupResults", () => {
   it("marks movies already in the library", () => {
     expect(results.find((r) => r.tmdbId === 910005)?.inLibrary).toBe(true);
     expect(results.find((r) => r.tmdbId === 910001)?.inLibrary).toBe(false);
+    expect(results.find((r) => r.tmdbId === 910005)?.libraryId).toBe(42);
+    expect(results.find((r) => r.tmdbId === 910001)?.libraryId).toBeNull();
   });
 
   it("caps the list at 20 results, keeping the first 20", () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ tmdbId: i + 1, title: `Film ${i + 1}` }) as MovieResource);
-    const capped = toLookupResults(many, new Set());
+    const capped = toLookupResults(many, new Map());
     expect(capped).toHaveLength(20);
     expect(capped[0].tmdbId).toBe(1);
     expect(capped[19].tmdbId).toBe(20);
@@ -111,7 +113,7 @@ describe("toLookupResults", () => {
       ...Array.from({ length: 25 }, () => ({ title: "No id" }) as MovieResource),
       ...Array.from({ length: 3 }, (_, i) => ({ tmdbId: i + 1, title: `Film ${i + 1}` }) as MovieResource),
     ];
-    expect(toLookupResults(mixed, new Set())).toHaveLength(3);
+    expect(toLookupResults(mixed, new Map())).toHaveLength(3);
   });
 });
 

@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { requirePageUser } from "@/server/authz";
 import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-options";
+import { getTmdbConfig } from "@/server/settings/tmdb";
+import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
 import { AddSearch } from "@/components/add/add-search";
 import { parseAddParams } from "@/components/add/add-link";
 
@@ -24,15 +25,14 @@ export default async function AddPage({
 
   return (
     <div className="space-y-4">
-      <Link href="/" className="text-sm text-muted-foreground hover:underline">
-        ← Home
-      </Link>
+      <Breadcrumb label="Add" />
       <h1 className="text-2xl font-semibold tracking-tight">Add</h1>
       <AddSearch
         // A new start text gets a fresh search: the state is seeded from these props only once, and Next may reuse a
         // hidden Add page.
         key={`${kind}:${query}`}
         isAdmin={isAdmin}
+        canPreview={getTmdbConfig() !== null}
         movieOptions={movieOptions}
         seriesOptions={seriesOptions}
         initialQuery={query}

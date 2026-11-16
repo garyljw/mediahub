@@ -104,9 +104,10 @@ export function startTrail(root: Crumb): void {
  * - A page already in the trail cuts the trail just after it. That covers browser Back and Forward, a click on a crumb,
  *   and a loop (A, person, B, same person, A) which ends as [..., A] instead of growing.
  * - A click from the trail's last page to this one adds it.
- * - Anything else (address bar, new tab, a page that isn't tracked) starts again at `root`.
+ * - Anything else (address bar, new tab, a page that isn't tracked) starts again at `root`, followed by the page's own
+ *   `parents` (the pages it belongs under, such as a show for one of its episodes).
  */
-export function visit(trail: Crumb[], crumb: Crumb, step: Step | null, root: Crumb): Crumb[] {
+export function visit(trail: Crumb[], crumb: Crumb, step: Step | null, root: Crumb, parents: Crumb[] = []): Crumb[] {
   const at = trail.findIndex((entry) => entry.path === crumb.path);
   if (at !== -1) return [...trail.slice(0, at), crumb];
 
@@ -116,5 +117,5 @@ export function visit(trail: Crumb[], crumb: Crumb, step: Step | null, root: Cru
     return next.length <= MAX_CRUMBS ? next : [next[0], ...next.slice(next.length - (MAX_CRUMBS - 1))];
   }
 
-  return crumb.path === root.path ? [crumb] : [root, crumb];
+  return crumb.path === root.path ? [crumb] : [root, ...parents, crumb];
 }

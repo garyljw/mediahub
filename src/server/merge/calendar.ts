@@ -6,6 +6,7 @@ import { TITLE_COLLATOR } from "@/components/library/list";
 import { episodeStatus } from "./episode-status";
 import { isCalendarDate, utcDateOf } from "./calendar-dates";
 import { hasPoster } from "./images";
+import { validId } from "./ids";
 import { toPeek, type Peek } from "./peek";
 
 type MovieResource = RadarrComponents["schemas"]["MovieResource"];
@@ -123,7 +124,7 @@ function episodeEntry(
 ): Sortable | null {
   const series = episode.series;
   if (
-    typeof episode.id !== "number" ||
+    validId(episode.id) === null ||
     typeof episode.seriesId !== "number" ||
     typeof episode.seasonNumber !== "number" ||
     typeof episode.episodeNumber !== "number" ||
@@ -156,7 +157,7 @@ function episodeEntry(
       status: status === "unaired" ? "upcoming" : status,
       posterSrc: hasPoster(series.images) ? `/api/tv/${episode.seriesId}/poster` : null,
       peek: toPeek(series),
-      href: `/tv/${episode.seriesId}`,
+      href: `/tv/${episode.seriesId}/episode/${episode.id}`,
     },
     sortKey: (series.sortTitle || series.title).toLowerCase(),
   };

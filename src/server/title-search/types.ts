@@ -11,6 +11,8 @@ export type TitleHit = {
   overview: string;
   posterSrc: string | null;
   inLibrary: boolean;
+  /** The TMDB id, for the preview page link. Always set for movies; null for a series Sonarr gave none for. */
+  tmdbId: number | null;
 };
 
 export interface TitleSearchProvider {

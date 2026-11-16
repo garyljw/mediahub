@@ -343,6 +343,7 @@ function hit(overrides: Partial<TitleHit> = {}): TitleHit {
     overview: "An insomniac office worker.",
     posterSrc: "/api/movies/lookup-poster/abc.jpg",
     inLibrary: false,
+    tmdbId: 550,
     ...overrides,
   };
 }

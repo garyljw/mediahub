@@ -46,15 +46,22 @@ describe("toSeriesLookupResults", () => {
     expect(results.map((r) => r.tvdbId)).toEqual([200001, 200002, 200004, 200005]);
   });
 
-  it("returns only the seven dialog fields", () => {
+  it("returns only the nine dialog fields", () => {
     for (const result of results) {
-      expect(Object.keys(result).sort()).toEqual(["inLibrary", "network", "overview", "posterPath", "title", "tvdbId", "year"]);
+      expect(Object.keys(result).sort()).toEqual(["inLibrary", "libraryId", "network", "overview", "posterPath", "title", "tmdbId", "tvdbId", "year"]);
     }
   });
 
   it("marks a series in the library from Sonarr's id, and not one with a zero id", () => {
     expect(results.find((r) => r.tvdbId === 200001)?.inLibrary).toBe(true);
     expect(results.find((r) => r.tvdbId === 200002)?.inLibrary).toBe(false);
+    expect(results.find((r) => r.tvdbId === 200001)?.libraryId).toBe(11);
+    expect(results.find((r) => r.tvdbId === 200002)?.libraryId).toBeNull();
+  });
+
+  it("passes a positive tmdbId through and gives null when Sonarr has none", () => {
+    expect(results.find((r) => r.tvdbId === 200002)?.tmdbId).toBe(910777);
+    expect(results.find((r) => r.tvdbId === 200001)?.tmdbId).toBeNull();
   });
 
   it("gives a v4 poster path from remotePoster and an old-style path from the poster entry", () => {
