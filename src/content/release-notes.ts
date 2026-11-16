@@ -7,6 +7,16 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.15.1",
+    date: "2026-11-16",
+    sections: [
+      {
+        heading: "Fixed",
+        notes: [{ text: "**The A–Z bar on phones:** tapping a letter no longer leaves the big letter on screen." }],
+      },
+    ],
+  },
+  {
     version: "1.15.0",
     date: "2026-11-16",
     sections: [
