@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.16.1",
+    date: "2026-11-17",
+    sections: [
+      {
+        heading: "Fixed",
+        notes: [
+          {
+            text: "**Security update:** MediaHub now runs on Next.js 16.4.6, which fixes the November Next.js security advisories.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.16.0",
     date: "2026-11-17",
     sections: [
