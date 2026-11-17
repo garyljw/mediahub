@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Tells coding agents when a Next.js security upgrade is due. Runs in `next dev` and `next build`, never in the
+    // running service. "security" is already Next's default; set here so the choice is visible.
+    agentUpgrade: "security",
+  },
   // MediaHub serves every image as a plain <img>, so Next's image optimiser is off. That keeps sharp
   // (and its LGPL libvips) out of the build, see outputFileTracingExcludes below.
   images: {
