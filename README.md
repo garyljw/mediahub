@@ -73,7 +73,7 @@ Focus lists are two short, household-wide lists you order by hand: **Movie Focus
 - **Deleted titles:** if a title in a Focus list is no longer in Radarr or Sonarr, the list shows a notice with a **Remove them** button (or **Remove it** for one title). Nothing is removed until you press it, and the notice doesn't appear when the app can't be reached.
 - **In Plex:** when Plex is connected (**Settings → Connections**), each list also appears in Plex as a collection of the same name, pinned to Home. On Plex Home, each row sits at the top of its own library's rows, so the library that comes first decides which list shows first. To put TV Focus first, drag your TV library above your movie library in the Plex Web sidebar. MediaHub keeps the collection in step with its list: after each change, and when someone opens Home or a Focus page after the last sync was over five minutes earlier. Anything changed in Plex is put back to match MediaHub, so titles added to a collection in Plex are removed and its order is reset. A rename or unpinning done in Plex is kept. A title that isn't in Plex yet is left out, and is added once it's there, the next time someone opens MediaHub. Disconnecting Plex leaves the collections as they are. To stop MediaHub changing them, set `MEDIAHUB_PLEX_FOCUS_SYNC=false` in `C:\ProgramData\MediaHub\mediahub.env` and restart the MediaHub service; the collections stay in Plex as they are.
 
-MediaHub is meant for a home network only. Don't expose it to the internet.
+MediaHub is meant for a home network only. Don't expose it to the internet. To use it away from home, see [Use MediaHub away from home](#use-mediahub-away-from-home).
 
 ## What you need
 - A Windows 10 or 11 PC (64-bit). The PC that already runs Radarr and Sonarr is the natural place.
@@ -154,6 +154,17 @@ Until you do step 2, the service can't read its settings and won't start.
 4. Restart the MediaHub service, either in services.msc or with `sc stop MediaHub` then `sc start MediaHub`.
 
 Running the installer again doesn't change an existing `mediahub.env`.
+
+### Use MediaHub away from home
+Use [Tailscale](https://tailscale.com), a free private network between your own devices. Nothing goes on the public internet and no router ports are opened.
+
+1. Install Tailscale on the PC that runs MediaHub and sign in.
+2. Install Tailscale on your phone or laptop and sign in with the same account.
+3. With Tailscale switched on, open MediaHub at the same address you use at home, such as `http://<this PC's name>:7979`. Tailscale's MagicDNS finds the PC by its name, so you don't need to change MediaHub's settings.
+
+Each person who uses MediaHub away from home needs Tailscale on their device, signed in to your Tailscale network. Anyone on that network can reach the PC, and MediaHub holds your Radarr and Sonarr API keys, so anyone who gets in as an admin controls Radarr and Sonarr. Only add people and devices you trust.
+
+Don't forward a router port to MediaHub. That puts the login page on the public internet with nothing in front of it.
 
 ## Users and recovery
 Admins manage requesters in **Settings → Users**: add one, set a new password (which also signs them out everywhere), sign them out everywhere, or delete them. Anyone can create an account only through an admin, because sign-up is turned off.
