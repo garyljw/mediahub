@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getProviders: vi.fn(),
   getTmdbConfig: vi.fn(),
   saveChosenServices: vi.fn(),
+  savePopularIncludes: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -25,11 +26,12 @@ vi.mock("@/server/tmdb/client", async () => {
 vi.mock("@/server/settings/tmdb", () => ({
   getTmdbConfig: mocks.getTmdbConfig,
   saveChosenServices: mocks.saveChosenServices,
+  savePopularIncludes: mocks.savePopularIncludes,
 }));
 
 import { AuthzError } from "@/server/authz";
 import { TmdbRequestError } from "@/server/tmdb/errors";
-import { savePopularServices } from "./actions";
+import { savePopularIncludeSettings, savePopularServices } from "./actions";
 
 const TOKEN = "fake-tmdb-token-0123456789abcdef";
 const provider = (id: number) => ({ id, name: `Service ${id}`, logoPath: null, displayPriority: id, displayPriorities: {} });
@@ -131,5 +133,54 @@ describe("savePopularServices", () => {
   it("rethrows an unexpected error from TMDB", async () => {
     mocks.getProviders.mockRejectedValue(new Error("bug"));
     await expect(savePopularServices({ ids: [8] })).rejects.toThrow("bug");
+  });
+});
+
+describe("savePopularIncludeSettings", () => {
+  it("checks for the admin role, returns the denial and saves nothing", async () => {
+    await savePopularIncludeSettings({ include: [] });
+    expect(mocks.requireRole).toHaveBeenCalledWith("admin");
+    vi.clearAllMocks();
+    mocks.requireRole.mockRejectedValue(new AuthzError(403));
+    expect(await savePopularIncludeSettings({ include: ["news"] })).toEqual({
+      ok: false,
+      message: "You don't have permission to change Popular settings.",
+    });
+    expect(mocks.savePopularIncludes).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rethrows errors that are not authorization failures", async () => {
+    mocks.requireRole.mockRejectedValue(new Error("db down"));
+    await expect(savePopularIncludeSettings({ include: [] })).rejects.toThrow("db down");
+  });
+
+  it.each([
+    ["not an object", "nope"],
+    ["an unknown key", { include: ["sport"] }],
+    ["a duplicate", { include: ["news", "news"] }],
+    ["not an array", { include: "news" }],
+    ["an extra field", { include: [], extra: 1 }],
+    ["a missing field", {}],
+  ])("refuses %s before saving", async (_name, input) => {
+    expect(await savePopularIncludeSettings(input)).toEqual({ ok: false, message: "Pick from the list." });
+    expect(mocks.savePopularIncludes).not.toHaveBeenCalled();
+  });
+
+  it("asks for a TMDB token when none is stored, without calling TMDB", async () => {
+    mocks.getTmdbConfig.mockReturnValue(null);
+    expect(await savePopularIncludeSettings({ include: ["news"] })).toEqual({
+      ok: false,
+      message: "Add a TMDB token in Settings → Connections first.",
+    });
+    expect(mocks.savePopularIncludes).not.toHaveBeenCalled();
+  });
+
+  it("saves the keys and revalidates both pages, without calling TMDB", async () => {
+    expect(await savePopularIncludeSettings({ include: ["reality", "soap"] })).toEqual({ ok: true });
+    expect(mocks.savePopularIncludes).toHaveBeenCalledWith(["reality", "soap"]);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/popular");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/popular");
+    expect(mocks.getProviders).not.toHaveBeenCalled();
   });
 });

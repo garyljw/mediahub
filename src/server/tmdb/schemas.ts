@@ -4,12 +4,6 @@ import { z } from "zod";
 // Reply shapes for the TMDB calls MediaHub makes. Each keeps only the fields we use; unknown fields are dropped.
 // Posters and dates can be null or an empty string, so both are normalised to null.
 
-// Genres the Popular page leaves out (TMDB genre ids): documentaries in movies and TV, and for TV also News (10763),
-// Reality (10764, which is where TMDB files quiz and game shows), Soap (10766) and Talk (10767). One source for both the
-// upstream filters and the merge that drops them from lists TMDB can't filter.
-export const EXCLUDED_MOVIE_GENRES: readonly number[] = [99];
-export const EXCLUDED_TV_GENRES: readonly number[] = [99, 10763, 10764, 10766, 10767];
-
 const emptyToNull = (value: string | null | undefined): string | null => (value ? value : null);
 const optionalText = z.string().nullish().transform((v) => emptyToNull(v));
 

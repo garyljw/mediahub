@@ -1,16 +1,39 @@
 import "server-only";
 import { toPeek, type Peek } from "./peek";
-import {
-  EXCLUDED_MOVIE_GENRES,
-  EXCLUDED_TV_GENRES,
-  type TmdbMovie,
-  type TmdbProvider,
-  type TmdbShow,
-} from "@/server/tmdb/schemas";
+import type { PopularInclude } from "@/components/settings/popular-includes";
+import type { TmdbMovie, TmdbProvider, TmdbShow } from "@/server/tmdb/schemas";
 
 // Turns TMDB lists into the tiles of the Popular page. Pure: the library is passed in, nothing is fetched here.
 
 export type PopularKind = "movie" | "series";
+
+// What the Popular page leaves out unless an admin includes it (TMDB ids): the movie genre, the TV genre and the TV show
+// type of each category. Documentary is genre 99 for both kinds; TMDB files quiz and game shows under Reality (10764).
+// One source for the upstream filters and for the merge that drops titles from lists TMDB can't filter.
+const CATEGORY_IDS: Record<PopularInclude, { movieGenre?: number; tvGenre?: number; tvType?: number }> = {
+  documentary: { movieGenre: 99, tvGenre: 99, tvType: 0 },
+  news: { tvGenre: 10763, tvType: 1 },
+  reality: { tvGenre: 10764, tvType: 3 },
+  soap: { tvGenre: 10766 },
+  talk: { tvGenre: 10767, tvType: 5 },
+};
+
+/** The show types "On this week" always asks for (Miniseries, Scripted, Video). */
+const BASE_TV_TYPES = [2, 4, 6];
+
+export type PopularFilters = { movieWithoutGenres: number[]; tvWithoutGenres: number[]; tvTypes: number[] };
+
+/** The genres to leave out and the show types to ask for, given the categories an admin included. All sorted ascending. */
+export function popularFilters(include: readonly PopularInclude[]): PopularFilters {
+  const left = (Object.keys(CATEGORY_IDS) as PopularInclude[]).filter((key) => !include.includes(key));
+  const ids = (pick: (c: (typeof CATEGORY_IDS)[PopularInclude]) => number | undefined, keys: readonly PopularInclude[]) =>
+    keys.flatMap((key) => pick(CATEGORY_IDS[key]) ?? []).sort((a, b) => a - b);
+  return {
+    movieWithoutGenres: ids((c) => c.movieGenre, left),
+    tvWithoutGenres: ids((c) => c.tvGenre, left),
+    tvTypes: [...BASE_TV_TYPES, ...ids((c) => c.tvType, include)].sort((a, b) => a - b),
+  };
+}
 
 /** One tile, with only the fields the UI needs. `posterFile` is a bare TMDB file name for the poster route. */
 export type PopularTile = {
@@ -85,10 +108,11 @@ export function movieTiles(
   movies: readonly TmdbMovie[],
   library: ReadonlyMap<number, number>,
   genres: ReadonlyMap<number, string>,
+  withoutGenres: readonly number[],
 ): PopularTile[] {
   // Some lists can't be filtered by TMDB (trending, upcoming movies), so excluded genres are dropped here, for every list.
   return movies
-    .filter((m) => !m.genreIds.some((id) => EXCLUDED_MOVIE_GENRES.includes(id)))
+    .filter((m) => !m.genreIds.some((id) => withoutGenres.includes(id)))
     .map((m) =>
       tile("movie", library, genres, {
         id: m.id,
@@ -105,9 +129,10 @@ export function showTiles(
   shows: readonly TmdbShow[],
   library: ReadonlyMap<number, number>,
   genres: ReadonlyMap<number, string>,
+  withoutGenres: readonly number[],
 ): PopularTile[] {
   return shows
-    .filter((s) => !s.genreIds.some((id) => EXCLUDED_TV_GENRES.includes(id)))
+    .filter((s) => !s.genreIds.some((id) => withoutGenres.includes(id)))
     .map((s) =>
       tile("series", library, genres, {
         id: s.id,

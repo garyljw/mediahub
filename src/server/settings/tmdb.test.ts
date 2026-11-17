@@ -13,7 +13,7 @@ const cache = vi.hoisted(() => ({ clear: vi.fn() }));
 vi.mock("@/server/db", () => ({ db: () => testDb.current }));
 vi.mock("@/server/tmdb/client", () => ({ clearTmdbCache: cache.clear }));
 
-import { getChosenServices, getTmdbConfig, getTmdbSummary, removeTmdbConfig, saveChosenServices, saveTmdbConfig } from "./tmdb";
+import { getChosenServices, getPopularIncludes, getTmdbConfig, getTmdbSummary, removeTmdbConfig, saveChosenServices, savePopularIncludes, saveTmdbConfig } from "./tmdb";
 
 beforeEach(() => {
   cache.clear.mockClear();
@@ -65,5 +65,20 @@ describe("tmdb settings", () => {
     saveChosenServices([8]);
     removeTmdbConfig();
     expect(getChosenServices()).toEqual([]);
+  });
+
+  it("keeps the included Popular categories in canonical order, drops unknown keys and duplicates, reads a bad value as none, and removes them with the config", () => {
+    expect(getPopularIncludes()).toEqual([]);
+    savePopularIncludes(["talk", "documentary"]);
+    expect(getPopularIncludes()).toEqual(["documentary", "talk"]);
+    testDb.current?.update(schema.setting).set({ value: '["soap","bogus","soap",7]' }).run();
+    expect(getPopularIncludes()).toEqual([]);
+    testDb.current?.update(schema.setting).set({ value: '["soap","bogus","soap","news"]' }).run();
+    expect(getPopularIncludes()).toEqual(["news", "soap"]);
+    testDb.current?.update(schema.setting).set({ value: "not json" }).run();
+    expect(getPopularIncludes()).toEqual([]);
+    savePopularIncludes(["news"]);
+    removeTmdbConfig();
+    expect(getPopularIncludes()).toEqual([]);
   });
 });

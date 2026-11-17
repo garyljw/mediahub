@@ -164,16 +164,26 @@ describe("parsers", () => {
 
   it("leaves documentaries and Reality out of the TV discover call and documentaries out of the movie one", async () => {
     const mock = stubFetch(() => json(tvList));
-    await discoverShows(TOKEN, "GB", 8);
+    await discoverShows(TOKEN, "GB", 8, [99, 10763, 10764, 10766, 10767]);
     expect(new URL(String(mock.mock.calls[0][0])).searchParams.get("without_genres")).toBe("99,10763,10764,10766,10767");
     mock.mockImplementation(async () => json(movieList));
-    await discoverMovies(TOKEN, "GB", 8);
+    await discoverMovies(TOKEN, "GB", 8, [99]);
     expect(new URL(String(mock.mock.calls[1][0])).searchParams.get("without_genres")).toBe("99");
+  });
+
+  it("omits without_genres when nothing is left out, and asks On this week for the extra show types", async () => {
+    const mock = stubFetch(() => json(tvList));
+    await discoverShows(TOKEN, "GB", 8, []);
+    await getShowsOnThisWeek(TOKEN, "any", [], [6, 0, 2, 4]);
+    const [service, week] = mock.mock.calls.map(([url]) => new URL(String(url)));
+    expect(service.searchParams.has("without_genres")).toBe(false);
+    expect(week.searchParams.has("without_genres")).toBe(false);
+    expect(week.searchParams.get("with_type")).toBe("0|2|4|6");
   });
 
   it("sends the discover filters", async () => {
     const mock = stubFetch(() => json(movieList));
-    await discoverMovies(TOKEN, "GB", 8);
+    await discoverMovies(TOKEN, "GB", 8, [99]);
     const params = new URL(String(mock.mock.calls[0][0])).searchParams;
     expect(Object.fromEntries(params)).toEqual({
       watch_region: "GB",
@@ -358,8 +368,8 @@ describe("TV windows", () => {
     vi.setSystemTime(new Date("2026-11-14T23:30:00Z"));
     try {
       const mock = stubFetch(() => json(tvList));
-      await getUpcomingShows(TOKEN, "ja");
-      await getShowsOnThisWeek(TOKEN, "any");
+      await getUpcomingShows(TOKEN, "ja", [99, 10763, 10764, 10766, 10767]);
+      await getShowsOnThisWeek(TOKEN, "any", [99, 10763, 10764, 10766, 10767], [2, 4, 6]);
       const [upcoming, week] = mock.mock.calls.map(([url]) => new URL(String(url)));
       expect(upcoming.pathname).toBe("/3/discover/tv");
       expect(Object.fromEntries(upcoming.searchParams)).toEqual({

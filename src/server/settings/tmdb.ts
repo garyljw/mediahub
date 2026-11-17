@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/server/db";
 import { setting } from "@/server/db/schema";
 import { clearTmdbCache } from "@/server/tmdb/client";
+import { POPULAR_INCLUDE_KEYS, type PopularInclude } from "@/components/settings/popular-includes";
 import { DEFAULT_TMDB_LANGUAGE, TMDB_LANGUAGE_CODES, type TmdbLanguage } from "@/components/settings/tmdb-languages";
 
 // The optional TMDB connection (Read Access Token + country) is stored in SQLite, set by an admin in
@@ -17,6 +18,7 @@ const TOKEN_KEY = "tmdb.token";
 const REGION_KEY = "tmdb.region";
 const LANGUAGE_KEY = "tmdb.language";
 const SERVICES_KEY = "tmdb.services";
+const INCLUDE_KEY = "tmdb.include";
 
 function languageOf(value: string | undefined): TmdbLanguage {
   return TMDB_LANGUAGE_CODES.find((code) => code === value) ?? DEFAULT_TMDB_LANGUAGE;
@@ -63,9 +65,9 @@ export function saveTmdbConfig({ token, region, language }: TmdbConfig): void {
   clearTmdbCache();
 }
 
-/** Removes the token, country, language and chosen services. */
+/** Removes the token, country, language, chosen services and included categories. */
 export function removeTmdbConfig(): void {
-  db().delete(setting).where(inArray(setting.key, [TOKEN_KEY, REGION_KEY, LANGUAGE_KEY, SERVICES_KEY])).run();
+  db().delete(setting).where(inArray(setting.key, [TOKEN_KEY, REGION_KEY, LANGUAGE_KEY, SERVICES_KEY, INCLUDE_KEY])).run();
   clearTmdbCache();
 }
 
@@ -91,6 +93,32 @@ export function saveChosenServices(ids: readonly number[]): void {
   db()
     .insert(setting)
     .values({ key: SERVICES_KEY, value, updatedAt })
+    .onConflictDoUpdate({ target: setting.key, set: { value, updatedAt } })
+    .run();
+}
+
+const IncludeSchema = z.array(z.string());
+
+/** The Popular categories the admin chose to include, in canonical order. Unknown keys and duplicates are dropped. Empty when none, or when the stored value is unreadable. */
+export function getPopularIncludes(): PopularInclude[] {
+  const row = db().select().from(setting).where(eq(setting.key, INCLUDE_KEY)).get();
+  if (!row) return [];
+  try {
+    const parsed = IncludeSchema.safeParse(JSON.parse(row.value));
+    if (!parsed.success) return [];
+    return POPULAR_INCLUDE_KEYS.filter((key) => parsed.data.includes(key));
+  } catch {
+    return [];
+  }
+}
+
+/** Stores the included categories. The caller has validated the keys. */
+export function savePopularIncludes(keys: readonly PopularInclude[]): void {
+  const value = JSON.stringify(POPULAR_INCLUDE_KEYS.filter((key) => keys.includes(key)));
+  const updatedAt = new Date();
+  db()
+    .insert(setting)
+    .values({ key: INCLUDE_KEY, value, updatedAt })
     .onConflictDoUpdate({ target: setting.key, set: { value, updatedAt } })
     .run();
 }

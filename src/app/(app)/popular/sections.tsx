@@ -13,6 +13,7 @@ import {
   movieTiles,
   offeredServices,
   showTiles,
+  type PopularFilters,
   type PopularTile,
 } from "@/server/merge/popular";
 import {
@@ -38,6 +39,8 @@ export type PopularContext = {
   token: string;
   region: string;
   language: string;
+  /** The genres and show types left out or asked for, from the admin's Settings -> Popular ticks. */
+  filters: PopularFilters;
   isAdmin: boolean;
   movieLibrary: Promise<Map<number, number> | null>;
   seriesLibrary: Promise<Map<number, number> | null>;
@@ -51,24 +54,24 @@ export type PopularContext = {
 /** One TMDB list. `load` gives a function that marks its tiles against a library, so the kinds are checked by type. */
 type Source = { id: PopularSectionId; isMovie: boolean; load: () => Promise<(library: ReadonlyMap<number, number>) => PopularTile[]> };
 
-function movieSource(id: PopularSectionId, genres: Promise<Map<number, string>>, load: () => Promise<TmdbMovie[]>): Source {
+function movieSource(id: PopularSectionId, genres: Promise<Map<number, string>>, withoutGenres: readonly number[], load: () => Promise<TmdbMovie[]>): Source {
   return {
     id,
     isMovie: true,
     load: async () => {
       const [items, names] = await Promise.all([load(), genres]);
-      return (library) => movieTiles(items, library, names);
+      return (library) => movieTiles(items, library, names, withoutGenres);
     },
   };
 }
 
-function showSource(id: PopularSectionId, genres: Promise<Map<number, string>>, load: () => Promise<TmdbShow[]>): Source {
+function showSource(id: PopularSectionId, genres: Promise<Map<number, string>>, withoutGenres: readonly number[], load: () => Promise<TmdbShow[]>): Source {
   return {
     id,
     isMovie: false,
     load: async () => {
       const [items, names] = await Promise.all([load(), genres]);
-      return (library) => showTiles(items, library, names);
+      return (library) => showTiles(items, library, names, withoutGenres);
     },
   };
 }
@@ -154,23 +157,23 @@ async function TileList({ ctx, source }: { ctx: PopularContext; source: Source }
 }
 
 export async function TrendingMovies({ ctx }: { ctx: PopularContext }) {
-  return <TileList ctx={ctx} source={movieSource("trending-movies", ctx.movieGenres, () => getTrendingMovies(ctx.token))} />;
+  return <TileList ctx={ctx} source={movieSource("trending-movies", ctx.movieGenres, ctx.filters.movieWithoutGenres, () => getTrendingMovies(ctx.token))} />;
 }
 
 export async function TrendingShows({ ctx }: { ctx: PopularContext }) {
-  return <TileList ctx={ctx} source={showSource("trending-tv", ctx.showGenres, () => getTrendingShows(ctx.token))} />;
+  return <TileList ctx={ctx} source={showSource("trending-tv", ctx.showGenres, ctx.filters.tvWithoutGenres, () => getTrendingShows(ctx.token))} />;
 }
 
 export async function UpcomingMovies({ ctx }: { ctx: PopularContext }) {
-  return <TileList ctx={ctx} source={movieSource("upcoming-movies", ctx.movieGenres, () => getUpcomingMovies(ctx.token, ctx.region))} />;
+  return <TileList ctx={ctx} source={movieSource("upcoming-movies", ctx.movieGenres, ctx.filters.movieWithoutGenres, () => getUpcomingMovies(ctx.token, ctx.region))} />;
 }
 
 export async function UpcomingShows({ ctx }: { ctx: PopularContext }) {
-  return <TileList ctx={ctx} source={showSource("upcoming-tv", ctx.showGenres, () => getUpcomingShows(ctx.token, ctx.language))} />;
+  return <TileList ctx={ctx} source={showSource("upcoming-tv", ctx.showGenres, ctx.filters.tvWithoutGenres, () => getUpcomingShows(ctx.token, ctx.language, ctx.filters.tvWithoutGenres))} />;
 }
 
 export async function ShowsOnThisWeek({ ctx }: { ctx: PopularContext }) {
-  return <TileList ctx={ctx} source={showSource("this-week", ctx.showGenres, () => getShowsOnThisWeek(ctx.token, ctx.language))} />;
+  return <TileList ctx={ctx} source={showSource("this-week", ctx.showGenres, ctx.filters.tvWithoutGenres, () => getShowsOnThisWeek(ctx.token, ctx.language, ctx.filters.tvWithoutGenres, ctx.filters.tvTypes))} />;
 }
 
 /**
@@ -223,8 +226,8 @@ export async function PopularOnService({ ctx, params }: { ctx: PopularContext; p
   }
   const source: Source =
     mode === "movie"
-      ? movieSource("service", ctx.movieGenres, () => discoverMovies(ctx.token, ctx.region, chosen.id))
-      : showSource("service", ctx.showGenres, () => discoverShows(ctx.token, ctx.region, chosen.id));
+      ? movieSource("service", ctx.movieGenres, ctx.filters.movieWithoutGenres, () => discoverMovies(ctx.token, ctx.region, chosen.id, ctx.filters.movieWithoutGenres))
+      : showSource("service", ctx.showGenres, ctx.filters.tvWithoutGenres, () => discoverShows(ctx.token, ctx.region, chosen.id, ctx.filters.tvWithoutGenres));
   return (
     <>
       <h2 className="text-lg font-semibold tracking-tight">Popular on {chosen.name}</h2>
