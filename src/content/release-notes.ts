@@ -7,6 +7,21 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.17.0",
+    date: "2026-11-17",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          { text: "**MediaHub logo links to About:** click the logo at the top to open the About page." },
+          {
+            text: "**A better About page:** it now says what MediaHub does, shows what's new in this version with a link to all release notes, and links to GitHub to report a problem or idea. The open-source licence list is folded away under **Show the list**.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.16.1",
     date: "2026-11-17",
     sections: [

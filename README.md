@@ -52,6 +52,7 @@ The screenshots show a made-up demo library, not a real one.
 - **Queue:** what is downloading, with remove and force import. A download grabbed with **Replace existing file** ticked shows **Will replace existing file** until it is imported.
 - **Calendar and History** for both Radarr and Sonarr.
 - **Release notes:** a page in the menu listing what changed in every MediaHub release, newest first.
+- **About:** click the MediaHub logo at the top (or **About** in the menu) to see what MediaHub does, what's new in this version, a link to report a problem or idea on GitHub, and the open-source licences.
 - **Phones and tablets:** on a narrower screen (a phone, or a tablet held upright) a tab bar along the bottom replaces the sidebar: **Home**, **Movie Focus**, **TV Focus**, **Queue** and **More**. **More** holds **Popular**, **Calendar**, **History**, **Release notes**, **Settings** (admins), **About** and **Sign out**. Queue and History show each item as a card, a series' page shows each episode as a card, and Calendar always shows the day list on a phone.
 - **Plex watched status (optional):** watched banners on posters, and watched markers on seasons and episodes. On Home, the **Any / Unwatched / Partly watched / Watched** chips under **Filters** show only titles in that state. Titles that aren't in Plex appear only under **Any**.
 - **Filtering Home:** the **Filters** button beside the sort menu opens a panel with **Type** (All, Movies or TV), **Watched in Plex** (when Plex is connected) and **Genre**. The genre list covers movies and TV together, or only the type you chose, and shows how many titles each genre has. Filters apply as you change them, and the button shows how many are on. Each filter that is on also appears as a tag under the toolbar; tap its **x** to switch it off. **Clear all** resets the filters (not the search). MediaHub remembers them when you open a title and come back.
@@ -192,7 +193,7 @@ For the times you can't use the web page, `mediahub-tool.cmd` in the install fol
 ## Licences
 MediaHub is released under the [MIT licence](LICENSE). Use it however you like, at your own risk.
 
-MediaHub is built on open-source projects, including Node.js and the WinSW service wrapper that the installer ships. Their licences and notices are in `THIRD_PARTY_NOTICES.txt` in `C:\Program Files\MediaHub\app`, and the **About** page lists them with their versions. On a phone, **About** is under **More**. The page also links to the full licence texts.
+MediaHub is built on open-source projects, including Node.js and the WinSW service wrapper that the installer ships. Their licences and notices are in `THIRD_PARTY_NOTICES.txt` in `C:\Program Files\MediaHub\app`, and the **About** page lists them with their versions under **Show the list**. On a phone, **About** is under **More**. The page also links to the full licence texts.
 
 ## Contributing
 I'm not accepting contributions at this time, so pull requests will be closed. You're welcome to fork it. To report a security problem, see [SECURITY.md](SECURITY.md).
