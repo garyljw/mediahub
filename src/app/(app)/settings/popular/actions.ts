@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthzError, requireRole } from "@/server/authz";
 import { mergeServices } from "@/server/merge/popular";
-import { getTmdbConfig, saveChosenServices } from "@/server/settings/tmdb";
+import { POPULAR_INCLUDE_KEYS } from "@/components/settings/popular-includes";
+import { getTmdbConfig, saveChosenServices, savePopularIncludes } from "@/server/settings/tmdb";
 import { getProviders, TmdbRequestError } from "@/server/tmdb/client";
 import { tmdbFailureText } from "@/server/tmdb/errors";
 
@@ -54,6 +55,32 @@ export async function savePopularServices(input: unknown): Promise<PopularServic
   }
 
   saveChosenServices(ids);
+  revalidatePath("/settings/popular");
+  revalidatePath("/popular");
+  return { ok: true };
+}
+
+const INCLUDE_INVALID = "Pick from the list.";
+
+const IncludeInputSchema = z
+  .strictObject({ include: z.array(z.enum(POPULAR_INCLUDE_KEYS)).max(POPULAR_INCLUDE_KEYS.length) })
+  .refine((value) => new Set(value.include).size === value.include.length);
+
+/** Saves which of the categories Popular normally leaves out are shown. Empty means none, as before. No TMDB call. */
+export async function savePopularIncludeSettings(input: unknown): Promise<PopularServicesResult> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, message: DENIED };
+    throw error;
+  }
+
+  const parsed = IncludeInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: INCLUDE_INVALID };
+
+  if (!getTmdbConfig()) return { ok: false, message: NO_TOKEN };
+
+  savePopularIncludes(parsed.data.include);
   revalidatePath("/settings/popular");
   revalidatePath("/popular");
   return { ok: true };

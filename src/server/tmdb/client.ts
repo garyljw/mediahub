@@ -6,8 +6,6 @@ import {
   EpisodeCreditsSchema,
   ExternalIdsSchema,
   GenresSchema,
-  EXCLUDED_MOVIE_GENRES,
-  EXCLUDED_TV_GENRES,
   MovieDetailsSchema,
   ShowDetailsSchema,
   MovieListSchema,
@@ -34,10 +32,9 @@ export { TmdbRequestError } from "./errors";
 const BASE_URL = "https://api.themoviedb.org/3";
 const TIMEOUT_MS = 15_000;
 const CACHE_TTL_MS = 60 * 60 * 1000;
-/** Documentaries and Reality are left out of every section. */
-const genreQuery = (ids: readonly number[]) => [...ids].sort((a, b) => a - b).join(",");
-const WITHOUT_MOVIE_GENRES = genreQuery(EXCLUDED_MOVIE_GENRES);
-const WITHOUT_TV_GENRES = genreQuery(EXCLUDED_TV_GENRES);
+/** The without_genres param for a list of genre ids, or nothing for an empty list (TMDB gets no empty value). */
+const withoutGenresParam = (ids: readonly number[]): Params =>
+  ids.length === 0 ? {} : { without_genres: [...ids].sort((a, b) => a - b).join(",") };
 const FAILURE_TTL_MS = 60 * 1000;
 const TVDB_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -251,17 +248,17 @@ function discoverParams(region: string, providerId: number): Params {
   };
 }
 
-export function discoverMovies(token: string, region: string, providerId: number): Promise<TmdbMovie[]> {
+export function discoverMovies(token: string, region: string, providerId: number, withoutGenres: readonly number[]): Promise<TmdbMovie[]> {
   return cachedGet("discover movies", "/discover/movie", token, MovieListSchema, {
     ...discoverParams(region, providerId),
-    without_genres: WITHOUT_MOVIE_GENRES,
+    ...withoutGenresParam(withoutGenres),
   });
 }
 
-export function discoverShows(token: string, region: string, providerId: number): Promise<TmdbShow[]> {
+export function discoverShows(token: string, region: string, providerId: number, withoutGenres: readonly number[]): Promise<TmdbShow[]> {
   return cachedGet("discover shows", "/discover/tv", token, TvListSchema, {
     ...discoverParams(region, providerId),
-    without_genres: WITHOUT_TV_GENRES,
+    ...withoutGenresParam(withoutGenres),
   });
 }
 
@@ -286,7 +283,7 @@ function languageParams(language: string): Params {
 }
 
 /** New shows with a first air date in the next 28 days, most popular first. */
-export function getUpcomingShows(token: string, language: string): Promise<TmdbShow[]> {
+export function getUpcomingShows(token: string, language: string, withoutGenres: readonly number[]): Promise<TmdbShow[]> {
   const today = new Date();
   return cachedGet("upcoming shows", "/discover/tv", token, TvListSchema, {
     "first_air_date.gte": utcDay(today, 0),
@@ -294,7 +291,7 @@ export function getUpcomingShows(token: string, language: string): Promise<TmdbS
     sort_by: "popularity.desc",
     include_adult: "false",
     include_null_first_air_dates: "false",
-    without_genres: WITHOUT_TV_GENRES,
+    ...withoutGenresParam(withoutGenres),
     ...languageParams(language),
     language: "en-US",
     page: 1,
@@ -302,17 +299,17 @@ export function getUpcomingShows(token: string, language: string): Promise<TmdbS
 }
 
 /**
- * Shows with an episode airing in the next 7 days, most popular first. The type filter lists every TMDB show type
- * except Documentary (0), News (1), Reality (3) and Talk Show (5), and the excluded TV genres are left out too. This is
- * the discover call TMDB documents as /tv/on_the_air.
+ * Shows with an episode airing in the next 7 days, most popular first. `types` is the list of TMDB show types to ask for
+ * (Miniseries 2, Scripted 4 and Video 6, plus Documentary 0, News 1, Reality 3 and Talk Show 5 when included), and the
+ * genres in `withoutGenres` are left out too. This is the discover call TMDB documents as /tv/on_the_air.
  */
-export function getShowsOnThisWeek(token: string, language: string): Promise<TmdbShow[]> {
+export function getShowsOnThisWeek(token: string, language: string, withoutGenres: readonly number[], types: readonly number[]): Promise<TmdbShow[]> {
   const today = new Date();
   return cachedGet("shows on this week", "/discover/tv", token, TvListSchema, {
     "air_date.gte": utcDay(today, 0),
     "air_date.lte": utcDay(today, 7),
-    with_type: "2|4|6",
-    without_genres: WITHOUT_TV_GENRES,
+    with_type: [...types].sort((a, b) => a - b).join("|"),
+    ...withoutGenresParam(withoutGenres),
     sort_by: "popularity.desc",
     include_adult: "false",
     ...languageParams(language),

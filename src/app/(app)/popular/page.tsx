@@ -5,8 +5,8 @@ import { listMovies } from "@/server/arr/movies";
 import { listSeries } from "@/server/arr/series";
 import { loadOrNull } from "@/server/arr/load-or-null";
 import { loadMovieAddOptions, loadSeriesAddOptions } from "@/server/add/add-options";
-import { getTmdbConfig } from "@/server/settings/tmdb";
-import { libraryByTmdbId } from "@/server/merge/popular";
+import { getPopularIncludes, getTmdbConfig } from "@/server/settings/tmdb";
+import { libraryByTmdbId, popularFilters } from "@/server/merge/popular";
 import { PopularPlace } from "@/components/popular/popular-place";
 import { parsePopularParams } from "@/components/popular/popular-params";
 import { PopularServiceSkeleton, PosterGridSkeleton } from "@/components/skeletons/page-skeletons";
@@ -60,6 +60,7 @@ export default async function PopularPage({
     token: config.token,
     region: config.region,
     language: config.language,
+    filters: popularFilters(getPopularIncludes()),
     isAdmin,
     movieLibrary: settle(
       loadOrNull(listMovies, "Popular page").then((movies) => (movies === null ? null : libraryByTmdbId(movies.rows))),

@@ -7,6 +7,20 @@ export type ReleaseEntry = { version: string; date: string; sections: ReleaseSec
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
   {
+    version: "1.16.0",
+    date: "2026-11-17",
+    sections: [
+      {
+        heading: "New",
+        notes: [
+          {
+            text: "**Choose what Popular leaves out:** in **Settings → Popular**, tick any of documentaries, news, reality (quiz and game shows), soaps and talk shows to include them on the Popular page. All are left out until ticked.",
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: "1.15.1",
     date: "2026-11-16",
     sections: [

@@ -24,7 +24,7 @@ export type Filmography = { tiles: FilmographyTile[]; backdropFile: string | nul
 /** "Self", "Himself", "Herself - Guest", "Themselves": the person playing themselves, not a role. */
 const SELF_ROLE = /^(self|himself|herself|themselves)\b/i;
 /**
- * TV genres left out of a person's filmography: News, Reality and Talk. Unlike the Popular page's EXCLUDED_TV_GENRES,
+ * TV genres left out of a person's filmography: News, Reality and Talk. Unlike the Popular page's default filters,
  * documentaries and soaps are kept, because actors act in them.
  */
 const PERSON_EXCLUDED_TV_GENRES: readonly number[] = [10763, 10764, 10767];

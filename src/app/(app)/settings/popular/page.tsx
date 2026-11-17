@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { PopularIncludesForm } from "@/components/settings/popular-includes-form";
 import { PopularServicesForm } from "@/components/settings/popular-services-form";
 import { requirePageUser } from "@/server/authz";
 import { mergeServices } from "@/server/merge/popular";
-import { getChosenServices, getTmdbConfig } from "@/server/settings/tmdb";
+import { getChosenServices, getPopularIncludes, getTmdbConfig } from "@/server/settings/tmdb";
 import { getProviders, TmdbRequestError } from "@/server/tmdb/client";
 import { Breadcrumb } from "@/components/breadcrumb/breadcrumb";
 import { navCrumb } from "@/components/breadcrumb/trail";
@@ -20,7 +21,7 @@ function Heading() {
       <h1 className="text-2xl font-semibold tracking-tight">Popular</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Pick the streaming services the Popular page offers, and drag them into order. With none picked, it shows
-        TMDB&apos;s top 12 for your country.
+        TMDB&apos;s top 12 for your country. You can also include the categories Popular leaves out.
       </p>
     </>
   );
@@ -61,6 +62,9 @@ export default async function PopularSettingsPage() {
         <p role="alert" className="mt-6 text-sm text-destructive">
           Couldn&apos;t load the services from TMDB.
         </p>
+        <div className="mt-6">
+          <PopularIncludesForm initial={getPopularIncludes()} />
+        </div>
       </div>
     );
   }
@@ -74,6 +78,9 @@ export default async function PopularSettingsPage() {
       <Heading />
       <div className="mt-6">
         <PopularServicesForm services={services} initialIds={initialIds} />
+      </div>
+      <div className="mt-8">
+        <PopularIncludesForm initial={getPopularIncludes()} />
       </div>
     </div>
   );
