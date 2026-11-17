@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Ellipsis, Info } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ChevronLeft, Ellipsis, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -17,16 +17,21 @@ import { Separator } from "@/components/ui/separator";
 import { signOut } from "@/app/(app)/actions";
 import { isPlainClick, topIfOpen } from "@/components/home/return-place";
 import { cn } from "@/lib/utils";
+import { useCanGoBack } from "./use-can-go-back";
 import { isActive, tabBarItems, type NavItem } from "./nav";
 
 type Props = {
   email: string;
   isAdmin: boolean;
+  showBackButton: boolean;
 };
 
 // Bottom navigation for narrow screens (below lg). The desktop sidebar takes over at lg.
-export function TabBar({ email, isAdmin }: Props) {
+export function TabBar({ email, isAdmin, showBackButton }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
+  // Back is disabled when there is no earlier MediaHub page in this tab, so it can't take the user out of MediaHub.
+  const canGoBack = useCanGoBack();
   const [moreOpen, setMoreOpen] = useState(false);
   const { tabs, more } = tabBarItems(isAdmin);
   const moreActive = more.some((item) => isActive(pathname, item.href));
@@ -60,8 +65,22 @@ export function TabBar({ email, isAdmin }: Props) {
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-30 border-t bg-sidebar/90 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden"
       >
-        {/* One column per tab plus More, so the bar never leaves an empty slot. */}
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))` }}>
+        {/* One column per tab plus More (and Back, when on), so the bar never leaves an empty slot. */}
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${tabs.length + 1 + (showBackButton ? 1 : 0)}, minmax(0, 1fr))` }}
+        >
+          {showBackButton && (
+            <button
+              type="button"
+              disabled={!canGoBack}
+              onClick={() => router.back()}
+              className="flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-center text-muted-foreground transition-colors disabled:opacity-40"
+            >
+              <ChevronLeft className="size-5" aria-hidden="true" />
+              <span className="text-[10px] leading-tight">Back</span>
+            </button>
+          )}
           {tabs.map(renderTab)}
           {/* SheetTrigger gives the button aria-haspopup and aria-expanded. It is a button, not a page, so no aria-current. */}
           <SheetTrigger

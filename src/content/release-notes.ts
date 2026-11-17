@@ -17,6 +17,7 @@ export const RELEASE_NOTES: ReleaseEntry[] = [
           {
             text: "**A better About page:** it now says what MediaHub does, shows what's new in this version with a link to all release notes, and links to GitHub to report a problem or idea. The open-source licence list is folded away under **Show the list**.",
           },
+          { text: "**Back button on phones:** an admin can turn on a Back button for the bottom bar on phones in **Settings → Display**. It's off by default." },
         ],
       },
     ],

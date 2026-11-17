@@ -23,6 +23,11 @@ const SECTIONS = [
     description: "Which streaming services the Popular page offers, and their order.",
   },
   {
+    href: "/settings/display",
+    title: "Display",
+    description: "The Back button on phones.",
+  },
+  {
     href: "/settings/users",
     title: "Users",
     description: "Add, reset and remove requester accounts.",
