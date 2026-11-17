@@ -102,6 +102,7 @@ const PAGE_ROLES: Record<string, string[]> = {
   "settings/users/page.tsx": ["admin"],
   "settings/updates/page.tsx": ["admin"],
   "settings/system/page.tsx": ["admin"],
+  "settings/display/page.tsx": ["admin"],
 };
 
 describe("(app) pages", () => {

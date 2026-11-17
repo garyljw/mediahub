@@ -127,6 +127,10 @@ Admins can see the installed version, the last check and its result in Settings 
 - Installing an older version by hand works only if the newer one didn't change the database. Otherwise MediaHub doesn't start and its log says why. Install the newer version again.
 - Release candidates (versions ending in `-rc.N`): an install of a release candidate also takes newer release candidates. An install of a normal release never takes a release candidate.
 
+### Display
+
+Admins can turn on a **Back button on phones** in Settings → Display. It's off by default. When it's on, the bottom bar on phones and other narrow screens gets a Back button that goes to the previous page in MediaHub. It's greyed out when there's no earlier MediaHub page to go back to (for example, on the first MediaHub page you opened in that tab), so it never takes you out of MediaHub. The switch applies to everyone.
+
 ### System
 
 Admins can see disk space in Settings → System. It lists each disk Radarr and Sonarr report, with its free and total space and a bar showing how full it is. A disk both apps report appears once. If only one app can be reached, the list comes from that app and says so.

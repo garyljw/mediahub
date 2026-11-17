@@ -9,11 +9,12 @@ import { UserMenu } from "./user-menu";
 type Props = {
   user: { name: string; email: string };
   isAdmin: boolean;
+  showBackButton: boolean;
   children: ReactNode;
 };
 
 // Server component: the shell markup. Only the interactive pieces are client components.
-export function AppShell({ user, isAdmin, children }: Props) {
+export function AppShell({ user, isAdmin, showBackButton, children }: Props) {
   return (
     <div className="min-h-screen">
       <SessionKeepAlive />
@@ -40,7 +41,7 @@ export function AppShell({ user, isAdmin, children }: Props) {
         {children}
       </main>
 
-      <TabBar email={user.email} isAdmin={isAdmin} />
+      <TabBar email={user.email} isAdmin={isAdmin} showBackButton={showBackButton} />
     </div>
   );
 }
